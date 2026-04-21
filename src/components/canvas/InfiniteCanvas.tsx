@@ -21,6 +21,10 @@ export function InfiniteCanvas() {
     height: number;
   } | null>(null);
 
+  // Refs for tracking manual middle-mouse panning
+  const isPanningRef = useRef(false);
+  const lastPanPositionRef = useRef({ x: 0, y: 0 });
+
   // Handle Resize
   useEffect(() => {
     const updateSize = () => {
@@ -67,6 +71,15 @@ export function InfiniteCanvas() {
 
   // Handle pointer down (initiate drawing, select, or text placement)
   const handlePointerDown = (e: KonvaEventObject<PointerEvent>) => {
+    // Handle Middle Mouse Button Panning
+    if (e.evt.button === 1) {
+      e.evt.preventDefault();
+      isPanningRef.current = true;
+      lastPanPositionRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+      document.body.style.cursor = 'grabbing';
+      return;
+    }
+
     // Deselect if clicking on empty stage and using select tool
     if (activeTool === 'select' && e.target === e.target.getStage()) {
       setSelection([]);
@@ -85,7 +98,7 @@ export function InfiniteCanvas() {
     const y = (pointer.y - stage.y()) / scale;
 
     // Handle drag-to-draw for shapes
-    if (['rectangle', 'circle', 'sticky', 'image', 'video', 'audio'].includes(activeTool)) {
+    if (['rectangle', 'circle', 'sticky', 'text', 'image', 'video', 'audio'].includes(activeTool)) {
       setDrawingShape({
         type: activeTool as any,
         startX: x,
@@ -97,20 +110,26 @@ export function InfiniteCanvas() {
       });
       return;
     }
-
-    // Handle dropping text
-    if (activeTool === 'text') {
-      const id = uuidv4();
-      addElement({ id, type: 'text', x: x, y: y, width: 150, height: 40, text: 'Wireless Canvas', fontSize: 24, fill: '#1a1a1b', fontFamily: 'sans-serif' });
-      setActiveTool('select');
-      setSelection([id]);
-    }
   };
 
   const handlePointerMove = (e: KonvaEventObject<PointerEvent>) => {
-    if (!drawingShape) return;
     const stage = e.target.getStage();
     if (!stage) return;
+    
+    // Middle Mouse Panning Logic
+    if (isPanningRef.current) {
+      e.evt.preventDefault();
+      const dx = e.evt.clientX - lastPanPositionRef.current.x;
+      const dy = e.evt.clientY - lastPanPositionRef.current.y;
+      setStageConfig({
+        x: stage.x() + dx,
+        y: stage.y() + dy
+      });
+      lastPanPositionRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+      return;
+    }
+
+    if (!drawingShape) return;
     
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
@@ -133,7 +152,14 @@ export function InfiniteCanvas() {
     } : null);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: KonvaEventObject<PointerEvent>) => {
+    // Stop Middle Mouse Panning
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
+      document.body.style.cursor = '';
+      return;
+    }
+
     if (drawingShape) {
       const isMedia = ['image', 'video', 'audio'].includes(drawingShape.type);
       
@@ -141,6 +167,7 @@ export function InfiniteCanvas() {
       let defaultHeight = 100;
       
       if (drawingShape.type === 'sticky') { defaultWidth = 200; defaultHeight = 200; }
+      else if (drawingShape.type === 'text') { defaultWidth = 360; defaultHeight = 240; }
       else if (drawingShape.type === 'image' || drawingShape.type === 'video') { defaultWidth = 320; defaultHeight = 240; }
       else if (drawingShape.type === 'audio') { defaultWidth = 300; defaultHeight = 80; }
 
@@ -154,8 +181,10 @@ export function InfiniteCanvas() {
           y: drawingShape.y, 
           width: drawingShape.width, 
           height: drawingShape.height, 
-          text: drawingShape.type === 'sticky' ? '📝 点击编辑便签内容...' : undefined,
-          fill: drawingShape.type === 'rectangle' ? '#3b82f6' : drawingShape.type === 'circle' ? '#10b981' : drawingShape.type === 'sticky' ? '#fef08a' : undefined, 
+          text: drawingShape.type === 'sticky' ? '📝 点击编辑便签内容...' : drawingShape.type === 'text' ? '' : undefined,
+          fontSize: drawingShape.type === 'text' ? 14 : undefined,
+          fontFamily: drawingShape.type === 'text' ? 'sans-serif' : undefined,
+          fill: drawingShape.type === 'rectangle' ? '#3b82f6' : drawingShape.type === 'circle' ? '#10b981' : drawingShape.type === 'sticky' ? '#fef08a' : drawingShape.type === 'text' ? '#1f2937' : undefined, 
           src: isMedia ? '' : undefined,
           cornerRadius: drawingShape.type === 'rectangle' ? 12 : undefined 
         } as any);
@@ -171,8 +200,10 @@ export function InfiniteCanvas() {
           y: drawingShape.startY - defaultHeight / 2, 
           width: defaultWidth, 
           height: defaultHeight, 
-          text: drawingShape.type === 'sticky' ? '📝 点击编辑便签内容...' : undefined,
-          fill: drawingShape.type === 'rectangle' ? '#3b82f6' : drawingShape.type === 'circle' ? '#10b981' : drawingShape.type === 'sticky' ? '#fef08a' : undefined, 
+          text: drawingShape.type === 'sticky' ? '📝 点击编辑便签内容...' : drawingShape.type === 'text' ? '' : undefined,
+          fontSize: drawingShape.type === 'text' ? 14 : undefined,
+          fontFamily: drawingShape.type === 'text' ? 'sans-serif' : undefined,
+          fill: drawingShape.type === 'rectangle' ? '#3b82f6' : drawingShape.type === 'circle' ? '#10b981' : drawingShape.type === 'sticky' ? '#fef08a' : drawingShape.type === 'text' ? '#1f2937' : undefined, 
           src: isMedia ? '' : undefined,
           cornerRadius: drawingShape.type === 'rectangle' ? 12 : undefined 
         } as any);
@@ -264,9 +295,9 @@ export function InfiniteCanvas() {
         x={stageConfig.x}
         y={stageConfig.y}
         onWheel={handleWheel}
-        draggable={activeTool === 'hand'}
+        draggable={activeTool === 'select' || activeTool === 'hand'}
         onDragEnd={(e) => {
-          if (activeTool === 'hand') {
+          if ((activeTool === 'select' || activeTool === 'hand') && e.target === e.target.getStage()) {
             setStageConfig({ x: e.target.x(), y: e.target.y() });
           }
         }}
@@ -275,7 +306,7 @@ export function InfiniteCanvas() {
         onPointerUp={handlePointerUp}
         className={
           activeTool === 'hand' ? 'cursor-grab active:cursor-grabbing' : 
-          activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair'
+          activeTool === 'select' ? 'cursor-default active:cursor-grab' : 'cursor-crosshair'
         }
       >
         <Layer>
@@ -319,7 +350,7 @@ export function InfiniteCanvas() {
                cornerRadius={2}
              />
           )}
-          {drawingShape && ['image', 'video', 'audio'].includes(drawingShape.type) && (
+          {drawingShape && ['text', 'image', 'video', 'audio'].includes(drawingShape.type) && (
              <Rect
                x={drawingShape.x}
                y={drawingShape.y}

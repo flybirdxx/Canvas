@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Rect, Text, Group, Transformer, Image as KonvaImage } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import useImage from 'use-image';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, AlignLeft } from 'lucide-react';
 import { useCanvasStore } from '../../store/useCanvasStore';
 
 // Helper component for loading image references
@@ -128,14 +128,69 @@ export function CanvasElements() {
         if (el.type === 'text') {
           const textEl = el as any;
           return (
-            <Text 
-              key={id} 
-              {...commonProps} 
-              text={textEl.text} 
-              fontSize={textEl.fontSize || 16} 
-              fill={textEl.fill || '#1a1a1b'} 
-              fontFamily={textEl.fontFamily || 'sans-serif'} 
-            />
+            <Group key={id} {...commonProps}>
+              {/* Invisible Rect for Konva interactions (dragging, selecting) */}
+              <Rect width={width} height={height} fill="transparent" />
+              
+              <Html divProps={{ style: { pointerEvents: 'none' } }}>
+                <div style={{
+                  width, 
+                  height, 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  backgroundColor: '#ffffff', // Matching the light theme
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                  fontFamily: textEl.fontFamily || 'sans-serif',
+                  overflow: 'hidden'
+                }}>
+                  {/* Header -> pointerEvents: none so we can click through to Konva Rect to drag */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px 8px 16px',
+                    color: '#6b7280', // Gray-500
+                    userSelect: 'none',
+                    borderBottom: '1px solid rgba(0,0,0,0.04)' // subtle separator
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlignLeft size={16} />
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Text</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>AI Model Ready</span>
+                  </div>
+
+                  {/* Textarea -> pointerEvents: auto for actual typing */}
+                  <div style={{ flex: 1, padding: '12px 16px 16px 16px' }}>
+                    <textarea
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        resize: 'none',
+                        color: textEl.fill && textEl.fill !== '#D4D4D4' ? textEl.fill : '#1f2937', // Default to Dark Gray-800 for light theme
+                        fontSize: `${textEl.fontSize || 14}px`,
+                        lineHeight: textEl.lineHeight || 1.4,
+                        textAlign: textEl.align || 'left',
+                        pointerEvents: 'auto', // Important for typing
+                      }}
+                      value={textEl.text}
+                      placeholder='Try "A poetic excerpt about the passage of time" [tab]'
+                      onChange={(e) => updateElement(id, { text: e.target.value })}
+                      onPointerDown={(e) => e.stopPropagation()} // Stop dragging the scrollbar etc from dragging canvas
+                      onKeyDown={(e) => {
+                        e.stopPropagation(); // Stop global hotkeys like backspace to delete node
+                      }}
+                      className="custom-scrollbar"
+                    />
+                  </div>
+                </div>
+              </Html>
+            </Group>
           );
         }
 

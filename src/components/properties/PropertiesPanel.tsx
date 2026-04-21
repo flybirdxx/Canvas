@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Type, Square, Settings2, Trash2, Link2, Upload } from 'lucide-react';
+import { Layers, Type, Square, Settings2, Trash2, Link2, Upload, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 import { useCanvasStore } from '../../store/useCanvasStore';
 
 export function PropertiesPanel() {
@@ -148,11 +148,81 @@ export function PropertiesPanel() {
                     className="bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[11px] resize-y min-h-[60px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                   />
                   {el.type === 'text' && (
-                    <div className="flex gap-2 mt-2">
-                      <ColorPicker 
-                        value={(el as any).fill}
-                        onChange={(color) => updateElement(el.id, { fill: color })}
-                      />
+                    <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] text-gray-500">字体 (Font)</label>
+                        <select 
+                          value={(el as any).fontFamily || 'sans-serif'}
+                          onChange={(e) => updateElement(el.id, { fontFamily: e.target.value })}
+                          className="bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[11px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                        >
+                          <option value="sans-serif">Sans-Serif</option>
+                          <option value="serif">Serif</option>
+                          <option value="monospace">Monospace</option>
+                          <option value="Inter">Inter</option>
+                          <option value="Comic Sans MS">Comic Sans</option>
+                          <option value="Arial">Arial</option>
+                          <option value="Times New Roman">Times New Roman</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] text-gray-500 flex justify-between">
+                          <span>字号 (Size)</span>
+                          <span className="font-mono">{(el as any).fontSize || 16}px</span>
+                        </label>
+                        <input 
+                           type="range" min="8" max="120" 
+                           value={(el as any).fontSize || 16}
+                           onChange={(e) => updateElement(el.id, { fontSize: Number(e.target.value) })}
+                           className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-gray-500">对齐 (Align)</label>
+                          <div className="flex bg-gray-100 p-0.5 rounded-md border border-gray-200/80">
+                            {[
+                              { id: 'left', icon: <AlignLeft className="w-3" /> },
+                              { id: 'center', icon: <AlignCenter className="w-3" /> },
+                              { id: 'right', icon: <AlignRight className="w-3" /> },
+                              { id: 'justify', icon: <AlignJustify className="w-3" /> }
+                            ].map(btn => (
+                              <button 
+                                key={btn.id}
+                                onClick={() => updateElement(el.id, { align: btn.id })}
+                                className={`flex-1 flex justify-center py-1 rounded transition-colors ${((el as any).align || 'left') === btn.id ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                              >
+                                {btn.icon}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-gray-500">行高 (Line Height)</label>
+                          <input 
+                            type="number" 
+                            step="0.1"
+                            min="0.5"
+                            max="5"
+                            value={(el as any).lineHeight || 1.2} 
+                            onChange={(e) => updateElement(el.id, { lineHeight: Number(e.target.value) })}
+                            className="bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[11px] font-mono focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 h-[26px]" 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        <label className="text-[10px] text-gray-500 block">颜色 (Color)</label>
+                        <div className="flex gap-2">
+                          <ColorPicker 
+                            value={(el as any).fill}
+                            onChange={(color) => updateElement(el.id, { fill: color })}
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

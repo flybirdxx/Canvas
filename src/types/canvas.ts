@@ -25,6 +25,8 @@ export interface TextElement extends BaseElement {
   fontSize: number;
   fontFamily: string;
   fill: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  lineHeight?: number;
 }
 
 export interface ImageElement extends BaseElement {
