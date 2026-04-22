@@ -1,14 +1,17 @@
-import { Search, Square, Circle, Type, Image as ImageIcon, Sparkles, Share2, Layers, Undo2, Redo2, StickyNote, Video, Music, Plus } from 'lucide-react';
+import { Search, Square, Circle, Type, Image as ImageIcon, Sparkles, Share2, Layers, Undo2, Redo2, StickyNote, Video, Music, Plus, Settings } from 'lucide-react';
 import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
 import { PropertiesPanel } from './components/properties/PropertiesPanel';
-import { AIPromptBar } from './components/AIPromptBar';
+import { SettingsModal } from './components/SettingsModal';
+import { HistoryPanel } from './components/HistoryPanel';
+import { SaveControls } from './components/SaveControls';
 import { useCanvasStore } from './store/useCanvasStore';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function App() {
   const { activeTool, setActiveTool, stageConfig, addElement, setSelection, undo, redo, past, future, deleteElements, selectedIds } = useCanvasStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -47,7 +50,39 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, deleteElements, selectedIds]);
+  }, [undo, redo, deleteElements, selectedIds, setActiveTool, setSelection]);
+
+  const handleCreateNode = (type: string) => {
+    const centerX = (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
+    const centerY = (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
+
+    let defaultWidth = 100;
+    let defaultHeight = 100;
+    if (type === 'sticky') { defaultWidth = 200; defaultHeight = 200; }
+    else if (type === 'text') { defaultWidth = 360; defaultHeight = 240; }
+    else if (type === 'image' || type === 'video') { defaultWidth = 400; defaultHeight = 300; }
+    else if (type === 'audio') { defaultWidth = 300; defaultHeight = 80; }
+
+    const id = uuidv4();
+    const isMedia = ['image', 'video', 'audio'].includes(type);
+
+    addElement({
+      id,
+      type: type as any,
+      x: centerX - defaultWidth / 2,
+      y: centerY - defaultHeight / 2,
+      width: defaultWidth,
+      height: defaultHeight,
+      text: type === 'sticky' ? '📝 点击编辑便签内容...' : type === 'text' ? '' : undefined,
+      fontSize: type === 'text' ? 14 : undefined,
+      fontFamily: type === 'text' ? 'sans-serif' : undefined,
+      fill: type === 'rectangle' ? '#3b82f6' : type === 'circle' ? '#10b981' : type === 'sticky' ? '#fef08a' : type === 'text' ? '#1f2937' : undefined,
+      src: isMedia ? '' : undefined,
+      cornerRadius: type === 'rectangle' ? 12 : undefined
+    });
+    setSelection([id]);
+    setActiveTool('select');
+  };
 
   return (
     <div className="w-screen h-screen bg-[#f0f2f5] text-[#1a1a1b] font-sans flex flex-col overflow-hidden select-none">
@@ -88,6 +123,15 @@ export default function App() {
 
         {/* Floating Top Right Controls (Actions) */}
         <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+          <SaveControls />
+          <div className="w-[1px] h-6 bg-gray-200/80 mx-1"></div>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center justify-center p-2 bg-white/90 backdrop-blur-md text-gray-600 hover:text-gray-900 shadow-sm border border-gray-200/80 rounded-lg transition-colors hover:bg-gray-50"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
           <button className="flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-md text-[11px] font-medium text-gray-700 hover:text-gray-900 shadow-sm border border-gray-200/80 rounded-lg transition-colors">
             <Sparkles className="w-4 h-4 text-purple-600" />
             AI 工作区
@@ -111,23 +155,21 @@ export default function App() {
           
           {/* Floating UI Elements */}
           <PropertiesPanel />
-          
-          {/* AI Generation Prompt Bar at Bottom Center */}
-          <AIPromptBar />
+
+          {/* History timeline panel */}
+          <HistoryPanel />
           
           {/* Floating Capsule Toolbar */}
           <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center bg-white/90 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-200/80 rounded-full px-2 py-3 gap-2 z-20">
             <div className="relative group/media self-stretch flex justify-center">
-              <div className={`relative w-10 h-10 flex items-center justify-center rounded-full cursor-pointer transition-all duration-300 z-10 shadow-sm ${
-                ['text', 'image', 'video', 'audio'].includes(activeTool) ? 'bg-blue-600 text-white shadow-blue-500/30' : 'bg-gray-900 text-white hover:bg-gray-800 hover:shadow-md'
-              }`}>
-                <Plus className={`w-5 h-5 transition-transform duration-300 ${['text', 'image', 'video', 'audio'].includes(activeTool) ? 'rotate-45' : ''}`} strokeWidth={2.5} />
+              <div className="relative w-10 h-10 flex items-center justify-center rounded-full cursor-pointer transition-all duration-300 z-10 shadow-sm bg-gray-900 text-white hover:bg-gray-800 hover:shadow-md">
+                <Plus className="w-5 h-5 transition-transform duration-300 group-hover/media:rotate-90" strokeWidth={2.5} />
                 
                 {/* Invisible hover bridge */}
-                <div className="absolute left-full top-0 w-8 h-full pointer-events-auto hidden group-hover/media:block z-0"></div>
+                <div className="absolute left-full top-0 w-8 h-full pointer-events-auto invisible group-hover/media:visible transition-all delay-500 group-hover/media:delay-0 z-0"></div>
               </div>
               
-              <div className="absolute left-full top-0 ml-4 opacity-0 -translate-x-4 pointer-events-none group-hover/media:opacity-100 group-hover/media:translate-x-0 group-hover/media:pointer-events-auto transition-all duration-300 z-50 w-[280px]">
+              <div className="absolute left-full top-0 ml-4 invisible opacity-0 -translate-x-4 group-hover/media:visible group-hover/media:opacity-100 group-hover/media:translate-x-0 transition-all duration-300 delay-500 group-hover/media:delay-0 z-50 w-[280px]">
                 <div className="bg-white/95 backdrop-blur-xl shadow-[0_20px_60px_rgb(0,0,0,0.15)] border border-gray-200/80 rounded-[20px] p-2.5 flex flex-col gap-3 text-left">
                   {/* Search Bar */}
                   <div className="relative flex items-center mt-1 mx-1">
@@ -137,10 +179,10 @@ export default function App() {
 
                   <div className="flex flex-col gap-0.5">
                     <div className="text-[11px] font-semibold text-gray-400 px-3 py-1.5 mt-1">Add Node</div>
-                    <MenuItem icon={<Type />} title="Text" desc="Generate and edit" hotkey="T" onClick={() => setActiveTool('text')} active={activeTool === 'text'} />
-                    <MenuItem icon={<ImageIcon />} title="Image" desc="Generate, edit, and upload" hotkey="I" onClick={() => setActiveTool('image')} active={activeTool === 'image'} />
-                    <MenuItem icon={<Video />} title="Video" desc="Generate, edit, and upload" hotkey="V" onClick={() => setActiveTool('video')} active={activeTool === 'video'} />
-                    <MenuItem icon={<Music />} title="Audio" desc="Generate audio from text" hotkey="A" onClick={() => setActiveTool('audio')} active={activeTool === 'audio'} />
+                    <MenuItem icon={<Type />} title="Text" desc="Generate and edit" hotkey="T" onClick={() => handleCreateNode('text')} active={false} />
+                    <MenuItem icon={<ImageIcon />} title="Image" desc="Generate, edit, and upload" hotkey="I" onClick={() => handleCreateNode('image')} active={false} />
+                    <MenuItem icon={<Video />} title="Video" desc="Generate, edit, and upload" hotkey="V" onClick={() => handleCreateNode('video')} active={false} />
+                    <MenuItem icon={<Music />} title="Audio" desc="Generate audio from text" hotkey="A" onClick={() => handleCreateNode('audio')} active={false} />
                   </div>
 
                   <div className="h-[1px] w-[calc(100%-8px)] mx-auto bg-gray-100 my-0.5"></div>
@@ -155,13 +197,18 @@ export default function App() {
 
             <div className="h-[1px] w-6 bg-gray-200 my-1"></div>
 
-            <ToolButton icon={<Square />} label="矩形" tool="rectangle" active={activeTool === 'rectangle'} onClick={() => setActiveTool('rectangle')} />
-            <ToolButton icon={<Circle />} label="圆形" tool="circle" active={activeTool === 'circle'} onClick={() => setActiveTool('circle')} />
-            <ToolButton icon={<StickyNote />} label="便签" tool="sticky" active={activeTool === 'sticky'} onClick={() => setActiveTool('sticky')} />
+            <ToolButton icon={<Square />} label="矩形" tool="rectangle" active={false} onClick={() => handleCreateNode('rectangle')} />
+            <ToolButton icon={<Circle />} label="圆形" tool="circle" active={false} onClick={() => handleCreateNode('circle')} />
+            <ToolButton icon={<StickyNote />} label="便签" tool="sticky" active={false} onClick={() => handleCreateNode('sticky')} />
           </div>
         </section>
 
       </main>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+      )}
     </div>
   );
 }
