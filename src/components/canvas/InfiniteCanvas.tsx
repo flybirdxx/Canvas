@@ -1,15 +1,29 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Stage, Layer, Rect, Line } from 'react-konva';
+import { Stage, Layer, Rect, Line, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
+import type Konva from 'konva';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '../../store/useCanvasStore';
 import { CanvasElements } from './CanvasElements';
 import { CanvasElement } from '../../types/canvas';
 import { NodeInputBar } from '../NodeInputBar';
-import { Type, ImageIcon, Video, Music } from 'lucide-react'; // For Quick Add Menu
+import { NodeVersionSwitcher } from '../NodeVersionSwitcher';
+import { InpaintOverlay } from '../InpaintOverlay';
+import { NodeNoteIndicator } from '../NodeNoteIndicator';
+import { setStage } from '../../utils/stageRegistry';
+import { exportCanvasRect } from '../../utils/exportPng';
+import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
+import { Type, ImageIcon, Video, Music, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
 
 // Bar 的宽度和间距用画布单位表达，由 CSS transform:scale 在渲染时等比缩放。
-const INPUT_BAR_MIN_WIDTH_CANVAS = 340;
+// 按节点类型设置最小宽度：视频模式底栏最密（model/aspect/quality/duration/more/count/credits/submit），
+// 图像模式稍少（无 duration），文本模式最简（仅 model/more/credits/submit）。
+const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
+  text: 360,
+  image: 480,
+  video: 520,
+};
+const INPUT_BAR_MIN_WIDTH_FALLBACK = 360;
 const INPUT_BAR_GAP_CANVAS = 10;
 const INPUT_BAR_VISIBLE_SCALE = 0.5;
 
@@ -24,15 +38,23 @@ function getBezierPoints(startX: number, startY: number, endX: number, endY: num
   return [startX, startY, cp1X, cp1Y, cp2X, cp2Y, endX, endY];
 }
 
+/**
+ * Paper-palette port colors — mirrors the --port-* tokens in tokens.css
+ * (Konva can't read CSS vars, so sRGB approximations of the oklch source).
+ * Kept in sync with the copy in CanvasElements.tsx.
+ */
 function getPortColor(type: string) {
   switch (type) {
-    case 'text': return '#10b981'; // emerald
-    case 'image': return '#8b5cf6'; // violet
-    case 'video': return '#ef4444'; // red
-    case 'audio': return '#f59e0b'; // amber
-    default: return '#94a3b8'; // slate
+    case 'text':  return '#3F8FA6';   // teal
+    case 'image': return '#C67654';   // terracotta
+    case 'video': return '#8866B5';   // plum
+    case 'audio': return '#6FA26A';   // green
+    default:      return '#8A7F74';   // neutral ink
   }
 }
+
+/** Ink-1 mirror for selection marquees. */
+const INK_LINE = '#5A4E42';
 
 export function InfiniteCanvas() {
   const { 
@@ -43,9 +65,19 @@ export function InfiniteCanvas() {
     drawingConnection, setDrawingConnection,
     selectedIds,
   } = useCanvasStore();
+  const inpaintMask = useCanvasStore(s => s.inpaintMask);
   
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Konva.Stage | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+
+  // Register the Konva Stage in the module-level registry so export utilities
+  // can grab it without prop drilling. Clean up on unmount.
+  useEffect(() => {
+    return () => {
+      setStage(null);
+    };
+  }, []);
 
   // Quick Add Menu state
   const [quickAddMenu, setQuickAddMenu] = useState<{
@@ -68,6 +100,36 @@ export function InfiniteCanvas() {
   } | null>(null);
 
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+
+  // Marquee-export tool mode. `active` means we're in the mode (awaiting draw or
+  // confirmation); `drawing` is true while the user is dragging out the rect;
+  // once the user releases, we stay active with a confirmation toolbar shown.
+  const [marquee, setMarquee] = useState<{
+    active: boolean;
+    drawing: boolean;
+    rect: { x: number; y: number; w: number; h: number } | null;
+  }>({ active: false, drawing: false, rect: null });
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Enter marquee mode on external request (menu / hotkey).
+  useEffect(() => {
+    const enter = () => setMarquee({ active: true, drawing: false, rect: null });
+    window.addEventListener('canvas:start-marquee-export', enter);
+    return () => window.removeEventListener('canvas:start-marquee-export', enter);
+  }, []);
+
+  // Esc cancels marquee mode globally.
+  useEffect(() => {
+    if (!marquee.active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMarquee({ active: false, drawing: false, rect: null });
+        marqueeStartRef.current = null;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [marquee.active]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -137,6 +199,25 @@ export function InfiniteCanvas() {
     // Hide Quick Add menu if clicking elsewhere
     setQuickAddMenu(null);
 
+    // Marquee export tool: start drawing a new rect (allowed only on primary
+    // button and only when we're not already showing a confirmation rect).
+    if (marquee.active && e.evt.button === 0) {
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const scale = stage.scaleX();
+      const cx = (pointer.x - stage.x()) / scale;
+      const cy = (pointer.y - stage.y()) / scale;
+      marqueeStartRef.current = { x: cx, y: cy };
+      setMarquee({
+        active: true,
+        drawing: true,
+        rect: { x: cx, y: cy, w: 0, h: 0 },
+      });
+      return;
+    }
+
     if (e.evt.button === 1 || (e.evt.button === 0 && isSpacePressed)) {
       e.evt.preventDefault();
       isPanningRef.current = true;
@@ -161,7 +242,27 @@ export function InfiniteCanvas() {
   const handlePointerMove = (e: KonvaEventObject<PointerEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
-    
+
+    if (marquee.active && marquee.drawing && marqueeStartRef.current) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const scale = stage.scaleX();
+      const cx = (pointer.x - stage.x()) / scale;
+      const cy = (pointer.y - stage.y()) / scale;
+      const s = marqueeStartRef.current;
+      setMarquee({
+        active: true,
+        drawing: true,
+        rect: {
+          x: Math.min(s.x, cx),
+          y: Math.min(s.y, cy),
+          w: Math.abs(cx - s.x),
+          h: Math.abs(cy - s.y),
+        },
+      });
+      return;
+    }
+
     if (isPanningRef.current) {
       e.evt.preventDefault();
       const dx = e.evt.clientX - lastPanPositionRef.current.x;
@@ -237,6 +338,18 @@ export function InfiniteCanvas() {
   }
 
   const handlePointerUp = (e: KonvaEventObject<PointerEvent>) => {
+    if (marquee.active && marquee.drawing) {
+      marqueeStartRef.current = null;
+      // Too-small drags collapse back to 'waiting for new drag' instead of
+      // opening a degenerate confirmation toolbar.
+      if (!marquee.rect || marquee.rect.w < 4 || marquee.rect.h < 4) {
+        setMarquee({ active: true, drawing: false, rect: null });
+        return;
+      }
+      setMarquee(m => ({ ...m, drawing: false }));
+      return;
+    }
+
     if (isPanningRef.current) {
       isPanningRef.current = false;
       return;
@@ -306,7 +419,40 @@ export function InfiniteCanvas() {
     e.preventDefault();
     const stage = containerRef.current?.querySelector('canvas');
     if (!stage) return;
-    
+
+    // Drop from the asset library panel — resolve asset by id and drop at cursor.
+    const assetId = e.dataTransfer.getData('application/x-canvas-asset');
+    if (assetId) {
+      const asset = useAssetLibraryStore.getState().findAsset(assetId);
+      if (!asset) return;
+
+      const defaults =
+        asset.kind === 'image' ? { w: 400, h: 300 } :
+        asset.kind === 'video' ? { w: 400, h: 300 } :
+                                  { w: 300, h: 80 };
+      const width = asset.width ?? defaults.w;
+      const height = asset.height ?? defaults.h;
+
+      const rect = containerRef.current!.getBoundingClientRect();
+      const posX = e.clientX - rect.left;
+      const posY = e.clientY - rect.top;
+      const scale = stageConfig.scale;
+      const x = (posX - stageConfig.x) / scale - width / 2;
+      const y = (posY - stageConfig.y) / scale - height / 2;
+
+      const id = uuidv4();
+      addElement({
+        id,
+        type: asset.kind,
+        x, y, width, height,
+        src: asset.src,
+        prompt: asset.prompt,
+      } as any);
+      setSelection([id]);
+      setActiveTool('select');
+      return;
+    }
+
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
@@ -318,19 +464,22 @@ export function InfiniteCanvas() {
       const src = URL.createObjectURL(file);
       const width = isVideo ? 400 : 300;
       const height = isVideo ? 260 : 80;
-      
+
       const rect = containerRef.current!.getBoundingClientRect();
       const posX = e.clientX - rect.left;
       const posY = e.clientY - rect.top;
-      
+
       const scale = stageConfig.scale;
       const x = (posX - stageConfig.x) / scale - width / 2;
       const y = (posY - stageConfig.y) / scale - height / 2;
-      
+
       const id = uuidv4();
       addElement({ id, type: isVideo ? 'video' : 'audio', x, y, width, height, src } as any);
       setSelection([id]);
       setActiveTool('select');
+      // Note: asset library refuses blob: URLs (session-local), so video/audio
+      // uploads aren't archived by the sync path. They can be re-added later via
+      // the panel's upload button, which converts to data URL.
       return;
     }
 
@@ -347,19 +496,29 @@ export function InfiniteCanvas() {
              height = (maxWidth / width) * height;
              width = maxWidth;
           }
-          
+
           const rect = containerRef.current!.getBoundingClientRect();
           const posX = e.clientX - rect.left;
           const posY = e.clientY - rect.top;
-          
+
           const scale = stageConfig.scale;
           const x = (posX - stageConfig.x) / scale - width / 2;
           const y = (posY - stageConfig.y) / scale - height / 2;
-          
+
           const id = uuidv4();
           addElement({ id, type: 'image', x, y, width, height, src });
           setSelection([id]);
           setActiveTool('select');
+
+          // Auto-archive uploaded images (data URLs survive reload).
+          useAssetLibraryStore.getState().addAsset({
+            kind: 'image',
+            src,
+            name: file.name || '上传图像',
+            width,
+            height,
+            source: 'uploaded',
+          });
         };
         img.src = src;
       };
@@ -370,9 +529,10 @@ export function InfiniteCanvas() {
   const handleQuickAdd = (type: 'text' | 'image' | 'video' | 'audio') => {
     if (!quickAddMenu) return;
     
-    let defaultWidth = 400;
-    let defaultHeight = 300;
+    let defaultWidth = 480;
+    let defaultHeight = 360;
     if (type === 'text') { defaultWidth = 360; defaultHeight = 240; }
+    else if (type === 'video') { defaultWidth = 520; defaultHeight = 360; }
     else if (type === 'audio') { defaultWidth = 300; defaultHeight = 80; }
 
     const id = uuidv4();
@@ -425,6 +585,10 @@ export function InfiniteCanvas() {
       onDragOver={(e) => e.preventDefault()}
     >
       <Stage
+        ref={(node) => {
+          stageRef.current = node;
+          setStage(node);
+        }}
         width={size.width}
         height={size.height}
         scaleX={stageConfig.scale}
@@ -432,7 +596,7 @@ export function InfiniteCanvas() {
         x={stageConfig.x}
         y={stageConfig.y}
         onWheel={handleWheel}
-        draggable={(activeTool === 'select' || activeTool === 'hand' || isSpacePressed) && !drawingConnection && !selectionBox}
+        draggable={(activeTool === 'select' || activeTool === 'hand' || isSpacePressed) && !drawingConnection && !selectionBox && !marquee.active}
         onDragEnd={(e) => {
           if ((activeTool === 'select' || activeTool === 'hand' || isSpacePressed) && e.target === e.target.getStage()) {
             setStageConfig({ x: e.target.x(), y: e.target.y() });
@@ -457,6 +621,7 @@ export function InfiniteCanvas() {
           }
         }}
         className={
+          marquee.active ? 'cursor-crosshair' :
           isSpacePressed ? (isPanningRef.current ? 'cursor-grabbing' : 'cursor-grab') :
           activeTool === 'hand' ? 'cursor-grab active:cursor-grabbing' : 
           activeTool === 'select' ? 'cursor-default active:cursor-grab' : 'cursor-crosshair'
@@ -483,42 +648,74 @@ export function InfiniteCanvas() {
             const endX = toEl.x;
             const endY = toEl.y + inputSpacing * (toPortIdx + 1);
             
+            // Two-pass ink line: a soft, wider wash underneath + a crisp
+            // stroke on top. Approximates the "brush bleed" of ink on
+            // paper without needing an SVG turbulence filter in Konva.
             return (
-              <Line
-                key={conn.id}
-                points={getBezierPoints(startX, startY, endX, endY)}
-                stroke={getPortColor(fromPortType)}
-                strokeWidth={3}
-                bezier={true}
-              />
+              <Group key={conn.id}>
+                <Line
+                  points={getBezierPoints(startX, startY, endX, endY)}
+                  stroke={getPortColor(fromPortType)}
+                  strokeWidth={5}
+                  opacity={0.22}
+                  bezier
+                  listening={false}
+                  lineCap="round"
+                />
+                <Line
+                  points={getBezierPoints(startX, startY, endX, endY)}
+                  stroke={getPortColor(fromPortType)}
+                  strokeWidth={1.6}
+                  bezier
+                  listening={false}
+                  lineCap="round"
+                />
+              </Group>
             );
           })}
 
-          {/* Render Active Drawing Connection */}
+          {/* Active drawing connection — thinner ink stroke, tight dash */}
           {drawingConnection && (
             <Line
               points={getBezierPoints(drawingConnection.startX, drawingConnection.startY, drawingConnection.toX, drawingConnection.toY)}
               stroke={getPortColor(drawingConnection.fromPortType)}
-              strokeWidth={3}
-              dash={[6, 6]}
-              bezier={true}
+              strokeWidth={1.8}
+              dash={[5, 4]}
+              bezier
+              lineCap="round"
             />
           )}
 
           <CanvasElements />
           
-          {/* Render Selection Box */}
+          {/* Selection box — hand-drawn ink dashed rect */}
           {selectionBox && (
-             <Rect 
-                x={selectionBox.x} 
-                y={selectionBox.y} 
-                width={selectionBox.width} 
-                height={selectionBox.height} 
-                fill="rgba(59, 130, 246, 0.1)" 
-                stroke="rgba(59, 130, 246, 0.5)" 
-                strokeWidth={1} 
+             <Rect
+                x={selectionBox.x}
+                y={selectionBox.y}
+                width={selectionBox.width}
+                height={selectionBox.height}
+                fill="rgba(40, 30, 20, 0.04)"
+                stroke={INK_LINE}
+                strokeWidth={1.2}
+                dash={[6, 4]}
                 cornerRadius={4}
+                opacity={0.75}
              />
+          )}
+
+          {/* Marquee export rectangle — terracotta ink dashed border */}
+          {marquee.active && marquee.rect && marquee.rect.w > 0 && marquee.rect.h > 0 && (
+            <Rect
+              x={marquee.rect.x}
+              y={marquee.rect.y}
+              width={marquee.rect.w}
+              height={marquee.rect.h}
+              fill="rgba(198, 118, 84, 0.08)"
+              stroke="#C67654"
+              strokeWidth={1.2 / stageConfig.scale}
+              dash={[6 / stageConfig.scale, 5 / stageConfig.scale]}
+            />
           )}
         </Layer>
       </Stage>
@@ -534,7 +731,8 @@ export function InfiniteCanvas() {
             .map(el => {
               const canvasX = el.x;
               const canvasY = el.y + el.height + INPUT_BAR_GAP_CANVAS;
-              const canvasWidth = Math.max(el.width, INPUT_BAR_MIN_WIDTH_CANVAS);
+              const barMin = INPUT_BAR_MIN_WIDTH_BY_TYPE[el.type] ?? INPUT_BAR_MIN_WIDTH_FALLBACK;
+              const canvasWidth = Math.max(el.width, barMin);
               const screenX = stageConfig.x + canvasX * stageConfig.scale;
               const screenY = stageConfig.y + canvasY * stageConfig.scale;
               return (
@@ -551,38 +749,256 @@ export function InfiniteCanvas() {
         </div>
       )}
 
+      {/* F15: Inpaint overlay — rendered only when an inpaint session is
+          active. Sits directly over the target image node in screen coords,
+          catching pointer events to draw the rewrite rectangle. */}
+      {inpaintMask && (() => {
+        const target = elements.find(el => el.id === inpaintMask.elementId);
+        if (!target) return null;
+        const screenX = stageConfig.x + target.x * stageConfig.scale;
+        const screenY = stageConfig.y + target.y * stageConfig.scale;
+        const screenW = target.width * stageConfig.scale;
+        const screenH = target.height * stageConfig.scale;
+        return (
+          <div className="absolute inset-0 pointer-events-none">
+            <InpaintOverlay
+              element={target}
+              x={screenX}
+              y={screenY}
+              width={screenW}
+              height={screenH}
+            />
+          </div>
+        );
+      })()}
+
+      {/* F24: Node note indicator — shown on node top-right. Visible
+          whenever the node has a stored note OR is currently selected
+          (so it also serves as the "add note" entry point). Scales with
+          the stage zoom to stay readable. */}
+      <div className="absolute inset-0 pointer-events-none">
+        {elements
+          .filter(el => {
+            const hasNote =
+              typeof (el as any).note === 'string' && (el as any).note.trim().length > 0;
+            return hasNote || selectedIds.includes(el.id);
+          })
+          .map(el => {
+            const canvasRightX = el.x + el.width;
+            const canvasTopY = el.y;
+            const screenX = stageConfig.x + canvasRightX * stageConfig.scale;
+            const screenY = stageConfig.y + canvasTopY * stageConfig.scale;
+            return (
+              <NodeNoteIndicator
+                key={`note-${el.id}`}
+                element={el}
+                x={screenX}
+                y={screenY}
+                scale={stageConfig.scale}
+              />
+            );
+          })}
+      </div>
+
+      {/* F2: Version switcher — shown above selected image/video nodes that
+          have 2+ archived versions. Doesn't participate in the INPUT_BAR
+          visibility gate because it's useful even at small scales (single
+          row, non-interactive when zoomed out). */}
+      <div className="absolute inset-0 pointer-events-none">
+        {elements
+          .filter(el =>
+            selectedIds.includes(el.id) &&
+            (el.type === 'image' || el.type === 'video') &&
+            Array.isArray((el as any).versions) &&
+            (el as any).versions.length >= 2
+          )
+          .map(el => {
+            // Top-center of the node, in screen coords.
+            const canvasCx = el.x + el.width / 2;
+            const canvasTop = el.y;
+            const screenX = stageConfig.x + canvasCx * stageConfig.scale;
+            const screenY = stageConfig.y + canvasTop * stageConfig.scale;
+            return (
+              <NodeVersionSwitcher
+                key={`ver-${el.id}`}
+                element={el}
+                x={screenX}
+                y={screenY}
+                scale={stageConfig.scale}
+              />
+            );
+          })}
+      </div>
+
       {/* Quick Add Menu Overlay */}
       {quickAddMenu && (
-        <div 
-          className="absolute z-50 bg-white/95 backdrop-blur-xl shadow-[0_20px_60px_rgb(0,0,0,0.15)] border border-gray-200/80 rounded-[16px] p-2 flex flex-col gap-1 w-[200px]"
-          style={{ left: quickAddMenu.x + 10, top: quickAddMenu.y - 10 }}
+        <div
+          className="chip-paper anim-pop absolute z-50 flex flex-col gap-0.5"
+          style={{
+            left: quickAddMenu.x + 10,
+            top: quickAddMenu.y - 10,
+            width: 'max-content',
+            minWidth: 140,
+            padding: 6,
+            boxShadow: 'var(--shadow-ink-3)',
+          }}
         >
-          <div className="text-[11px] font-semibold text-gray-400 px-3 py-1.5">Quick Add Node</div>
-          <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded-lg text-left transition-colors" onClick={() => handleQuickAdd('text')}>
-            <Type className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-gray-700 font-medium">Text</span>
-          </button>
-          <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded-lg text-left transition-colors" onClick={() => handleQuickAdd('image')}>
-            <ImageIcon className="w-4 h-4 text-violet-500" />
-            <span className="text-sm text-gray-700 font-medium">Image</span>
-          </button>
-          <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded-lg text-left transition-colors" onClick={() => handleQuickAdd('video')}>
-            <Video className="w-4 h-4 text-red-500" />
-            <span className="text-sm text-gray-700 font-medium">Video</span>
-          </button>
-          <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded-lg text-left transition-colors" onClick={() => handleQuickAdd('audio')}>
-            <Music className="w-4 h-4 text-amber-500" />
-            <span className="text-sm text-gray-700 font-medium">Audio</span>
-          </button>
+          <div className="meta" style={{ padding: '4px 10px', fontSize: 9.5 }}>
+            Quick Add Node
+          </div>
+          <QuickAddRow icon={<Type className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-text)' }} />} label="Text" onClick={() => handleQuickAdd('text')} />
+          <QuickAddRow icon={<ImageIcon className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-image)' }} />} label="Image" onClick={() => handleQuickAdd('image')} />
+          <QuickAddRow icon={<Video className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-video)' }} />} label="Video" onClick={() => handleQuickAdd('video')} />
+          <QuickAddRow icon={<Music className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-audio)' }} />} label="Audio" onClick={() => handleQuickAdd('audio')} />
         </div>
       )}
 
-      {/* Mini Viewport Info */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-gray-200/50">
-        <button className="p-1 hover:bg-gray-100/50 rounded-full text-gray-500" onClick={() => setStageConfig({ scale: Math.max(0.1, stageConfig.scale / 1.1) })}>-</button>
-        <span className="text-[10px] font-bold min-w-[36px] text-center text-gray-700">{Math.round(stageConfig.scale * 100)}%</span>
-        <button className="p-1 hover:bg-gray-100/50 rounded-full text-gray-500" onClick={() => setStageConfig({ scale: Math.min(5, stageConfig.scale * 1.1) })}>+</button>
+      {/* Marquee-export UI overlays */}
+      {marquee.active && (
+        <>
+          {/* Top hint banner, visible while awaiting / drawing. */}
+          {!marquee.rect || marquee.drawing ? (
+            <div
+              className="absolute z-30 pointer-events-none anim-fade-in"
+              style={{
+                top: 120,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                padding: '5px 12px',
+                borderRadius: 'var(--r-pill)',
+                background: 'var(--accent)',
+                color: 'var(--accent-fg)',
+                fontSize: 12,
+                fontWeight: 500,
+                boxShadow: 'var(--shadow-ink-2)',
+              }}
+            >
+              {marquee.drawing ? '松开以确认范围' : '拖拽框选要导出的区域（Esc 取消）'}
+            </div>
+          ) : null}
+
+          {/* Confirmation toolbar, placed above the drawn rect. */}
+          {!marquee.drawing && marquee.rect && marquee.rect.w > 0 && marquee.rect.h > 0 && (() => {
+            const screenX = stageConfig.x + marquee.rect.x * stageConfig.scale;
+            const screenY = stageConfig.y + marquee.rect.y * stageConfig.scale;
+            const screenW = marquee.rect.w * stageConfig.scale;
+            const toolbarTop = Math.max(8, screenY - 44);
+            const toolbarLeft = screenX + screenW / 2;
+            return (
+              <div
+                className="chip-paper absolute z-30 flex items-center gap-1"
+                style={{
+                  left: toolbarLeft,
+                  top: toolbarTop,
+                  transform: 'translateX(-50%)',
+                  padding: '3px 4px',
+                  borderRadius: 'var(--r-pill)',
+                  boxShadow: 'var(--shadow-ink-3)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (marquee.rect) exportCanvasRect(marquee.rect);
+                    setMarquee({ active: false, drawing: false, rect: null });
+                  }}
+                  className="btn btn-primary"
+                  style={{ padding: '5px 12px', fontSize: 11, borderRadius: 'var(--r-pill)' }}
+                >
+                  <Check className="w-3.5 h-3.5" strokeWidth={1.8} />
+                  导出此区域
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarquee({ active: true, drawing: false, rect: null })}
+                  className="btn btn-ghost"
+                  style={{ padding: '5px 10px', fontSize: 11, borderRadius: 'var(--r-pill)' }}
+                  title="重新框选"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.6} />
+                  重新框
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarquee({ active: false, drawing: false, rect: null })}
+                  className="btn btn-ghost btn-icon"
+                  style={{ width: 26, height: 26, padding: 0, borderRadius: '50%' }}
+                  title="取消 (Esc)"
+                >
+                  <X className="w-3.5 h-3.5" strokeWidth={1.6} />
+                </button>
+              </div>
+            );
+          })()}
+        </>
+      )}
+
+      {/* Mini Zoom Control — sits bottom-left under the ToolDock */}
+      <div
+        className="chip-paper chip-paper--flat absolute flex items-center mono"
+        style={{
+          bottom: 16,
+          left: 16,
+          padding: '2px 4px',
+          fontSize: 10.5,
+          color: 'var(--ink-1)',
+          zIndex: 30,
+        }}
+      >
+        <button
+          className="btn btn-ghost btn-icon"
+          style={{ width: 22, height: 22, padding: 0 }}
+          onClick={() => setStageConfig({ scale: Math.max(0.1, stageConfig.scale / 1.1) })}
+        >
+          −
+        </button>
+        <span
+          style={{
+            minWidth: 40,
+            textAlign: 'center',
+            color: 'var(--ink-0)',
+            fontWeight: 500,
+          }}
+        >
+          {Math.round(stageConfig.scale * 100)}%
+        </span>
+        <button
+          className="btn btn-ghost btn-icon"
+          style={{ width: 22, height: 22, padding: 0 }}
+          onClick={() => setStageConfig({ scale: Math.min(5, stageConfig.scale * 1.1) })}
+        >
+          +
+        </button>
       </div>
     </div>
+  );
+}
+
+function QuickAddRow({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="flex items-center gap-2.5 text-left transition-colors"
+      style={{
+        padding: '7px 10px',
+        borderRadius: 'var(--r-sm)',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+      }}
+      onClick={onClick}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      {icon}
+      <span style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500 }}>{label}</span>
+    </button>
   );
 }

@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 画布 Pro · Warm Paper Studio · Redesign Prototype</title>
+
+<!-- Tailwind CDN (prototype only) -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+
+<!-- Fonts: Fraunces (Google, variable + SOFT) + IBM Plex Mono (Google) + General Sans (Fontshare) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,0..100;1,9..144,300..700,0..100&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        serif: ['"Fraunces"', 'Iowan Old Style', 'Georgia', 'serif'],
+        sans:  ['"General Sans"', 'system-ui', 'sans-serif'],
+        mono:  ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+      },
+    },
+  },
+};
+</script>
+
+<style>
+/* ============================================================
+   TOKENS · LIGHT (default · Cream Paper)
+============================================================ */
+:root,
+[data-theme="light"] {
+  --bg-0: oklch(0.985 0.012 85);
+  --bg-1: oklch(0.972 0.014 85);
+  --bg-2: oklch(0.952 0.016 85);
+  --bg-3: oklch(0.920 0.020 80);
+
+  --fg-0: oklch(0.185 0.015 65);
+  --fg-1: oklch(0.365 0.018 65);
+  --fg-2: oklch(0.540 0.020 65);
+  --fg-3: oklch(0.705 0.020 65);
+
+  --line:        oklch(0.865 0.020 75);
+  --line-strong: oklch(0.755 0.022 75);
+
+  --accent:    oklch(0.565 0.180 45);
+  --accent-hi: oklch(0.490 0.200 45);
+  --accent-lo: oklch(0.965 0.030 45);
+
+  --signal:    oklch(0.515 0.120 180);
+  --signal-hi: oklch(0.445 0.135 180);
+  --signal-lo: oklch(0.955 0.028 180);
+
+  --warn:    oklch(0.635 0.155 75);
+  --danger:  oklch(0.525 0.205 25);
+  --success: oklch(0.525 0.135 155);
+
+  --canvas:       oklch(0.982 0.010 85);
+  --grid-dot:     oklch(0.775 0.020 75 / 0.35);
+  --paper-grain:  oklch(0.185 0.015 65 / 0.02);
+  --vignette:     oklch(0.185 0.015 65 / 0.06);
+
+  --shadow-ink-1: oklch(0.185 0.020 65 / 0.10);
+  --shadow-ink-2: oklch(0.185 0.020 65 / 0.14);
+
+  --shadow-1: inset 0 0 0 1px var(--line);
+  --shadow-2: 0 2px 4px -2px var(--shadow-ink-1), 0 10px 24px -12px var(--shadow-ink-2);
+  --shadow-3: 0 4px 8px -4px var(--shadow-ink-1), 0 18px 40px -16px var(--shadow-ink-2);
+  --shadow-4: 0 8px 16px -8px var(--shadow-ink-1), 0 32px 64px -24px var(--shadow-ink-2);
+  --shadow-press: 0 1px 0 0 var(--shadow-ink-1);
+
+  --sticky-bg:   oklch(0.945 0.110 92);
+  --sticky-line: oklch(0.745 0.140 90);
+  --sticky-fg:   oklch(0.305 0.095 80);
+
+  --port-text:  oklch(0.515 0.120 180);
+  --port-image: oklch(0.565 0.180 45);
+  --port-video: oklch(0.570 0.140 75);
+  --port-audio: oklch(0.465 0.110 290);
+
+  --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-pill: 999px;
+
+  --dur-xs: 100ms; --dur-sm: 160ms; --dur-md: 240ms; --dur-lg: 380ms;
+  --ease-snap:  cubic-bezier(0.22, 0.8, 0.22, 1);
+  --ease-stand: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --ease-paper: cubic-bezier(0.32, 0.72, 0.24, 1.02);
+}
+
+/* ============================================================
+   TOKENS · DARK (Evening Paper)
+============================================================ */
+[data-theme="dark"] {
+  --bg-0: oklch(0.185 0.014 65);
+  --bg-1: oklch(0.220 0.016 65);
+  --bg-2: oklch(0.260 0.018 65);
+  --bg-3: oklch(0.310 0.020 65);
+
+  --fg-0: oklch(0.965 0.012 85);
+  --fg-1: oklch(0.810 0.014 85);
+  --fg-2: oklch(0.615 0.016 85);
+  --fg-3: oklch(0.465 0.018 85);
+
+  --line:        oklch(0.345 0.020 70);
+  --line-strong: oklch(0.435 0.022 70);
+
+  --accent:    oklch(0.705 0.160 45);
+  --accent-hi: oklch(0.770 0.175 45);
+  --accent-lo: oklch(0.280 0.080 45);
+
+  --signal:    oklch(0.685 0.110 180);
+  --signal-hi: oklch(0.760 0.125 180);
+
+  --warn:    oklch(0.715 0.150 75);
+  --danger:  oklch(0.670 0.200 25);
+  --success: oklch(0.680 0.130 155);
+
+  --canvas:       oklch(0.165 0.014 65);
+  --grid-dot:     oklch(0.560 0.020 80 / 0.25);
+  --paper-grain:  oklch(0.965 0.012 85 / 0.03);
+  --vignette:     oklch(0 0 0 / 0.25);
+
+  --shadow-ink-1: oklch(0 0 0 / 0.35);
+  --shadow-ink-2: oklch(0 0 0 / 0.50);
+
+  --shadow-1: inset 0 0 0 1px var(--line);
+  --shadow-2: 0 3px 6px -3px var(--shadow-ink-1), 0 14px 30px -14px var(--shadow-ink-2);
+  --shadow-3: 0 5px 10px -5px var(--shadow-ink-1), 0 22px 48px -20px var(--shadow-ink-2);
+  --shadow-4: 0 10px 20px -10px var(--shadow-ink-1), 0 40px 72px -28px var(--shadow-ink-2);
+  --shadow-press: 0 1px 0 0 oklch(0 0 0 / 0.5);
+
+  --sticky-bg:   oklch(0.375 0.085 85);
+  --sticky-line: oklch(0.560 0.110 85);
+  --sticky-fg:   oklch(0.955 0.060 85);
+
+  --port-text:  oklch(0.700 0.110 180);
+  --port-image: oklch(0.715 0.165 45);
+  --port-video: oklch(0.720 0.140 75);
+  --port-audio: oklch(0.665 0.110 290);
+}
+
+/* ============================================================
+   BASE
+============================================================ */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: "General Sans", system-ui, sans-serif;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  overflow: hidden;
+  font-feature-settings: "ss01" 1, "cv11" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--dur-md) var(--ease-stand), color var(--dur-md) var(--ease-stand);
+}
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
+::selection { background: color-mix(in oklch, var(--accent) 30%, transparent); color: var(--fg-0); }
+
+/* Typography roles */
+.serif     { font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 72; letter-spacing: -0.01em; }
+.serif-it  { font-family: "Fraunces", Georgia, serif; font-style: italic; font-variation-settings: "SOFT" 50, "opsz" 24; }
+.mono      { font-family: "IBM Plex Mono", monospace; letter-spacing: 0.02em; }
+.meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500;
+  color: var(--fg-2);
+}
+.wordmark {
+  font-family: "Fraunces", Georgia, serif; font-weight: 500;
+  font-variation-settings: "SOFT" 60, "opsz" 144;
+  letter-spacing: -0.02em; line-height: 1;
+}
+
+/* ============================================================
+   ATMOSPHERE · L0 paper grain + vignette
+============================================================ */
+.paper-grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 90;
+  mix-blend-mode: multiply; opacity: 0.55;
+}
+[data-theme="dark"] .paper-grain { mix-blend-mode: screen; opacity: 0.22; }
+
+.vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 91;
+  background: radial-gradient(ellipse at center, transparent 50%, var(--vignette) 100%);
+}
+
+/* ============================================================
+   CANVAS · L1 dot grid
+============================================================ */
+.canvas-surface {
+  background-color: var(--canvas);
+  background-image: radial-gradient(circle, var(--grid-dot) 0.8px, transparent 1.2px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
+/* ============================================================
+   GENERIC SURFACES (paper chip / capsule)
+============================================================ */
+.chip-paper {
+  background: color-mix(in oklch, var(--bg-1) 94%, transparent);
+  backdrop-filter: blur(10px) saturate(110%);
+  -webkit-backdrop-filter: blur(10px) saturate(110%);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1), var(--shadow-2);
+  transition: box-shadow var(--dur-sm) var(--ease-paper), transform var(--dur-sm) var(--ease-paper);
+}
+.chip-paper.tight { border-radius: var(--r-md); }
+.chip-pill {
+  background: color-mix(in oklch, var(--bg-1) 94%, transparent);
+  backdrop-filter: blur(10px) saturate(110%);
+  -webkit-backdrop-filter: blur(10px) saturate(110%);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-1), var(--shadow-2);
+}
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 13px; border-radius: var(--r-sm);
+  font-family: "General Sans", sans-serif;
+  font-size: 12.5px; font-weight: 600; line-height: 1;
+  color: var(--fg-0); background: transparent;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  transition: all var(--dur-sm) var(--ease-paper);
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--line-strong); box-shadow: var(--shadow-1), var(--shadow-2); transform: translateY(-1px); }
+.btn:active { transform: translateY(1px); box-shadow: var(--shadow-press); }
+
+.btn-primary {
+  background: var(--accent); color: oklch(0.99 0.01 45);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-1), var(--shadow-2);
+}
+.btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); transform: translateY(-1px); box-shadow: var(--shadow-1), var(--shadow-3); }
+
+.btn-tonal {
+  background: var(--accent-lo); color: var(--accent-hi);
+  border-color: color-mix(in oklch, var(--accent) 30%, var(--line));
+}
+.btn-tonal:hover { background: color-mix(in oklch, var(--accent) 18%, var(--bg-1)); }
+
+.btn-ghost { border-color: transparent; box-shadow: none; color: var(--fg-1); }
+.btn-ghost:hover { border-color: transparent; background: var(--bg-2); box-shadow: none; color: var(--fg-0); transform: none; }
+
+.btn-icon { padding: 7px; }
+
+/* ============================================================
+   CHIPS
+============================================================ */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500;
+  background: var(--bg-1); color: var(--fg-1);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.chip-accent  { background: var(--accent-lo); color: var(--accent-hi); border-color: color-mix(in oklch, var(--accent) 25%, var(--line)); }
+.chip-signal  { background: var(--signal-lo); color: var(--signal-hi); border-color: color-mix(in oklch, var(--signal) 25%, var(--line)); }
+.chip-warn    { background: color-mix(in oklch, var(--warn) 16%, var(--bg-0)); color: var(--warn); border-color: color-mix(in oklch, var(--warn) 30%, var(--line)); }
+.chip-danger  { background: color-mix(in oklch, var(--danger) 12%, var(--bg-0)); color: var(--danger); border-color: color-mix(in oklch, var(--danger) 30%, var(--line)); }
+.chip-success { background: color-mix(in oklch, var(--success) 14%, var(--bg-0)); color: var(--success); border-color: color-mix(in oklch, var(--success) 30%, var(--line)); }
+
+/* status dots */
+.dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+.dot-running { background: var(--accent); }
+.dot-success { background: var(--success); }
+.dot-danger  { background: var(--danger); }
+.dot-idle    { background: var(--fg-3); }
+
+/* ============================================================
+   FIELDS
+============================================================ */
+.field {
+  background: var(--bg-0); color: var(--fg-0);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 8px 11px; font-size: 12.5px; line-height: 1.5;
+  font-family: "General Sans", sans-serif;
+  transition: border-color var(--dur-sm), box-shadow var(--dur-sm);
+  caret-color: var(--accent);
+}
+.field::placeholder { color: var(--fg-3); font-family: "Fraunces", Georgia, serif; font-style: italic; }
+.field:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px color-mix(in oklch, var(--signal) 18%, transparent); }
+.field.mono { font-family: "IBM Plex Mono", monospace; }
+
+/* ============================================================
+   NODES (polaroid-like paper cards)
+============================================================ */
+.node {
+  position: absolute;
+  background: var(--bg-1);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1), var(--shadow-2);
+  transition: box-shadow var(--dur-sm) var(--ease-paper), transform var(--dur-sm) var(--ease-paper);
+  overflow: hidden;
+}
+.node:hover { box-shadow: var(--shadow-1), var(--shadow-3); transform: translateY(-1px); }
+.node[data-selected="true"] { box-shadow: var(--shadow-1), var(--shadow-3); }
+
+.node-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.node-head-title {
+  display: flex; align-items: center; gap: 7px;
+  font-family: "Fraunces", Georgia, serif; font-style: italic; font-weight: 400;
+  font-variation-settings: "SOFT" 50, "opsz" 14;
+  font-size: 13px; color: var(--fg-0); letter-spacing: 0.01em;
+}
+
+/* Hand-drawn selection ink frame (renders around selected node) */
+.ink-select {
+  position: absolute;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ============================================================
+   AI GENERATING (ink bloom halo + shimmer)
+============================================================ */
+.gen-wrap { position: relative; }
+.gen-halo {
+  position: absolute; inset: -1px; border-radius: inherit;
+  pointer-events: none;
+  animation: gen-halo 1600ms ease-in-out infinite;
+}
+@keyframes gen-halo {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 0%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 26%, transparent); }
+}
+.gen-shimmer {
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(to bottom,
+    var(--bg-1) 0 14px,
+    var(--bg-2) 14px 28px);
+  animation: gen-shimmer 12s linear infinite;
+  opacity: 0.95;
+}
+@keyframes gen-shimmer {
+  from { background-position: 0 0; }
+  to   { background-position: 0 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gen-halo { animation: none; box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 18%, transparent); }
+  .gen-shimmer { animation: none; }
+}
+
+/* ============================================================
+   PORTS
+============================================================ */
+.port {
+  position: absolute; width: 12px; height: 12px;
+  cursor: crosshair; z-index: 3;
+  transition: transform var(--dur-sm) var(--ease-paper);
+}
+.port svg { display: block; }
+.port:hover { transform: scale(1.18); }
+.port:hover .port-ring { stroke: var(--accent); }
+
+/* ============================================================
+   TOOL DOCK
+============================================================ */
+.tool-btn {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--fg-1);
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all var(--dur-sm) var(--ease-paper);
+  cursor: pointer; position: relative;
+}
+.tool-btn:hover { background: var(--bg-2); color: var(--fg-0); }
+.tool-btn[data-active="true"] {
+  color: var(--accent-hi);
+  background: var(--accent-lo);
+  border-color: color-mix(in oklch, var(--accent) 25%, var(--line));
+}
+.tool-btn svg { width: 17px; height: 17px; }
+
+/* tooltip (paper chip) */
+.tool-btn::after {
+  content: attr(data-label);
+  position: absolute; left: 100%; top: 50%;
+  transform: translate(10px, -50%);
+  padding: 4px 9px;
+  background: var(--fg-0); color: var(--bg-0);
+  border-radius: var(--r-sm);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap; opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-sm) var(--ease-paper);
+  box-shadow: var(--shadow-2);
+}
+.tool-btn:hover::after { opacity: 1; }
+
+/* ============================================================
+   TAB PILL
+============================================================ */
+.tab-pill {
+  padding: 6px 11px; border-radius: var(--r-sm);
+  font-family: "General Sans", sans-serif;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--fg-2); cursor: pointer;
+  transition: all var(--dur-sm);
+}
+.tab-pill:hover { color: var(--fg-0); background: var(--bg-2); }
+.tab-pill[data-active="true"] {
+  color: var(--accent-hi); background: var(--accent-lo);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 30%, var(--line));
+}
+
+/* ============================================================
+   ASSET TILE
+============================================================ */
+.asset-tile {
+  aspect-ratio: 1;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden; position: relative;
+  cursor: pointer; transition: all var(--dur-sm) var(--ease-paper);
+}
+.asset-tile:hover { border-color: var(--line-strong); transform: translateY(-1px); box-shadow: var(--shadow-2); }
+.asset-tile[data-active="true"] { border-color: var(--accent); box-shadow: var(--shadow-1), 0 0 0 2px color-mix(in oklch, var(--accent) 25%, transparent); }
+.asset-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ============================================================
+   MODAL
+============================================================ */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: color-mix(in oklch, oklch(0.05 0.01 65) 55%, transparent);
+  backdrop-filter: blur(3px);
+  z-index: 200;
+  display: none;
+  align-items: center; justify-content: center;
+}
+.modal-backdrop[data-open="true"] { display: flex; animation: fade 220ms ease-out; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+.modal {
+  background: var(--bg-1); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1), var(--shadow-4);
+  width: min(860px, 92vw); max-height: 80vh; overflow: hidden;
+  display: grid; grid-template-columns: 220px 1fr;
+  animation: modalIn 240ms var(--ease-paper);
+}
+@keyframes modalIn { from { transform: translateY(8px) scale(0.98); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* ============================================================
+   STICKY NODE (paper on paper, micro-rotated)
+============================================================ */
+.sticky-card {
+  background: var(--sticky-bg);
+  border: 1px solid var(--sticky-line);
+  color: var(--sticky-fg);
+  border-radius: 10px 8px 8px 8px;
+  box-shadow:
+    0 1px 0 0 var(--sticky-line),
+    var(--shadow-2);
+  transform: rotate(-0.4deg);
+  transition: transform var(--dur-sm) var(--ease-paper), box-shadow var(--dur-sm) var(--ease-paper);
+}
+.sticky-card:hover { transform: rotate(-0.2deg) translateY(-1px); box-shadow: 0 1px 0 0 var(--sticky-line), var(--shadow-3); }
+
+/* ============================================================
+   Scrollbar
+============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--bg-1); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* subtle separator */
+.hair { height: 1px; background: var(--line); }
+
+/* reduced motion universal */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* link-like */
+.link { color: var(--signal-hi); text-underline-offset: 2px; text-decoration: underline; text-decoration-color: color-mix(in oklch, var(--signal) 40%, transparent); cursor: pointer; }
+.link:hover { color: var(--signal); }
+</style>
+</head>
+
+<body>
+
+<!-- ============================================================
+     SVG DEFS · ink-wobble filter + paper grain
+============================================================ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="ink-wobble" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3"/>
+    </filter>
+    <filter id="ink-wobble-soft" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="11" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.9"/>
+    </filter>
+  </defs>
+</svg>
+
+<svg class="paper-grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <filter id="paper-noise">
+    <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" stitchTiles="stitch"/>
+    <feColorMatrix values="0 0 0 0 0.10   0 0 0 0 0.08   0 0 0 0 0.06   0 0 0 0.035 0"/>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#paper-noise)"/>
+</svg>
+
+<div class="vignette"></div>
+
+<!-- ============================================================
+     WORKSPACE
+============================================================ -->
+<main class="relative w-screen h-screen">
+
+  <!-- ── Canvas surface ───────────────────────────────────── -->
+  <section class="canvas-surface absolute inset-0">
+
+    <!-- Ink connections (hand-drawn, turbulence filter) -->
+    <svg class="absolute inset-0 pointer-events-none" style="z-index: 2;" width="100%" height="100%">
+      <g filter="url(#ink-wobble)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <!-- text → image -->
+        <path d="M 440 270 C 480 270, 500 350, 580 350" stroke="var(--fg-0)" stroke-width="1.25" opacity="0.82"/>
+        <circle cx="580" cy="350" r="2.6" fill="var(--fg-0)"/>
+        <!-- image → ai-generating -->
+        <path d="M 960 350 C 1000 350, 1010 400, 1060 380" stroke="var(--fg-0)" stroke-width="1.25" opacity="0.82"/>
+        <circle cx="1060" cy="380" r="2.6" fill="var(--fg-0)"/>
+        <!-- sticky → image (context reference, dashed) -->
+        <path d="M 380 520 C 450 510, 500 470, 580 430" stroke="var(--fg-2)" stroke-width="1.1" stroke-dasharray="4 3" opacity="0.7"/>
+      </g>
+    </svg>
+
+    <!-- Hand-drawn selection outline around the IMAGE node -->
+    <svg class="ink-select" style="left: 570px; top: 190px; width: 400px; height: 320px;" aria-hidden="true">
+      <g filter="url(#ink-wobble)">
+        <rect x="6" y="6" width="388" height="308" rx="12" ry="12"
+              fill="none" stroke="var(--fg-0)" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.9"/>
+      </g>
+      <!-- corner ticks in terracotta -->
+      <g stroke="var(--accent)" stroke-width="2" stroke-linecap="round">
+        <line x1="2"   y1="10"  x2="2"   y2="2"/>   <line x1="2"   y1="2"   x2="10"  y2="2"/>
+        <line x1="398" y1="2"   x2="398" y2="10"/>  <line x1="390" y1="2"   x2="398" y2="2"/>
+        <line x1="2"   y1="310" x2="2"   y2="318"/> <line x1="2"   y1="318" x2="10"  y2="318"/>
+        <line x1="390" y1="318" x2="398" y2="318"/> <line x1="398" y1="310" x2="398" y2="318"/>
+      </g>
+    </svg>
+
+    <!-- ── TEXT NODE (prompt source) ────────────────────── -->
+    <div class="node" style="left: 120px; top: 200px; width: 320px; height: 160px;">
+      <div class="node-head">
+        <div class="node-head-title">
+          <i data-lucide="type" class="w-3.5 h-3.5" style="color: var(--port-text)"></i>
+          <span class="serif-it">Text · prompt</span>
+        </div>
+        <span class="meta" style="color: var(--fg-3)">320×160</span>
+      </div>
+      <div class="p-3 text-[13px] leading-[1.65]" style="color: var(--fg-0)">
+        a solitary lighthouse at dusk, 85mm lens, deep shadows,<br>
+        volumetric fog,
+        <span class="serif-it" style="color: var(--accent-hi)">warm amber glow</span>
+        from window,<br>
+        <span class="mono text-[11px]" style="color: var(--fg-2)">--style cinematic --mood solitude</span>
+      </div>
+      <!-- output port -->
+      <div class="port" style="right: -6px; top: 70px;" title="output · text">
+        <svg viewBox="0 0 12 12">
+          <circle class="port-ring" cx="6" cy="6" r="5.5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+          <circle cx="6" cy="6" r="2.8" fill="var(--port-text)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── IMAGE NODE (selected, with NodeInputBar) ─────── -->
+    <div class="node" data-selected="true" style="left: 580px; top: 200px; width: 380px; height: 300px;">
+      <div class="node-head">
+        <div class="node-head-title">
+          <i data-lucide="image" class="w-3.5 h-3.5" style="color: var(--port-image)"></i>
+          <span class="serif-it">Image</span>
+          <span class="meta" style="color: var(--fg-3)">· 02 / 05</span>
+          <span class="chip chip-accent" style="padding: 2px 6px;"><i data-lucide="star" class="w-2.5 h-2.5"></i> fav</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button class="btn btn-ghost btn-icon" style="padding: 4px;"><i data-lucide="chevron-left" class="w-3 h-3"></i></button>
+          <span class="mono text-[11px]" style="color: var(--fg-2)">2 / 5</span>
+          <button class="btn btn-ghost btn-icon" style="padding: 4px;"><i data-lucide="chevron-right" class="w-3 h-3"></i></button>
+        </div>
+      </div>
+
+      <!-- Image body with polaroid inner frame -->
+      <div class="relative p-2" style="height: 220px; background: var(--bg-1);">
+        <div class="relative w-full h-full overflow-hidden" style="border-radius: 6px; box-shadow: inset 0 0 0 1px var(--line);">
+          <img src="https://images.unsplash.com/photo-1500673922987-e212871fec22?w=760&h=440&fit=crop"
+               alt="sample generated image" class="w-full h-full object-cover"/>
+          <!-- Folded-corner note indicator -->
+          <div class="absolute top-2 right-2 sticky-card px-2.5 py-1.5 flex items-center gap-1.5" style="transform: rotate(-1deg); font-size: 11px;">
+            <i data-lucide="pencil" class="w-3 h-3"></i>
+            <span class="serif-it text-[11px]">dreamlike, golden hour…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ports -->
+      <div class="port" style="left: -6px; top: 46px;" title="input · prompt">
+        <svg viewBox="0 0 12 12">
+          <circle class="port-ring" cx="6" cy="6" r="5.5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+          <circle cx="6" cy="6" r="2.8" fill="var(--port-text)"/>
+        </svg>
+      </div>
+      <div class="port" style="left: -6px; top: 80px;" title="input · reference">
+        <svg viewBox="0 0 12 12">
+          <circle class="port-ring" cx="6" cy="6" r="5.5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+          <circle cx="6" cy="6" r="2.8" fill="var(--port-image)"/>
+        </svg>
+      </div>
+      <div class="port" style="right: -6px; top: 150px;" title="output · image">
+        <svg viewBox="0 0 12 12">
+          <circle class="port-ring" cx="6" cy="6" r="5.5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+          <circle cx="6" cy="6" r="2.8" fill="var(--port-image)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- NodeInputBar (anchored below IMAGE node) -->
+    <div class="absolute chip-paper" style="left: 580px; top: 525px; width: 380px; padding: 11px;">
+      <!-- Toolbar row -->
+      <div class="flex items-center gap-1.5 mb-2.5">
+        <button class="btn btn-ghost" style="padding: 5px 9px;">
+          <i data-lucide="sparkles" class="w-3 h-3" style="color: var(--accent-hi)"></i>
+          <span class="mono text-[11px]">gpt-image-1</span>
+          <i data-lucide="chevron-down" class="w-3 h-3" style="color: var(--fg-3)"></i>
+        </button>
+        <button class="btn btn-ghost" style="padding: 5px 9px;">
+          <span class="mono text-[11px]">1:1</span>
+          <i data-lucide="chevron-down" class="w-3 h-3" style="color: var(--fg-3)"></i>
+        </button>
+        <button class="btn btn-ghost" style="padding: 5px 9px;">
+          <span class="mono text-[11px]">HQ</span>
+        </button>
+        <button class="btn btn-ghost" style="padding: 5px 9px;">
+          <span class="mono text-[11px]">×4</span>
+        </button>
+        <div class="flex-1"></div>
+        <button class="btn btn-ghost btn-icon" title="局部重绘">
+          <i data-lucide="brush" class="w-3.5 h-3.5"></i>
+        </button>
+        <button class="btn btn-ghost btn-icon" title="提示词库">
+          <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <!-- input row -->
+      <div class="flex items-end gap-2">
+        <textarea class="field flex-1" rows="2" style="resize: none;">a solitary lighthouse at dusk, 85mm, cinematic</textarea>
+        <button class="btn btn-primary" title="generate (enter)">
+          <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+          <span>Generate</span>
+        </button>
+      </div>
+
+      <!-- subtle hint -->
+      <div class="flex items-center gap-2 mt-2.5">
+        <span class="chip chip-signal" style="padding: 2px 7px;"><i data-lucide="link-2" class="w-2.5 h-2.5"></i> inherits 1 prompt</span>
+        <span class="meta" style="color: var(--fg-3); font-size: 10px;">enter · gen ◇ shift+enter · newline ◇ ⌘k · palette</span>
+      </div>
+    </div>
+
+    <!-- ── AI GENERATING NODE ────────────────────────────── -->
+    <div class="node gen-wrap" style="left: 1060px; top: 280px; width: 300px; height: 200px;">
+      <div class="gen-halo"></div>
+      <div class="node-head" style="position: relative; z-index: 2;">
+        <div class="node-head-title">
+          <span class="dot dot-running"></span>
+          <span class="serif-it" style="color: var(--accent-hi)">Generating</span>
+          <span class="mono text-[11px]" style="color: var(--accent-hi); margin-left: 2px;">0:12</span>
+        </div>
+        <span class="meta" style="color: var(--fg-3)">gpt-image-1</span>
+      </div>
+      <div class="relative p-2" style="height: calc(100% - 40px);">
+        <div class="relative w-full h-full overflow-hidden" style="border-radius: 6px; box-shadow: inset 0 0 0 1px var(--line);">
+          <div class="gen-shimmer"></div>
+        </div>
+      </div>
+      <div class="port" style="left: -6px; top: 80px;">
+        <svg viewBox="0 0 12 12">
+          <circle class="port-ring" cx="6" cy="6" r="5.5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+          <circle cx="6" cy="6" r="2.8" fill="var(--port-image)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── STICKY NODE ───────────────────────────────────── -->
+    <div class="sticky-card absolute p-3" style="left: 120px; top: 460px; width: 260px; height: 160px;">
+      <div class="flex items-start justify-between mb-1.5">
+        <div class="flex items-center gap-2">
+          <i data-lucide="bookmark" class="w-3.5 h-3.5" style="color: var(--sticky-fg); opacity: 0.65;"></i>
+          <span class="meta" style="color: var(--sticky-fg); opacity: 0.7; font-size: 10px;">Note · 07</span>
+        </div>
+        <span class="mono" style="font-size: 9.5px; color: var(--sticky-fg); opacity: 0.55;">Apr 22</span>
+      </div>
+      <div class="serif" style="font-size: 16px; font-weight: 500; line-height: 1.35; color: var(--sticky-fg);">
+        Lighthouse series
+      </div>
+      <div class="serif-it" style="font-size: 13px; line-height: 1.45; color: var(--sticky-fg); opacity: 0.78; margin-top: 4px;">
+        client wants a cold / warm contrast between frames 03 and 09. keep the fog.
+      </div>
+      <div class="mono" style="font-size: 10px; color: var(--sticky-fg); opacity: 0.55; margin-top: 8px;">— zhang</div>
+    </div>
+
+    <!-- ── ERROR NODE (example) ──────────────────────────── -->
+    <div class="node" style="left: 1060px; top: 520px; width: 300px; height: 160px; border-left: 3px solid var(--danger);">
+      <div class="node-head" style="border-color: color-mix(in oklch, var(--danger) 30%, var(--line))">
+        <div class="node-head-title">
+          <span class="dot dot-danger"></span>
+          <span class="serif-it" style="color: var(--danger)">Generation failed</span>
+        </div>
+        <span class="chip chip-danger" style="padding: 2px 6px;">401</span>
+      </div>
+      <div class="p-3 flex flex-col gap-2">
+        <div class="text-[12.5px] leading-[1.5]" style="color: var(--fg-1)">
+          <span class="serif-it" style="color: var(--fg-0)">openai</span> · exceeded current quota.
+          <br><span class="text-[11.5px]" style="color: var(--fg-2)">add billing or switch provider.</span>
+        </div>
+        <div class="flex gap-1.5">
+          <button class="btn" style="padding: 5px 9px; color: var(--danger); border-color: color-mix(in oklch, var(--danger) 35%, var(--line));">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> retry
+          </button>
+          <button class="btn btn-ghost" style="padding: 5px 9px;">settings</button>
+          <button class="btn btn-ghost" style="padding: 5px 9px; color: var(--fg-2)">dismiss</button>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============================================================
+       L3 · TopBar (floating paper chip, centered)
+  ============================================================ -->
+  <header class="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pl-3 pr-2 py-2 chip-paper z-50"
+          style="min-width: 580px;">
+    <!-- Wordmark -->
+    <div class="flex items-center gap-2.5 pr-3">
+      <div style="width: 26px; height: 26px; border-radius: 8px; background: var(--bg-0);
+                  box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 0 var(--shadow-ink-1);
+                  display: grid; place-items: center;">
+        <span class="wordmark" style="font-size: 16px; color: var(--accent-hi); font-variation-settings: 'SOFT' 80, 'opsz' 144;">c</span>
+      </div>
+      <div class="flex flex-col leading-tight">
+        <span class="wordmark" style="font-size: 14px; color: var(--fg-0);">canvas</span>
+        <span class="mono" style="font-size: 8.5px; color: var(--fg-3); letter-spacing: 0.12em; text-transform: uppercase;">ai · pro</span>
+      </div>
+    </div>
+
+    <div class="w-px self-stretch" style="background: var(--line)"></div>
+
+    <!-- Doc name -->
+    <div class="px-3 flex items-center gap-2">
+      <i data-lucide="file-text" class="w-3.5 h-3.5" style="color: var(--fg-3)"></i>
+      <span class="serif-it text-[13.5px]" style="color: var(--fg-0)">lighthouse-v2</span>
+      <span class="mono text-[10px]" style="color: var(--fg-3)">.canvas</span>
+      <span class="flex items-center gap-1 text-[10.5px]" style="color: var(--success)">
+        <span class="dot dot-success"></span>
+        <span class="mono uppercase" style="letter-spacing: 0.06em;">saved</span>
+      </span>
+    </div>
+
+    <div class="w-px self-stretch" style="background: var(--line)"></div>
+
+    <!-- Undo / Redo / History -->
+    <div class="flex items-center gap-0.5">
+      <button class="btn btn-ghost btn-icon" title="undo"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i></button>
+      <button class="btn btn-ghost btn-icon" title="redo" style="opacity: 0.45"><i data-lucide="redo-2" class="w-3.5 h-3.5"></i></button>
+      <button class="btn btn-ghost btn-icon" title="history"><i data-lucide="history" class="w-3.5 h-3.5"></i></button>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Right actions -->
+    <button class="btn btn-ghost" onclick="document.getElementById('settings-modal').setAttribute('data-open','true')"><i data-lucide="layout-template" class="w-3.5 h-3.5"></i> templates</button>
+    <button class="btn btn-ghost btn-icon" onclick="toggleTheme()" title="toggle theme">
+      <i data-lucide="sun" class="w-3.5 h-3.5" id="theme-icon"></i>
+    </button>
+    <button class="btn btn-ghost btn-icon" onclick="document.getElementById('settings-modal').setAttribute('data-open','true')" title="settings">
+      <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
+    </button>
+    <button class="btn btn-primary"><i data-lucide="share-2" class="w-3.5 h-3.5"></i> share</button>
+  </header>
+
+  <!-- ============================================================
+       L3 · ToolDock (vertical floating, left)
+  ============================================================ -->
+  <aside class="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 chip-paper p-1.5 z-40">
+    <button class="tool-btn" data-active="true" data-label="select · v"><i data-lucide="mouse-pointer-2"></i></button>
+    <button class="tool-btn" data-label="hand · h"><i data-lucide="hand"></i></button>
+    <button class="tool-btn" data-label="frame · f"><i data-lucide="frame"></i></button>
+    <div class="hair mx-1 my-1"></div>
+    <button class="tool-btn" data-label="image · i"><i data-lucide="image"></i></button>
+    <button class="tool-btn" data-label="video · b"><i data-lucide="video"></i></button>
+    <button class="tool-btn" data-label="text · t"><i data-lucide="type"></i></button>
+    <button class="tool-btn" data-label="audio · a"><i data-lucide="music"></i></button>
+    <div class="hair mx-1 my-1"></div>
+    <button class="tool-btn" data-label="sticky · s"><i data-lucide="sticky-note"></i></button>
+    <button class="tool-btn" data-label="shape · r"><i data-lucide="square"></i></button>
+    <button class="tool-btn" data-label="connect · c"><i data-lucide="git-branch"></i></button>
+    <div class="hair mx-1 my-1"></div>
+    <button class="tool-btn" data-label="assets · l"><i data-lucide="images"></i></button>
+    <button class="tool-btn" data-label="prompts · p"><i data-lucide="book-open"></i></button>
+  </aside>
+
+  <!-- ============================================================
+       L3 · PropertiesPanel (right)
+  ============================================================ -->
+  <aside class="absolute right-4 top-20 bottom-14 w-[308px] chip-paper flex flex-col z-40">
+    <!-- Head -->
+    <div class="px-4 py-3 flex items-center gap-2" style="border-bottom: 1px solid var(--line)">
+      <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5" style="color: var(--accent-hi)"></i>
+      <span class="wordmark" style="font-size: 16px;">Inspector</span>
+      <span class="chip chip-accent" style="padding: 2px 7px;">1 sel</span>
+      <div class="flex-1"></div>
+      <button class="btn btn-ghost btn-icon" style="padding: 3px;"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+    </div>
+    <!-- Tabs -->
+    <div class="flex items-center gap-1 p-2" style="border-bottom: 1px solid var(--line)">
+      <div class="tab-pill" data-active="true">Style</div>
+      <div class="tab-pill">AI</div>
+      <div class="tab-pill">Data</div>
+      <div class="tab-pill">Conn</div>
+    </div>
+
+    <!-- Body -->
+    <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+      <!-- Frame -->
+      <div>
+        <div class="meta mb-2">Frame</div>
+        <div class="grid grid-cols-4 gap-2">
+          <label class="flex flex-col gap-1">
+            <span class="meta" style="font-size: 9.5px; color: var(--fg-3)">x</span>
+            <input class="field mono text-[11.5px]" value="580" style="padding: 5px 8px;">
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="meta" style="font-size: 9.5px; color: var(--fg-3)">y</span>
+            <input class="field mono text-[11.5px]" value="200" style="padding: 5px 8px;">
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="meta" style="font-size: 9.5px; color: var(--fg-3)">w</span>
+            <input class="field mono text-[11.5px]" value="380" style="padding: 5px 8px;">
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="meta" style="font-size: 9.5px; color: var(--fg-3)">h</span>
+            <input class="field mono text-[11.5px]" value="300" style="padding: 5px 8px;">
+          </label>
+        </div>
+      </div>
+
+      <!-- Versions -->
+      <div>
+        <div class="meta mb-2 flex items-center justify-between">
+          <span>Versions · 5</span>
+          <span class="link text-[10.5px] serif-it" style="text-transform: none; letter-spacing: 0;">view all</span>
+        </div>
+        <div class="grid grid-cols-5 gap-1.5">
+          <div class="asset-tile"><img src="https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=80&h=80&fit=crop"></div>
+          <div class="asset-tile" data-active="true"><img src="https://images.unsplash.com/photo-1500673922987-e212871fec22?w=80&h=80&fit=crop"></div>
+          <div class="asset-tile"><img src="https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=80&h=80&fit=crop"></div>
+          <div class="asset-tile"><img src="https://images.unsplash.com/photo-1536431311719-398b6704d4cc?w=80&h=80&fit=crop"></div>
+          <div class="asset-tile"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=80&h=80&fit=crop"></div>
+        </div>
+      </div>
+
+      <!-- Generation -->
+      <div>
+        <div class="meta mb-2">Generation</div>
+        <div class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[12px]" style="color: var(--fg-1)">Model</span>
+            <button class="btn btn-ghost" style="padding: 4px 8px;"><span class="mono text-[11px]">gpt-image-1</span> <i data-lucide="chevron-down" class="w-3 h-3" style="color: var(--fg-3)"></i></button>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-[12px]" style="color: var(--fg-1)">Aspect</span>
+            <div class="flex items-center p-0.5 rounded-[10px]" style="background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line)">
+              <button class="tab-pill" data-active="true" style="padding: 3px 9px;">1:1</button>
+              <button class="tab-pill" style="padding: 3px 9px;">16:9</button>
+              <button class="tab-pill" style="padding: 3px 9px;">9:16</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-[12px]" style="color: var(--fg-1)">Quality</span>
+            <div class="flex items-center p-0.5 rounded-[10px]" style="background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line)">
+              <button class="tab-pill" style="padding: 3px 9px;">draft</button>
+              <button class="tab-pill" data-active="true" style="padding: 3px 9px;">hq</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-[12px]" style="color: var(--fg-1)">Variants</span>
+            <input class="field mono text-[11.5px]" value="4" style="padding: 4px 8px; width: 64px; text-align: right;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Connections -->
+      <div>
+        <div class="meta mb-2">Connections</div>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-2 px-2.5 py-1.5" style="background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-sm);">
+            <svg width="10" height="10" viewBox="0 0 12 12">
+              <circle cx="6" cy="6" r="5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+              <circle cx="6" cy="6" r="2.5" fill="var(--port-text)"/>
+            </svg>
+            <span class="mono text-[10.5px]" style="color: var(--fg-1)">← text-a1 · prompt</span>
+            <div class="flex-1"></div>
+            <button class="meta" style="color: var(--fg-3)">×</button>
+          </div>
+          <div class="flex items-center gap-2 px-2.5 py-1.5" style="background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-sm);">
+            <svg width="10" height="10" viewBox="0 0 12 12">
+              <circle cx="6" cy="6" r="5" fill="var(--bg-0)" stroke="var(--line-strong)" stroke-width="1"/>
+              <circle cx="6" cy="6" r="2.5" fill="var(--port-image)"/>
+            </svg>
+            <span class="mono text-[10.5px]" style="color: var(--fg-1)">→ ai-gen-b9 · reference</span>
+            <div class="flex-1"></div>
+            <button class="meta" style="color: var(--fg-3)">×</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- footer -->
+    <div class="px-3 py-2.5 flex items-center gap-2" style="border-top: 1px solid var(--line)">
+      <button class="btn" style="flex: 1;"><i data-lucide="copy" class="w-3 h-3"></i> duplicate</button>
+      <button class="btn btn-ghost btn-icon" style="color: var(--danger);" title="delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+    </div>
+  </aside>
+
+  <!-- ============================================================
+       L3 · GenerationQueuePanel (top-right, below topbar)
+  ============================================================ -->
+  <section class="absolute top-20 right-[324px] w-[264px] chip-paper z-40">
+    <button class="w-full px-3 py-2.5 flex items-center gap-2" style="border-bottom: 1px solid var(--line)">
+      <span class="dot dot-running"></span>
+      <span class="wordmark" style="font-size: 14px;">Queue</span>
+      <div class="flex-1"></div>
+      <span class="chip chip-accent" style="padding: 2px 6px; font-size: 9.5px;">2 running</span>
+      <span class="chip chip-danger" style="padding: 2px 6px; font-size: 9.5px;">1 failed</span>
+      <i data-lucide="chevron-down" class="w-3 h-3" style="color: var(--fg-3)"></i>
+    </button>
+    <div class="max-h-[260px] overflow-y-auto">
+      <!-- running -->
+      <div class="px-3 py-2.5 flex items-start gap-2" style="border-bottom: 1px solid var(--line)">
+        <i data-lucide="image" class="w-3.5 h-3.5 mt-0.5" style="color: var(--port-image)"></i>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="mono text-[10px]" style="color: var(--accent-hi)">RUNNING · 0:12</span>
+            <span class="meta" style="color: var(--fg-3); font-size: 9.5px;">gpt-image-1</span>
+          </div>
+          <div class="text-[11.5px] truncate serif-it" style="color: var(--fg-0); font-style: italic;">a solitary lighthouse at dusk…</div>
+        </div>
+        <button class="btn btn-ghost btn-icon" style="padding: 3px;" title="locate"><i data-lucide="target" class="w-3 h-3"></i></button>
+      </div>
+      <!-- running 2 -->
+      <div class="px-3 py-2.5 flex items-start gap-2" style="border-bottom: 1px solid var(--line)">
+        <i data-lucide="video" class="w-3.5 h-3.5 mt-0.5" style="color: var(--port-video)"></i>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="mono text-[10px]" style="color: var(--accent-hi)">RUNNING · 0:03</span>
+            <span class="meta" style="color: var(--fg-3); font-size: 9.5px;">placeholder</span>
+          </div>
+          <div class="text-[11.5px] truncate serif-it" style="color: var(--fg-0);">camera slowly orbits around the…</div>
+        </div>
+        <button class="btn btn-ghost btn-icon" style="padding: 3px;"><i data-lucide="target" class="w-3 h-3"></i></button>
+      </div>
+      <!-- failed -->
+      <div class="px-3 py-2.5 flex items-start gap-2" style="border-bottom: 1px solid var(--line)">
+        <i data-lucide="image" class="w-3.5 h-3.5 mt-0.5" style="color: var(--danger)"></i>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="mono text-[10px]" style="color: var(--danger)">FAILED · 401</span>
+            <span class="meta" style="color: var(--fg-3); font-size: 9.5px;">openai</span>
+          </div>
+          <div class="text-[11.5px] truncate serif-it" style="color: var(--fg-0);">neon cyberpunk alley, rain…</div>
+          <div class="mono text-[9.5px]" style="color: var(--fg-2)">exceeded current quota</div>
+        </div>
+        <button class="btn btn-ghost btn-icon" style="padding: 3px; color: var(--accent-hi);" title="retry"><i data-lucide="refresh-cw" class="w-3 h-3"></i></button>
+      </div>
+      <!-- done -->
+      <div class="px-3 py-2.5 flex items-start gap-2" style="opacity: 0.75">
+        <i data-lucide="image" class="w-3.5 h-3.5 mt-0.5" style="color: var(--success)"></i>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="mono text-[10px]" style="color: var(--success)">DONE · 0:24</span>
+          </div>
+          <div class="text-[11.5px] truncate serif-it" style="color: var(--fg-2);">portrait, studio lighting, 85mm…</div>
+        </div>
+      </div>
+    </div>
+    <div class="px-3 py-2 flex justify-end" style="border-top: 1px solid var(--line)">
+      <span class="link text-[10.5px] serif-it" style="text-transform: none; letter-spacing: 0;">clear finished</span>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       L2 · AlignmentToolbar
+  ============================================================ -->
+  <div class="absolute left-1/2 -translate-x-1/2 bottom-14 flex items-center gap-0.5 chip-pill px-2 py-1.5 z-30">
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="align left"><i data-lucide="align-start-vertical"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="center h"><i data-lucide="align-center-vertical"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="align right"><i data-lucide="align-end-vertical"></i></button>
+    <div class="hair" style="width: 1px; height: 16px; margin: 0 4px;"></div>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="align top"><i data-lucide="align-start-horizontal"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="center v"><i data-lucide="align-center-horizontal"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="align bottom"><i data-lucide="align-end-horizontal"></i></button>
+    <div class="hair" style="width: 1px; height: 16px; margin: 0 4px;"></div>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="dist h"><i data-lucide="columns-3"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="dist v"><i data-lucide="rows-3"></i></button>
+    <button class="tool-btn" style="width: 32px; height: 32px;" data-label="grid"><i data-lucide="grid-3x3"></i></button>
+    <div class="hair" style="width: 1px; height: 16px; margin: 0 4px;"></div>
+    <span class="meta pr-2" style="color: var(--fg-2); font-size: 10px;">3 selected</span>
+  </div>
+
+  <!-- ============================================================
+       L3 · StatusBar (bottom)
+  ============================================================ -->
+  <footer class="absolute bottom-0 left-0 right-0 h-8 flex items-center gap-3 px-4 text-[11.5px] z-30"
+          style="background: color-mix(in oklch, var(--bg-0) 92%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(10px);">
+    <span class="meta"><span style="color: var(--accent-hi)">SELECT</span> <span style="color: var(--fg-3)">·</span> drag to marquee <span style="color: var(--fg-3)">·</span> / summon <span style="color: var(--fg-3)">·</span> ⌘k palette</span>
+    <div class="flex-1"></div>
+    <span class="mono" style="color: var(--fg-2); font-size: 10.5px;">(1 204, 682)</span>
+    <span style="color: var(--fg-3)">·</span>
+    <span class="mono" style="color: var(--fg-2); font-size: 10.5px;">zoom 1.00×</span>
+    <span style="color: var(--fg-3)">·</span>
+    <span class="mono" style="color: var(--fg-2); font-size: 10.5px;">7 nodes · 1 sel · 3 conns</span>
+    <span style="color: var(--fg-3)">·</span>
+    <span class="flex items-center gap-1.5"><span class="dot dot-success"></span><span class="mono uppercase" style="color: var(--success); letter-spacing: 0.06em; font-size: 10px;">saved</span></span>
+  </footer>
+
+</main>
+
+<!-- ============================================================
+     MODAL · Settings
+============================================================ -->
+<div id="settings-modal" class="modal-backdrop" data-open="false" onclick="if(event.target===this)this.setAttribute('data-open','false')">
+  <div class="modal">
+    <!-- sidebar -->
+    <aside class="p-4 flex flex-col gap-1" style="background: var(--bg-0); border-right: 1px solid var(--line);">
+      <div class="wordmark mb-4" style="font-size: 22px;">Settings</div>
+      <div class="tab-pill" data-active="true" style="justify-content: flex-start; text-align: left;">Providers</div>
+      <div class="tab-pill" style="justify-content: flex-start; text-align: left;">General</div>
+      <div class="tab-pill" style="justify-content: flex-start; text-align: left;">Keyboard</div>
+      <div class="tab-pill" style="justify-content: flex-start; text-align: left;">Advanced</div>
+      <div class="tab-pill" style="justify-content: flex-start; text-align: left;">About</div>
+      <div class="flex-1"></div>
+      <div class="meta" style="color: var(--fg-3)">v1.1 · 2026.04.22</div>
+    </aside>
+    <!-- content -->
+    <div class="flex flex-col overflow-hidden">
+      <div class="px-6 py-4 flex items-center gap-2" style="border-bottom: 1px solid var(--line)">
+        <span class="wordmark" style="font-size: 22px;">OpenAI</span>
+        <span class="chip chip-success" style="margin-left: 4px;"><span class="dot dot-success"></span> connected · 143ms</span>
+        <div class="flex-1"></div>
+        <button class="btn btn-ghost btn-icon" onclick="document.getElementById('settings-modal').setAttribute('data-open','false')"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+        <label class="flex flex-col gap-1.5">
+          <span class="meta">API Key</span>
+          <div class="flex gap-2">
+            <input class="field flex-1 mono" type="password" value="sk-●●●●●●●●●●●●●●●●●●●●"/>
+            <button class="btn btn-icon"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="meta">Base URL</span>
+          <input class="field mono" value="https://api.openai.com/v1"/>
+        </label>
+        <div>
+          <div class="meta mb-2.5">Enabled Models</div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <label class="chip-paper tight p-3 flex items-start gap-2.5 cursor-pointer" style="border-radius: var(--r-md);">
+              <input type="checkbox" checked class="mt-0.5" style="accent-color: var(--accent)"/>
+              <div class="flex-1">
+                <div class="text-[13.5px] font-semibold" style="color: var(--fg-0)">gpt-image-1</div>
+                <div class="meta mt-0.5" style="color: var(--fg-3); font-size: 9.5px;">image · edits · inpaint</div>
+              </div>
+            </label>
+            <label class="chip-paper tight p-3 flex items-start gap-2.5 cursor-pointer" style="border-radius: var(--r-md);">
+              <input type="checkbox" checked class="mt-0.5" style="accent-color: var(--accent)"/>
+              <div class="flex-1">
+                <div class="text-[13.5px] font-semibold" style="color: var(--fg-0)">dall-e-3</div>
+                <div class="meta mt-0.5" style="color: var(--fg-3); font-size: 9.5px;">image · no edits</div>
+              </div>
+            </label>
+            <label class="chip-paper tight p-3 flex items-start gap-2.5 cursor-pointer" style="border-radius: var(--r-md);">
+              <input type="checkbox" class="mt-0.5" style="accent-color: var(--accent)"/>
+              <div class="flex-1">
+                <div class="text-[13.5px] font-semibold" style="color: var(--fg-0)">sora <span class="serif-it font-normal" style="color: var(--fg-3); font-size: 11px;">(preview)</span></div>
+                <div class="meta mt-0.5" style="color: var(--fg-3); font-size: 9.5px;">video · coming soon</div>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button class="btn">test connection</button>
+          <div class="flex-1"></div>
+          <button class="btn btn-ghost">cancel</button>
+          <button class="btn btn-primary">save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     INIT
+============================================================ -->
+<script>
+  lucide.createIcons();
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const now = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', now);
+    const icon = document.getElementById('theme-icon');
+    if (icon) {
+      icon.setAttribute('data-lucide', now === 'light' ? 'sun' : 'moon');
+      lucide.createIcons();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      document.getElementById('settings-modal').setAttribute('data-open', 'true');
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('settings-modal').setAttribute('data-open', 'false');
+    }
+  });
+</script>
+
+</body>
+</html>

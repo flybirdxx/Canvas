@@ -22,10 +22,22 @@ export interface DrawingConnection {
   existingConnectionId?: string;
 }
 
+/**
+ * F15 local inpainting session — transient UI state, not persisted.
+ * `elementId` is the image node being repainted. `rect` is the user-drawn
+ * selection in NORMALIZED [0..1] coords relative to the node's rendered
+ * box. `null` rect means the mode is toggled on but nothing drawn yet.
+ */
+export interface InpaintMaskState {
+  elementId: string;
+  rect: { x: number; y: number; w: number; h: number } | null;
+}
+
 interface CanvasState {
   elements: CanvasElement[];
   connections: Connection[];
   drawingConnection: DrawingConnection | null;
+  inpaintMask: InpaintMaskState | null;
   past: HistorySnapshot[];
   future: HistorySnapshot[];
   currentLabel: string;
@@ -34,11 +46,27 @@ interface CanvasState {
   stageConfig: { scale: number; x: number; y: number };
   activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio';
   lastSavedAt: number | null;
+  /**
+   * F17 history-coalescing hints. When two consecutive `updateElement`
+   * calls share the same coalesce key within {@link COALESCE_WINDOW_MS},
+   * the second replaces the current state WITHOUT pushing a new history
+   * snapshot. This keeps rapid prompt typing or value-slider drags from
+   * exploding the undo stack. Neither field is persisted — they reset on
+   * every reload and on any non-update action.
+   */
+  _coalesceKey?: string;
+  _coalesceAt?: number;
 
   // Actions
   addElement: (element: CanvasElement) => void;
   updateElement: (id: string, attrs: Partial<CanvasElement>) => void;
   updateElementPosition: (id: string, x: number, y: number) => void;
+  /**
+   * Batch-commit positions for several elements in a single history entry —
+   * used by alignment / distribute / auto-grid so one user action undoes as
+   * one. Silent no-op on elements not present in the store.
+   */
+  batchUpdatePositions: (updates: { id: string; x: number; y: number }[], label?: string) => void;
   deleteElements: (ids: string[]) => void;
   addConnection: (connection: Connection) => void;
   deleteConnections: (ids: string[]) => void;
@@ -46,6 +74,8 @@ interface CanvasState {
   setStageConfig: (config: Partial<{ scale: number; x: number; y: number }>) => void;
   setActiveTool: (tool: CanvasState['activeTool']) => void;
   setDrawingConnection: (drawing: DrawingConnection | null) => void;
+  /** F15: set / clear the localized inpaint target + rect. Transient. */
+  setInpaintMask: (state: InpaintMaskState | null) => void;
   undo: () => void;
   redo: () => void;
   jumpToHistory: (index: number) => void;
@@ -55,6 +85,21 @@ interface CanvasState {
 }
 
 const MAX_HISTORY = 50;
+
+/**
+ * F17: two consecutive updateElement calls sharing the same `coalesceKey`
+ * within this window replace the in-memory state WITHOUT pushing a new
+ * snapshot. A natural typing pause of > 500ms breaks the run and the
+ * next edit becomes a fresh undo step. Tuned so 4–6 chars per second of
+ * prompt typing collapses to one entry, but deliberate edits separated
+ * by reading/thinking pauses stay granular.
+ */
+const COALESCE_WINDOW_MS = 500;
+
+/** Deterministic key so we only coalesce "like with like". */
+function coalesceKey(id: string, attrs: Record<string, unknown>): string {
+  return `update:${id}:${Object.keys(attrs).sort().join(',')}`;
+}
 
 const typeLabelMap: Record<string, string> = {
   rectangle: '矩形',
@@ -82,6 +127,7 @@ export const useCanvasStore = create<CanvasState>()(
       elements: [],
       connections: [],
       drawingConnection: null,
+      inpaintMask: null,
       past: [],
       future: [],
       currentLabel: '初始状态',
@@ -94,7 +140,14 @@ export const useCanvasStore = create<CanvasState>()(
       addElement: (element) => set((state) => {
         if (!element.inputs) {
           element.inputs = [];
-          if (element.type === 'image') element.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+          if (element.type === 'image') {
+            // Two input ports: a text prompt input (for upstream text nodes)
+            // and an image input (for reference images via connection, F14
+            // extension). Order matters — text first so it stays at the top
+            // of the rendered port column.
+            element.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+            element.inputs.push({ id: uuidv4(), type: 'image', label: 'Ref' });
+          }
           if (element.type === 'video') element.inputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
           if (element.type === 'audio') element.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
           if (element.type === 'rectangle' || element.type === 'circle' || element.type === 'sticky') {
@@ -120,6 +173,8 @@ export const useCanvasStore = create<CanvasState>()(
           elements: [...state.elements, element],
           currentLabel: label,
           currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
@@ -129,12 +184,40 @@ export const useCanvasStore = create<CanvasState>()(
         const nextElements: CanvasElement[] = state.elements.map((el) =>
           el.id === id ? ({ ...el, ...attrs } as CanvasElement) : el
         );
+
+        // F17: coalesce rapid successive edits to the same element + same
+        // set of attribute keys into a single undo step. The history
+        // snapshot captured when the run STARTED is kept untouched so
+        // one Ctrl+Z still unwinds the whole run.
+        const now = Date.now();
+        const key = coalesceKey(id, attrs as Record<string, unknown>);
+        const canCoalesce =
+          state._coalesceKey === key &&
+          state._coalesceAt !== undefined &&
+          now - state._coalesceAt < COALESCE_WINDOW_MS &&
+          // Safety: if someone emptied the past (e.g., clearHistory) we
+          // can't coalesce into a nonexistent snapshot — start fresh.
+          state.past.length > 0;
+
+        if (canCoalesce) {
+          return {
+            elements: nextElements,
+            currentLabel: label,
+            currentTimestamp: now,
+            _coalesceKey: key,
+            _coalesceAt: now,
+            // past / future are left as-is — we're merging into the
+            // existing head of history.
+          };
+        }
         return {
           past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
           future: [],
           elements: nextElements,
           currentLabel: label,
-          currentTimestamp: Date.now(),
+          currentTimestamp: now,
+          _coalesceKey: key,
+          _coalesceAt: now,
         };
       }),
 
@@ -143,6 +226,24 @@ export const useCanvasStore = create<CanvasState>()(
           el.id === id ? ({ ...el, x, y } as CanvasElement) : el
         ),
       })),
+
+      batchUpdatePositions: (updates, label) => set((state) => {
+        if (!updates || updates.length === 0) return state;
+        const updateMap = new Map(updates.map(u => [u.id, u]));
+        const nextElements: CanvasElement[] = state.elements.map((el) => {
+          const u = updateMap.get(el.id);
+          return u ? ({ ...el, x: u.x, y: u.y } as CanvasElement) : el;
+        });
+        return {
+          past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+          future: [],
+          elements: nextElements,
+          currentLabel: label ?? `对齐 ${updates.length} 个元素`,
+          currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
+        };
+      }),
 
       deleteElements: (ids) => set((state) => {
         const nextElements = state.elements.filter((el) => !ids.includes(el.id));
@@ -155,6 +256,8 @@ export const useCanvasStore = create<CanvasState>()(
           selectedIds: state.selectedIds.filter((id) => !ids.includes(id)),
           currentLabel: `删除 ${ids.length} 个元素`,
           currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
@@ -166,6 +269,8 @@ export const useCanvasStore = create<CanvasState>()(
           connections: [...filteredConnections, connection],
           currentLabel: '添加连线',
           currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
@@ -175,6 +280,8 @@ export const useCanvasStore = create<CanvasState>()(
         connections: state.connections.filter((conn) => !ids.includes(conn.id)),
         currentLabel: `删除 ${ids.length} 条连线`,
         currentTimestamp: Date.now(),
+        _coalesceKey: undefined,
+        _coalesceAt: undefined,
       })),
 
       setSelection: (ids) => set({ selectedIds: ids }),
@@ -186,6 +293,8 @@ export const useCanvasStore = create<CanvasState>()(
       setActiveTool: (tool) => set({ activeTool: tool }),
 
       setDrawingConnection: (drawing) => set({ drawingConnection: drawing }),
+
+      setInpaintMask: (state) => set({ inpaintMask: state }),
 
       undo: () => set((state) => {
         if (state.past.length === 0) return state;
@@ -199,6 +308,8 @@ export const useCanvasStore = create<CanvasState>()(
           currentLabel: previousSnap.label,
           currentTimestamp: previousSnap.timestamp,
           selectedIds: [],
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
@@ -214,6 +325,8 @@ export const useCanvasStore = create<CanvasState>()(
           currentLabel: nextSnap.label,
           currentTimestamp: nextSnap.timestamp,
           selectedIds: [],
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
@@ -237,10 +350,12 @@ export const useCanvasStore = create<CanvasState>()(
           currentLabel: target.label,
           currentTimestamp: target.timestamp,
           selectedIds: [],
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
         };
       }),
 
-      clearHistory: () => set({ past: [], future: [] }),
+      clearHistory: () => set({ past: [], future: [], _coalesceKey: undefined, _coalesceAt: undefined }),
 
       clearCanvas: () => set((state) => ({
         past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
@@ -250,11 +365,13 @@ export const useCanvasStore = create<CanvasState>()(
         selectedIds: [],
         currentLabel: '清空画布',
         currentTimestamp: Date.now(),
+        _coalesceKey: undefined,
+        _coalesceAt: undefined,
       })),
     }),
     {
       name: 'ai-canvas-document',
-      version: 2,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         elements: state.elements,
@@ -281,6 +398,40 @@ export const useCanvasStore = create<CanvasState>()(
             return el;
           });
         }
+        // v2 -> v3: 图像节点新增 image 输入端口（F14 延伸，支持 image→image 连线）。
+        // 对既有 image 节点：若 inputs 里还没有 type==='image' 的端口，补一个。
+        if (version < 3 && persistedState && Array.isArray(persistedState.elements)) {
+          persistedState.elements = persistedState.elements.map((el: any) => {
+            if (!el || el.type !== 'image') return el;
+            const inputs = Array.isArray(el.inputs) ? el.inputs : [];
+            const hasImageInput = inputs.some((p: any) => p && p.type === 'image');
+            if (hasImageInput) return el;
+            return {
+              ...el,
+              inputs: [
+                ...inputs,
+                { id: uuidv4(), type: 'image', label: 'Ref' },
+              ],
+            };
+          });
+        }
+        // v3 -> v4: 为了让 NodeInputBar 底栏在 image/video 模式下不再挤压，
+        // 节点最小宽度提升至 image=480、video=520。将既有过窄节点等比补齐，
+        // 保持视觉上节点与其下方输入栏宽度一致。
+        if (version < 4 && persistedState && Array.isArray(persistedState.elements)) {
+          const MIN_BY_TYPE: Record<string, number> = { image: 480, video: 520 };
+          persistedState.elements = persistedState.elements.map((el: any) => {
+            if (!el || typeof el.width !== 'number' || typeof el.height !== 'number') return el;
+            const minW = MIN_BY_TYPE[el.type];
+            if (!minW || el.width >= minW) return el;
+            const scale = minW / el.width;
+            return {
+              ...el,
+              width: minW,
+              height: Math.round(el.height * scale),
+            };
+          });
+        }
         return persistedState;
       },
       onRehydrateStorage: () => (state) => {
@@ -291,6 +442,7 @@ export const useCanvasStore = create<CanvasState>()(
           state.currentTimestamp = Date.now();
           state.drawingConnection = null;
           state.selectedIds = [];
+          state.inpaintMask = null;
         }
       },
     }

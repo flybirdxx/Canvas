@@ -34,14 +34,42 @@ export function HistoryPanel() {
   const totalChanges = past.length + future.length;
 
   return (
-    <div className="absolute bottom-4 right-4 z-20 flex items-end gap-2">
+    <div
+      className="absolute z-20 flex items-end gap-2 anim-fade-in"
+      style={{ bottom: 56, right: 16 }}
+    >
       {isOpen && (
-        <div className="bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl w-72 max-h-[50vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-2">
-          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
+        <div
+          className="chip-paper flex flex-col overflow-hidden"
+          style={{
+            width: 288,
+            maxHeight: '50vh',
+            boxShadow: 'var(--shadow-ink-2)',
+          }}
+        >
+          <div
+            className="hairline-b flex items-center justify-between"
+            style={{ padding: '9px 12px', background: 'var(--bg-2)' }}
+          >
             <div className="flex items-center gap-2">
-              <History className="w-3.5 h-3.5 text-gray-500" />
-              <span className="text-[12px] font-bold text-gray-700">历史记录</span>
-              <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+              <History className="w-3.5 h-3.5" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />
+              <span
+                className="serif"
+                style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-0)' }}
+              >
+                历史记录
+              </span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  padding: '1px 6px',
+                  borderRadius: 'var(--r-sm)',
+                  color: 'var(--ink-2)',
+                  background: 'var(--bg-0)',
+                  border: '1px solid var(--line-1)',
+                }}
+              >
                 {entries.length}
               </span>
             </div>
@@ -50,16 +78,31 @@ export function HistoryPanel() {
                 if (confirm('确定要清空历史记录吗？（画布内容不会变化）')) clearHistory();
               }}
               disabled={totalChanges === 0}
-              className="p-1 rounded hover:bg-gray-200/60 text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+              className="btn btn-ghost btn-icon"
+              style={{
+                width: 24,
+                height: 24,
+                padding: 0,
+                opacity: totalChanges === 0 ? 0.3 : 1,
+              }}
               title="清空历史记录"
             >
-              <Eraser className="w-3.5 h-3.5" />
+              <Eraser className="w-3.5 h-3.5" strokeWidth={1.6} />
             </button>
           </div>
 
-          <div className="overflow-y-auto custom-scrollbar flex-1">
+          <div className="paper-scroll overflow-y-auto flex-1">
             {entries.length === 0 && (
-              <div className="p-6 text-center text-[11px] text-gray-400">暂无历史</div>
+              <div
+                style={{
+                  padding: 24,
+                  textAlign: 'center',
+                  fontSize: 11,
+                  color: 'var(--ink-3)',
+                }}
+              >
+                暂无历史
+              </div>
             )}
             {entries.map((entry, idx) => {
               const isCurrent = idx === currentIdx;
@@ -68,34 +111,67 @@ export function HistoryPanel() {
                 <button
                   key={`${entry.timestamp}-${idx}`}
                   onClick={() => jumpToHistory(idx)}
-                  className={`w-full text-left px-3 py-2 flex items-center gap-2 border-b border-gray-50 transition-colors ${
-                    isCurrent
-                      ? 'bg-blue-50/80 hover:bg-blue-50'
-                      : isFuture
-                        ? 'opacity-60 hover:bg-gray-50'
-                        : 'hover:bg-gray-50'
-                  }`}
+                  className="w-full text-left flex items-center gap-2 transition-colors"
+                  style={{
+                    padding: '8px 12px',
+                    borderBottom: '1px solid var(--line-1)',
+                    background: isCurrent
+                      ? 'color-mix(in oklch, var(--accent) 10%, var(--bg-0))'
+                      : 'transparent',
+                    opacity: isFuture ? 0.55 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isCurrent) e.currentTarget.style.background = 'var(--bg-2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isCurrent) e.currentTarget.style.background = 'transparent';
+                  }}
                   title={`跳转到此步骤 · ${formatTime(entry.timestamp)}`}
                 >
                   <div
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      isCurrent ? 'bg-blue-500' : isFuture ? 'bg-gray-300' : 'bg-gray-400'
-                    }`}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      flexShrink: 0,
+                      background: isCurrent
+                        ? 'var(--accent)'
+                        : isFuture
+                          ? 'var(--line-2)'
+                          : 'var(--ink-2)',
+                    }}
                   />
                   <div className="flex-1 min-w-0">
                     <div
-                      className={`text-[12px] truncate ${
-                        isCurrent ? 'text-blue-700 font-semibold' : 'text-gray-700 font-medium'
-                      }`}
+                      className="truncate"
+                      style={{
+                        fontSize: 12,
+                        fontWeight: isCurrent ? 600 : 500,
+                        color: isCurrent ? 'var(--accent)' : 'var(--ink-0)',
+                      }}
                     >
                       {entry.label}
                     </div>
-                    <div className="text-[10px] text-gray-400 font-mono">
+                    <div
+                      className="mono"
+                      style={{ fontSize: 9.5, color: 'var(--ink-3)', marginTop: 1 }}
+                    >
                       {formatTime(entry.timestamp)} · {entry.elements.length} 元素 · {entry.connections.length} 连线
                     </div>
                   </div>
                   {isCurrent && (
-                    <span className="text-[9px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">当前</span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 600,
+                        padding: '1px 6px',
+                        borderRadius: 'var(--r-sm)',
+                        color: 'var(--accent-fg)',
+                        background: 'var(--accent)',
+                      }}
+                    >
+                      当前
+                    </span>
                   )}
                 </button>
               );
@@ -106,24 +182,34 @@ export function HistoryPanel() {
 
       <button
         onClick={() => setIsOpen(v => !v)}
-        className={`flex items-center gap-2 px-3 py-2 backdrop-blur-md text-[11px] font-medium rounded-lg transition-colors border shadow-sm ${
-          isOpen
-            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-            : 'bg-white/90 text-gray-700 border-gray-200/80 hover:bg-gray-50'
-        }`}
+        className={isOpen ? 'btn btn-primary' : 'btn btn-ghost'}
+        style={{
+          padding: '6px 10px',
+          fontSize: 11,
+          borderRadius: 'var(--r-md)',
+          gap: 6,
+          ...(isOpen ? {} : { background: 'var(--bg-0)', border: '1px solid var(--line-1)', boxShadow: 'var(--shadow-ink-1)' }),
+        }}
         title="历史记录"
       >
-        <History className="w-4 h-4" />
-        <span>历史</span>
+        <History className="w-3.5 h-3.5" strokeWidth={1.6} />
+        <span style={{ fontWeight: 500 }}>历史</span>
         <span
-          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-            isOpen ? 'bg-blue-500/40' : 'bg-gray-100 text-gray-500'
-          }`}
+          className="mono"
+          style={{
+            fontSize: 10,
+            padding: '1px 6px',
+            borderRadius: 'var(--r-sm)',
+            background: isOpen ? 'color-mix(in oklch, white 20%, transparent)' : 'var(--bg-2)',
+            color: isOpen ? 'var(--accent-fg)' : 'var(--ink-2)',
+          }}
         >
           {currentIdx + 1}/{entries.length}
         </span>
         <ChevronRight
-          className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          className="w-3 h-3 transition-transform"
+          strokeWidth={1.8}
+          style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
         />
       </button>
     </div>

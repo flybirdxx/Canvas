@@ -1,1 +1,554 @@
 @import "tailwindcss";
+
+/* ============================================================================
+   Warm Paper Studio — Design Tokens
+   See: Canvas/docs/redesign/02-aesthetic.md
+   ============================================================================ */
+
+:root,
+[data-theme="light"] {
+  /* -- Paper ground ------------------------------------------------------- */
+  --bg-0: oklch(0.985 0.012 85);    /* app bg — warm off-white */
+  --bg-1: oklch(0.975 0.015 82);    /* canvas area */
+  --bg-2: oklch(0.945 0.020 78);    /* chip surface */
+  --bg-3: oklch(0.910 0.024 75);    /* sunken / input */
+
+  /* -- Ink / foreground --------------------------------------------------- */
+  --ink-0: oklch(0.220 0.022 55);   /* primary text */
+  --ink-1: oklch(0.380 0.022 55);   /* secondary */
+  --ink-2: oklch(0.560 0.020 55);   /* meta */
+  --ink-3: oklch(0.720 0.018 55);   /* disabled */
+
+  /* -- Lines (1px hairlines) --------------------------------------------- */
+  --line-0: oklch(0.860 0.020 65);  /* ultra subtle */
+  --line-1: oklch(0.800 0.024 60);  /* default border */
+  --line-2: oklch(0.700 0.028 55);  /* strong / hover */
+  --line-3: oklch(0.380 0.022 55);  /* ink — equals ink-1 for diagrams */
+
+  /* -- Accents ------------------------------------------------------------ */
+  --accent: oklch(0.612 0.162 32);   /* terracotta — CTA, brand */
+  --accent-hover: oklch(0.560 0.175 30);
+  --accent-soft: oklch(0.930 0.045 35);
+  --accent-fg: oklch(0.985 0.012 85);
+
+  --signal: oklch(0.640 0.125 200);  /* teal — links, focus */
+  --signal-soft: oklch(0.920 0.040 200);
+
+  /* -- Semantic ----------------------------------------------------------- */
+  --success: oklch(0.620 0.120 150);
+  --warning: oklch(0.780 0.130 75);
+  --danger:  oklch(0.560 0.170 25);
+  --danger-soft: oklch(0.940 0.045 25);
+
+  /* -- Sticky waxes ------------------------------------------------------- */
+  --sticky-yellow: oklch(0.940 0.080 92);
+  --sticky-yellow-edge: oklch(0.880 0.070 92);
+  --sticky-peach:  oklch(0.920 0.070 45);
+  --sticky-peach-edge: oklch(0.860 0.070 45);
+  --sticky-mint:   oklch(0.925 0.055 160);
+  --sticky-mint-edge: oklch(0.870 0.060 160);
+  --sticky-fg:     oklch(0.500 0.120 75);   /* ochre ink for sticky content */
+
+  /* -- Ports -------------------------------------------------------------- */
+  --port-text:  oklch(0.640 0.125 200);  /* teal */
+  --port-image: oklch(0.612 0.162 32);   /* terracotta */
+  --port-video: oklch(0.520 0.140 295);  /* plum */
+  --port-audio: oklch(0.620 0.120 150);  /* green */
+
+  /* -- Shadows (paper lift — never glow) ---------------------------------- */
+  --shadow-ink-0: 0 1px 0 rgba(40, 30, 20, 0.04);
+  --shadow-ink-1:
+    0 1px 1px rgba(40, 30, 20, 0.05),
+    0 2px 4px rgba(40, 30, 20, 0.06);
+  --shadow-ink-2:
+    0 2px 2px rgba(40, 30, 20, 0.07),
+    0 6px 14px rgba(40, 30, 20, 0.08);
+  --shadow-ink-3:
+    0 4px 4px rgba(40, 30, 20, 0.08),
+    0 12px 28px rgba(40, 30, 20, 0.11);
+  --shadow-press:
+    inset 0 1px 2px rgba(40, 30, 20, 0.12),
+    0 0 0 1px rgba(40, 30, 20, 0.04);
+
+  /* -- Atmosphere --------------------------------------------------------- */
+  --paper-grain: 0.035;    /* opacity multiplier */
+  --grid-dot: oklch(0.820 0.020 65);
+  --vignette-ink: rgba(40, 30, 20, 0.10);
+
+  /* -- Radii -------------------------------------------------------------- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* -- Motion ------------------------------------------------------------- */
+  --ease-soft: cubic-bezier(0.32, 0.72, 0.35, 1);
+  --ease-ink:  cubic-bezier(0.18, 0.70, 0.28, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
+  --dur-4: 420ms;
+
+  /* -- Fonts -------------------------------------------------------------- */
+  --font-serif: 'Fraunces', 'Source Han Serif SC', 'Noto Serif SC', Georgia, serif;
+  --font-sans:  'General Sans', 'PingFang SC', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:  'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg-0: oklch(0.175 0.012 60);
+  --bg-1: oklch(0.205 0.014 62);
+  --bg-2: oklch(0.235 0.016 64);
+  --bg-3: oklch(0.270 0.018 66);
+
+  --ink-0: oklch(0.930 0.018 80);
+  --ink-1: oklch(0.820 0.020 78);
+  --ink-2: oklch(0.680 0.022 76);
+  --ink-3: oklch(0.520 0.022 74);
+
+  --line-0: oklch(0.310 0.018 65);
+  --line-1: oklch(0.380 0.020 62);
+  --line-2: oklch(0.480 0.022 60);
+  --line-3: oklch(0.720 0.020 75);
+
+  --accent: oklch(0.682 0.148 35);
+  --accent-hover: oklch(0.740 0.152 35);
+  --accent-soft: oklch(0.320 0.085 35);
+  --accent-fg: oklch(0.145 0.012 60);
+
+  --signal: oklch(0.720 0.105 200);
+  --signal-soft: oklch(0.290 0.060 200);
+
+  --success: oklch(0.700 0.110 150);
+  --warning: oklch(0.820 0.120 75);
+  --danger:  oklch(0.660 0.155 25);
+  --danger-soft: oklch(0.300 0.090 25);
+
+  --sticky-yellow: oklch(0.560 0.090 92);
+  --sticky-yellow-edge: oklch(0.490 0.080 92);
+  --sticky-peach:  oklch(0.540 0.085 45);
+  --sticky-peach-edge: oklch(0.470 0.080 45);
+  --sticky-mint:   oklch(0.520 0.075 160);
+  --sticky-mint-edge: oklch(0.450 0.070 160);
+  --sticky-fg:     oklch(0.860 0.090 85);
+
+  --shadow-ink-0: 0 1px 0 rgba(0, 0, 0, 0.35);
+  --shadow-ink-1:
+    0 1px 1px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.45);
+  --shadow-ink-2:
+    0 2px 2px rgba(0, 0, 0, 0.45),
+    0 6px 14px rgba(0, 0, 0, 0.55);
+  --shadow-ink-3:
+    0 4px 4px rgba(0, 0, 0, 0.50),
+    0 12px 28px rgba(0, 0, 0, 0.62);
+  --shadow-press:
+    inset 0 1px 2px rgba(0, 0, 0, 0.50),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+
+  --paper-grain: 0.055;
+  --grid-dot: oklch(0.330 0.018 65);
+  --vignette-ink: rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
+
+/* ============================================================================
+   Tailwind v4 @theme mapping (expose tokens as utility classes)
+   ============================================================================ */
+
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-line-0: var(--line-0);
+  --color-line-1: var(--line-1);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger:  var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-port-text:  var(--port-text);
+  --color-port-image: var(--port-image);
+  --color-port-video: var(--port-video);
+  --color-port-audio: var(--port-audio);
+
+  --font-serif: var(--font-serif);
+  --font-sans:  var(--font-sans);
+  --font-mono:  var(--font-mono);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-pill: var(--r-pill);
+
+  --shadow-ink-0: var(--shadow-ink-0);
+  --shadow-ink-1: var(--shadow-ink-1);
+  --shadow-ink-2: var(--shadow-ink-2);
+  --shadow-ink-3: var(--shadow-ink-3);
+  --shadow-press: var(--shadow-press);
+}
+
+/* ============================================================================
+   Base
+   ============================================================================ */
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-feature-settings: 'ss01', 'cv11';
+  background: var(--bg-0);
+  color: var(--ink-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  color: var(--ink-0);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* Tailwind v4 preflight disables default border color; restore to our hairline */
+* {
+  border-color: var(--line-1);
+}
+
+/* ============================================================================
+   Typography helpers
+   ============================================================================ */
+
+.serif       { font-family: var(--font-serif); font-variation-settings: 'SOFT' 40, 'opsz' 14; }
+.serif-hero  { font-family: var(--font-serif); font-variation-settings: 'SOFT' 75, 'opsz' 144; letter-spacing: -0.015em; }
+.serif-it    { font-family: var(--font-serif); font-style: italic; font-variation-settings: 'SOFT' 60, 'opsz' 14; }
+.mono        { font-family: var(--font-mono); font-feature-settings: 'zero', 'ss01'; font-variant-numeric: tabular-nums; }
+.meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.wordmark {
+  font-family: var(--font-serif);
+  font-variation-settings: 'SOFT' 80, 'opsz' 48, 'wght' 500;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================================
+   Atmosphere layers (applied globally via <Atmosphere /> component)
+   ============================================================================ */
+
+.paper-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--paper-grain);
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+[data-theme="dark"] .paper-grain { mix-blend-mode: screen; }
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(ellipse 140% 100% at 50% 50%, transparent 60%, var(--vignette-ink) 100%);
+}
+
+/* ============================================================================
+   Chrome — floating paper chips
+   ============================================================================ */
+
+.chip-paper {
+  background: color-mix(in oklch, var(--bg-1) 92%, transparent);
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-ink-2);
+  color: var(--ink-0);
+}
+
+.chip-paper--flat {
+  box-shadow: var(--shadow-ink-1);
+}
+
+.chip-paper--sunken {
+  background: var(--bg-3);
+  box-shadow: var(--shadow-press);
+  border-color: var(--line-1);
+}
+
+.hairline { border: 1px solid var(--line-1); }
+.hairline-t { border-top: 1px solid var(--line-1); }
+.hairline-b { border-bottom: 1px solid var(--line-1); }
+.hairline-l { border-left: 1px solid var(--line-1); }
+.hairline-r { border-right: 1px solid var(--line-1); }
+
+/* ============================================================================
+   Buttons
+   ============================================================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-0);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease-soft),
+    color var(--dur-1) var(--ease-soft),
+    border-color var(--dur-1) var(--ease-soft),
+    box-shadow var(--dur-1) var(--ease-soft),
+    transform var(--dur-1) var(--ease-soft);
+  user-select: none;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: translateY(0.5px); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: var(--shadow-ink-1);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-ink-2);
+}
+
+.btn-secondary {
+  background: var(--bg-1);
+  color: var(--ink-0);
+  border-color: var(--line-1);
+  box-shadow: var(--shadow-ink-0);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-2);
+  border-color: var(--line-2);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-1);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--ink-0) 6%, transparent);
+  color: var(--ink-0);
+}
+
+.btn-tonal {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 18%, transparent);
+}
+.btn-tonal:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent-soft) 85%, var(--accent) 15%);
+}
+
+.btn-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in oklch, var(--danger) 18%, transparent);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--danger-soft) 85%, var(--danger) 15%);
+}
+
+.btn-icon {
+  padding: 7px;
+  width: 32px;
+  height: 32px;
+}
+
+/* ============================================================================
+   Inputs
+   ============================================================================ */
+
+.input-paper {
+  background: var(--bg-3);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--ink-0);
+  transition:
+    border-color var(--dur-1) var(--ease-soft),
+    background var(--dur-1) var(--ease-soft),
+    box-shadow var(--dur-1) var(--ease-soft);
+}
+.input-paper::placeholder { color: var(--ink-3); }
+.input-paper:hover { border-color: var(--line-2); }
+.input-paper:focus {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal-soft);
+  background: var(--bg-1);
+}
+
+textarea.input-paper {
+  resize: none;
+  line-height: 1.55;
+}
+
+/* ============================================================================
+   Meta chip (tiny paper label)
+   ============================================================================ */
+
+.chip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in oklch, var(--ink-0) 6%, transparent);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+.chip-meta--accent {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+.chip-meta--signal {
+  color: var(--signal);
+  background: var(--signal-soft);
+  border-color: color-mix(in oklch, var(--signal) 14%, transparent);
+}
+.chip-meta--danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in oklch, var(--danger) 14%, transparent);
+}
+.chip-meta--success {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 14%, transparent);
+  border-color: color-mix(in oklch, var(--success) 22%, transparent);
+}
+
+/* ============================================================================
+   Ink dot (ports — for DOM cases; Konva nodes render their own)
+   ============================================================================ */
+
+.ink-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink-1);
+  box-shadow: 0 0 0 2px var(--bg-1);
+}
+
+/* ============================================================================
+   Divider — hairline on paper
+   ============================================================================ */
+
+.rule-ink {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--line-1) 12%,
+    var(--line-1) 88%,
+    transparent 100%
+  );
+  border: 0;
+}
+
+/* ============================================================================
+   Scrollbars — quiet
+   ============================================================================ */
+
+.paper-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.paper-scroll::-webkit-scrollbar-track { background: transparent; }
+.paper-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--ink-3) 40%, transparent);
+  border-radius: var(--r-pill);
+}
+.paper-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--ink-2) 50%, transparent);
+}
+
+/* ============================================================================
+   Motion — subtle, non-looping, editorial
+   ============================================================================ */
+
+@keyframes ink-diffuse {
+  0%   { transform: scale(0.98); opacity: 0.55; }
+  50%  { transform: scale(1.02); opacity: 0.85; }
+  100% { transform: scale(0.98); opacity: 0.55; }
+}
+.anim-ink-diffuse { animation: ink-diffuse 2.2s var(--ease-ink) infinite; }
+
+@keyframes paper-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-fade-in { animation: paper-fade-in var(--dur-3) var(--ease-soft) both; }
+
+@keyframes paper-pop {
+  0%   { transform: scale(0.96); opacity: 0; }
+  60%  { transform: scale(1.01); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.anim-pop { animation: paper-pop var(--dur-3) var(--ease-ink) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition-duration: 1ms !important; }
+}

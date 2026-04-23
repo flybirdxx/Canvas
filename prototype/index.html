@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1440" />
+  <title>AI 无限画布 · 高保真原型</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            appbg: '#f0f2f5',
+            canvasbg: '#fafafa',
+            accent: '#8b5cf6',
+            accentSoft: '#ede9fe',
+            primary: '#2563eb',
+            primaryHover: '#1d4ed8',
+            stroke: '#e5e7eb',
+            strokeStrong: '#d1d5db',
+          },
+          boxShadow: {
+            card: '0 2px 6px rgba(0,0,0,0.06)',
+            float: '0 8px 30px rgba(0,0,0,0.12)',
+            bar: '0 12px 40px rgba(0,0,0,0.12)',
+            menu: '0 20px 60px rgba(0,0,0,0.15)',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html, body { font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    body { background: #f0f2f5; color: #1a1a1b; }
+
+    .canvas-dotgrid {
+      background-color: #fafafa;
+      background-image: radial-gradient(#d1d5db 1px, transparent 1px);
+      background-size: 20px 20px;
+      background-position: 0 0;
+    }
+
+    .screen { display: none; }
+    .screen.active { display: flex; }
+
+    /* Mock port */
+    .port { width: 12px; height: 12px; border-radius: 9999px; border: 2px solid #ffffff; }
+    .port-in  { background: #8b5cf6; }
+    .port-out { background: #22c55e; }
+
+    /* Connector path styling */
+    .wire { fill: none; stroke: #a78bfa; stroke-width: 1.8; stroke-linecap: round; }
+
+    /* Scroll look-and-feel */
+    .scroll-soft::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scroll-soft::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
+
+    /* Running pulse */
+    @keyframes softPulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    .is-running { animation: softPulse 1.4s ease-in-out infinite; }
+
+    .screen-switcher button.active {
+      background: #111827;
+      color: #fff;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased select-none">
+  <!-- =============== Screen Switcher (prototype chrome only) =============== -->
+  <div class="screen-switcher fixed top-3 left-1/2 -translate-x-1/2 z-[100] bg-white/90 backdrop-blur-md border border-stroke rounded-full shadow-card px-1 py-1 flex items-center gap-1 text-[12px]">
+    <button data-goto="canvas"    class="active px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">1 · Canvas 主视图</button>
+    <button data-goto="nodebar"   class="px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">2 · 模型网关</button>
+    <button data-goto="story"     class="px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">3 · 分镜模式</button>
+    <button data-goto="run"       class="px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">4 · 运行面板</button>
+    <button data-goto="assets"    class="px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">5 · 资源库</button>
+    <button data-goto="export"    class="px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">6 · 导出</button>
+  </div>
+
+  <!-- Reusable: Top bar -->
+  <template id="tpl-topbar">
+    <div class="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-none">
+      <div class="flex items-center gap-3 bg-white/90 backdrop-blur-md py-1.5 pl-2 pr-4 rounded-xl shadow-card border border-stroke pointer-events-auto">
+        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-card">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+        </div>
+        <div class="flex flex-col justify-center">
+          <span class="text-[13px] font-bold text-gray-800 leading-tight">AI 画布 Pro</span>
+          <span class="text-[10px] text-gray-400 leading-tight">未命名设计.canvas</span>
+        </div>
+        <div class="w-[1px] h-6 bg-gray-200 ml-2"></div>
+        <div class="flex items-center gap-1">
+          <button class="p-1.5 rounded hover:bg-gray-100 text-gray-600" title="撤销"><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+          <button class="p-1.5 rounded hover:bg-gray-100 text-gray-600" title="重做"><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 pointer-events-auto">
+        <div class="flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-md rounded-lg border border-stroke shadow-card text-[11px] text-gray-600">
+          <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i>
+          <span>已保存 · 刚刚</span>
+        </div>
+        <button class="flex items-center justify-center p-2 bg-white/90 backdrop-blur-md text-gray-600 shadow-card border border-stroke rounded-lg hover:bg-gray-50">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+        <button class="flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-md text-[11px] font-medium text-gray-700 border border-stroke rounded-lg shadow-card">
+          <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+          AI 工作区
+        </button>
+        <button class="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-[11px] font-semibold rounded-lg shadow-card hover:bg-primaryHover">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+          分享
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <!-- Reusable: Left capsule toolbar -->
+  <template id="tpl-toolbar">
+    <div class="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center bg-white/90 backdrop-blur-md shadow-float border border-stroke rounded-full px-2 py-3 gap-2 z-20">
+      <button class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-900 text-white hover:bg-gray-800 shadow-card" title="新增节点">
+        <i data-lucide="plus" class="w-5 h-5"></i>
+      </button>
+      <div class="h-[1px] w-6 bg-gray-200 my-1"></div>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" title="选择"><i data-lucide="mouse-pointer-2" class="w-5 h-5"></i></button>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" title="矩形"><i data-lucide="square" class="w-5 h-5"></i></button>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" title="圆形"><i data-lucide="circle" class="w-5 h-5"></i></button>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" title="便签"><i data-lucide="sticky-note" class="w-5 h-5"></i></button>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" title="截图 PNG · F6"><i data-lucide="crop" class="w-5 h-5"></i></button>
+    </div>
+  </template>
+
+  <!-- Reusable: Right properties panel -->
+  <template id="tpl-propspanel">
+    <div class="absolute top-24 right-4 bottom-20 w-[280px] bg-white/95 backdrop-blur-md border border-stroke rounded-2xl shadow-card flex flex-col overflow-hidden z-20">
+      <div class="px-4 py-3 border-b border-stroke flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="image" class="w-4 h-4 text-accent"></i>
+          <span class="text-[13px] font-semibold">Image Node</span>
+        </div>
+        <button class="p-1 rounded hover:bg-gray-100 text-gray-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+      </div>
+      <div class="flex-1 overflow-auto scroll-soft p-4 flex flex-col gap-4 text-[12px]">
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Position</div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-1.5 border border-stroke rounded-md px-2 py-1.5 bg-white"><span class="text-gray-400">X</span><input class="w-full outline-none" value="420" /></label>
+            <label class="flex items-center gap-1.5 border border-stroke rounded-md px-2 py-1.5 bg-white"><span class="text-gray-400">Y</span><input class="w-full outline-none" value="180" /></label>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Size</div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-1.5 border border-stroke rounded-md px-2 py-1.5 bg-white"><span class="text-gray-400">W</span><input class="w-full outline-none" value="400" /></label>
+            <label class="flex items-center gap-1.5 border border-stroke rounded-md px-2 py-1.5 bg-white"><span class="text-gray-400">H</span><input class="w-full outline-none" value="300" /></label>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Generation</div>
+          <div class="bg-accentSoft/60 border border-accent/30 rounded-lg p-3 flex flex-col gap-2 text-[12px]">
+            <div class="flex items-center justify-between">
+              <span class="text-gray-600">Model</span><span class="font-medium">gpt-image-1</span>
+            </div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Aspect</span><span class="font-medium">3:2</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Quality</span><span class="font-medium">高</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Count</span><span class="font-medium">4</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Ports</div>
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-2"><span class="port port-in"></span><span class="text-gray-500">in · image</span></div>
+            <div class="flex items-center gap-2"><span class="port port-out"></span><span class="text-gray-500">out · image</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Actions</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="px-2 py-1.5 bg-white border border-stroke rounded-md text-[12px] hover:bg-gray-50">复制</button>
+            <button class="px-2 py-1.5 bg-white border border-stroke rounded-md text-[12px] hover:bg-gray-50">锁定</button>
+            <button class="px-2 py-1.5 bg-white border border-stroke rounded-md text-[12px] hover:bg-gray-50">收藏</button>
+            <button class="px-2 py-1.5 bg-white border border-red-200 text-red-600 rounded-md text-[12px] hover:bg-red-50">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Reusable: History drawer (collapsed) -->
+  <template id="tpl-history">
+    <div class="absolute left-0 right-0 bottom-0 flex justify-center z-20 pointer-events-none">
+      <div class="bg-white/95 backdrop-blur-md border border-stroke rounded-t-2xl shadow-bar px-4 py-2 text-[11px] text-gray-600 flex items-center gap-3 pointer-events-auto">
+        <i data-lucide="history" class="w-3.5 h-3.5"></i>
+        <span>历史 · 27 步</span>
+        <div class="w-[1px] h-3 bg-stroke"></div>
+        <button class="hover:text-gray-800">展开时间轴 ↑</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- ========================================================= -->
+  <!-- Screen 1 · Canvas 主视图                                     -->
+  <!-- ========================================================= -->
+  <section id="screen-canvas" class="screen active w-screen h-screen relative overflow-hidden">
+    <div class="canvas-dotgrid absolute inset-0"></div>
+
+    <!-- Mock canvas content (nodes + wires) -->
+    <div class="absolute inset-0">
+      <!-- SVG wires between nodes -->
+      <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+        <!-- text → image -->
+        <path class="wire" d="M 350,260 C 440,260 440,320 540,320" />
+        <!-- image → image (i2i) -->
+        <path class="wire" d="M 840,320 C 900,320 900,420 960,420" />
+      </svg>
+
+      <!-- Text (prompt) node -->
+      <div class="absolute" style="left:110px; top:220px; width:240px;">
+        <div class="bg-white border-2 border-stroke rounded-2xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="type" class="w-3.5 h-3.5"></i><span class="font-semibold text-gray-800">TEXT</span><span class="ml-auto">#3</span>
+          </div>
+          <div class="p-3 text-[12px] text-gray-700 leading-relaxed">
+            极简主义的猫，漂浮在宇宙中，柔和光线，日系插画风格。
+          </div>
+        </div>
+        <span class="port port-out absolute -right-1.5 top-1/2 -translate-y-1/2"></span>
+      </div>
+
+      <!-- Image node (selected) -->
+      <div class="absolute" style="left:540px; top:180px; width:300px;">
+        <div class="bg-white border-2 border-primary rounded-2xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">IMAGE</span>
+            <span class="ml-auto bg-emerald-100 text-emerald-700 px-1.5 rounded-md text-[10px] font-semibold">success</span>
+          </div>
+          <div class="aspect-[3/2] bg-gradient-to-tr from-indigo-100 via-purple-100 to-pink-100 flex items-center justify-center text-gray-500 text-[12px]">
+            <i data-lucide="image" class="w-6 h-6 mr-1.5 text-gray-400"></i>生成结果预览
+          </div>
+        </div>
+        <span class="port port-in  absolute -left-1.5 top-1/2 -translate-y-1/2"></span>
+        <span class="port port-out absolute -right-1.5 top-1/2 -translate-y-1/2"></span>
+
+        <!-- NodeInputBar (bound to selected node) -->
+        <div class="absolute left-0 right-0" style="top: calc(100% + 10px);">
+          <div class="bg-white border border-accent/40 rounded-2xl shadow-bar overflow-hidden">
+            <div class="p-3">
+              <textarea rows="2" class="w-full resize-none text-[12px] leading-snug outline-none placeholder:text-gray-400" placeholder="描述你要生成什么…">极简主义的猫，漂浮在宇宙中，柔和光线</textarea>
+            </div>
+            <div class="px-2 pb-2 flex items-center gap-1 text-[11px]">
+              <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">gpt-image-1 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+              <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">3:2 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+              <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">高 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+              <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">×4 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+              <div class="ml-auto flex items-center gap-1.5">
+                <button class="p-1 rounded-md hover:bg-gray-100 text-gray-500" title="提示词库 F11"><i data-lucide="book-marked" class="w-3.5 h-3.5"></i></button>
+                <button class="p-1 rounded-md hover:bg-gray-100 text-gray-500" title="更多"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></button>
+                <span class="text-gray-400">40 积分</span>
+                <button class="px-2.5 py-1 rounded-md bg-primary text-white flex items-center gap-1 hover:bg-primaryHover">生成 <i data-lucide="arrow-right" class="w-3 h-3"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variant grid beneath the selected image (F10) -->
+      <div class="absolute" style="left:540px; top:520px; width:300px;">
+        <div class="text-[10px] text-gray-500 mb-1.5 px-1 flex items-center gap-1.5">
+          <i data-lucide="grid-2x2" class="w-3 h-3"></i>批量变体 · 4 张 · 点任一张提升为正式节点
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div class="aspect-[3/2] rounded-lg bg-gradient-to-br from-indigo-100 to-sky-100 border border-stroke hover:border-primary cursor-pointer"></div>
+          <div class="aspect-[3/2] rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 border border-stroke hover:border-primary cursor-pointer"></div>
+          <div class="aspect-[3/2] rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 border border-stroke hover:border-primary cursor-pointer"></div>
+          <div class="aspect-[3/2] rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 border border-stroke hover:border-primary cursor-pointer"></div>
+        </div>
+      </div>
+
+      <!-- Second image node (img2img result) -->
+      <div class="absolute" style="left:960px; top:360px; width:260px;">
+        <div class="bg-white border border-stroke rounded-2xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">IMG2IMG</span>
+            <span class="ml-auto bg-purple-100 text-purple-700 px-1.5 rounded-md text-[10px] font-semibold is-running">running</span>
+          </div>
+          <div class="aspect-[3/2] bg-gray-100 flex items-center justify-center text-gray-400 text-[12px] is-running">
+            strength 0.65 · 14s
+          </div>
+        </div>
+        <span class="port port-in  absolute -left-1.5 top-1/2 -translate-y-1/2"></span>
+        <span class="port port-out absolute -right-1.5 top-1/2 -translate-y-1/2"></span>
+      </div>
+
+      <!-- Sticky note -->
+      <div class="absolute rotate-[-2deg]" style="left:110px; top:500px; width:200px;">
+        <div class="bg-yellow-200 p-3 rounded-md shadow-card text-[12px] text-yellow-900 leading-relaxed">
+          关键帧 1：猫咪漂浮 ← 先跑这里，再派生变体。
+        </div>
+      </div>
+    </div>
+
+    <div data-include="tpl-topbar"></div>
+    <div data-include="tpl-toolbar"></div>
+    <div data-include="tpl-propspanel"></div>
+    <div data-include="tpl-history"></div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- Screen 2 · NodeInputBar + 多模型网关                         -->
+  <!-- ========================================================= -->
+  <section id="screen-nodebar" class="screen w-screen h-screen relative overflow-hidden">
+    <div class="canvas-dotgrid absolute inset-0"></div>
+
+    <!-- Selected image node centered, with a big model menu open -->
+    <div class="absolute" style="left:440px; top:180px; width:420px;">
+      <div class="bg-white border-2 border-primary rounded-2xl shadow-card overflow-hidden">
+        <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+          <i data-lucide="image" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">IMAGE</span>
+          <span class="ml-auto bg-gray-100 text-gray-600 px-1.5 rounded-md text-[10px] font-semibold">idle</span>
+        </div>
+        <div class="aspect-[3/2] bg-gradient-to-tr from-sky-100 via-blue-100 to-indigo-200 flex items-center justify-center text-gray-500 text-[12px]">
+          点 "生成" 开始
+        </div>
+      </div>
+
+      <div class="absolute left-0 right-0" style="top: calc(100% + 10px);">
+        <div class="bg-white border border-accent/40 rounded-2xl shadow-bar overflow-hidden">
+          <div class="p-3">
+            <textarea rows="2" class="w-full resize-none text-[12px] leading-snug outline-none">超写实摄影，晨光中的森林，镜头贴地仰拍，电影级质感</textarea>
+          </div>
+          <div class="px-2 pb-2 flex items-center gap-1 text-[11px] relative">
+            <button class="flex items-center gap-1 px-2 py-1 rounded-md bg-accentSoft text-accent font-medium">gpt-image-1 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">16:9 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">极高 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            <button class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 text-gray-700">×9 <i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            <div class="ml-auto flex items-center gap-1.5">
+              <button class="p-1 rounded-md hover:bg-gray-100 text-gray-500"><i data-lucide="book-marked" class="w-3.5 h-3.5"></i></button>
+              <button class="p-1 rounded-md hover:bg-gray-100 text-gray-500"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></button>
+              <span class="text-gray-400">90 积分</span>
+              <button class="px-2.5 py-1 rounded-md bg-primary text-white flex items-center gap-1">生成 <i data-lucide="arrow-right" class="w-3 h-3"></i></button>
+            </div>
+
+            <!-- Model Gateway Menu (open) -->
+            <div class="absolute left-0 top-full mt-2 w-[340px] bg-white border border-stroke rounded-xl shadow-menu p-2 z-40">
+              <div class="flex items-center gap-2 px-2 py-1.5 border border-stroke rounded-lg text-[12px] text-gray-500 mb-2">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                <input class="flex-1 outline-none" placeholder="搜索模型或能力…" />
+                <span class="text-[10px] text-gray-400 bg-gray-100 rounded px-1">⌘K</span>
+              </div>
+
+              <div class="text-[10px] font-semibold text-gray-400 px-2 py-1">Image · 文生图</div>
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-accentSoft text-accent cursor-pointer">
+                  <i data-lucide="sparkles" class="w-4 h-4"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">gpt-image-1</span><span class="text-[10px] text-accent/70">OpenAI · 高质量 · $0.04</span></div>
+                  <i data-lucide="check" class="w-3.5 h-3.5 ml-auto"></i>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer">
+                  <i data-lucide="palette" class="w-4 h-4 text-pink-500"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">flux-pro-1.1</span><span class="text-[10px] text-gray-500">Replicate · 设计向 · $0.055</span></div>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer">
+                  <i data-lucide="camera" class="w-4 h-4 text-amber-500"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">seedream-3</span><span class="text-[10px] text-gray-500">t8star · 中文友好 · $0.02</span></div>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer">
+                  <i data-lucide="brush" class="w-4 h-4 text-emerald-500"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">qwen-image-max</span><span class="text-[10px] text-gray-500">通义 · 国风 / 写意 · $0.012</span></div>
+                </div>
+              </div>
+
+              <div class="text-[10px] font-semibold text-gray-400 px-2 py-1 mt-2">Video · 文生视频（V2）</div>
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer">
+                  <i data-lucide="film" class="w-4 h-4 text-rose-500"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">kling-v1.6</span><span class="text-[10px] text-gray-500">快手 · 6s 竖屏</span></div>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer">
+                  <i data-lucide="clapperboard" class="w-4 h-4 text-indigo-500"></i>
+                  <div class="flex flex-col"><span class="font-semibold text-[12px]">veo-3</span><span class="text-[10px] text-gray-500">Google · 10s · $0.75</span></div>
+                </div>
+              </div>
+
+              <div class="h-[1px] bg-stroke my-2"></div>
+              <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 text-[12px] text-gray-600">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>添加自定义 HTTP Provider…
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Helper legend box at bottom-left -->
+    <div class="absolute bottom-6 left-6 bg-white/90 backdrop-blur-md border border-stroke rounded-xl shadow-card p-4 text-[12px] text-gray-600 max-w-[320px]">
+      <div class="flex items-center gap-2 mb-2 text-gray-800 font-semibold"><i data-lucide="info" class="w-4 h-4 text-primary"></i>F7 多模型网关</div>
+      在 Settings 配置 provider 与 Key 之后，所有模型按能力（text / image / video / audio）分组展示；每行 label 长于容器时以 <code class="text-[11px] bg-gray-100 px-1 rounded">truncate + title</code> 显示完整名称。
+    </div>
+
+    <div data-include="tpl-topbar"></div>
+    <div data-include="tpl-toolbar"></div>
+    <div data-include="tpl-history"></div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- Screen 3 · 分镜模式 Storyboard                                -->
+  <!-- ========================================================= -->
+  <section id="screen-story" class="screen w-screen h-screen relative overflow-hidden">
+    <div class="absolute inset-0 bg-canvasbg"></div>
+
+    <!-- Mode switcher at top center -->
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md border border-stroke rounded-full shadow-card px-1 py-1 flex items-center gap-1 text-[12px]">
+      <button class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100"><i data-lucide="boxes" class="w-3.5 h-3.5 inline mr-1"></i>画布</button>
+      <button class="px-3 py-1.5 rounded-full bg-gray-900 text-white"><i data-lucide="clapperboard" class="w-3.5 h-3.5 inline mr-1"></i>分镜</button>
+    </div>
+
+    <div class="absolute top-24 left-4 right-4 bottom-14 flex gap-4">
+      <!-- Script left column -->
+      <aside class="w-[320px] bg-white border border-stroke rounded-2xl shadow-card flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-stroke flex items-center gap-2 text-[13px] font-semibold">
+          <i data-lucide="scroll-text" class="w-4 h-4 text-accent"></i>剧本 · 夜色渐浓
+          <span class="ml-auto text-[11px] font-normal text-gray-400">6 场</span>
+        </div>
+        <div class="flex-1 overflow-auto scroll-soft p-4 text-[12.5px] leading-relaxed text-gray-700 space-y-3">
+          <p><span class="font-semibold text-gray-900">### 场 1 · 内景 · 公寓 · 夜</span><br/>窗外雨声。小米独坐在沙发上，手机屏幕照亮她的脸。</p>
+          <p><span class="font-semibold text-gray-900">### 场 2 · 外景 · 街道 · 凌晨</span><br/>霓虹灯映在湿漉的柏油路面。一个身影快步穿过马路。</p>
+          <p><span class="font-semibold text-gray-900">### 场 3 · 内景 · 便利店 · 夜</span><br/>暖黄灯光下，店员抬头看了一眼玻璃门。</p>
+          <p><span class="font-semibold text-gray-900">### 场 4 · 外景 · 天桥 · 黎明</span><br/>远处城市渐渐亮起，地平线透出一道薄橘色。</p>
+          <p><span class="font-semibold text-gray-900">### 场 5 · 内景 · 咖啡馆 · 清晨</span><br/>蒸汽从杯沿升起。她把湿透的外套挂在椅背。</p>
+          <p><span class="font-semibold text-gray-900">### 场 6 · 外景 · 海边 · 午后</span><br/>阳光强烈，海面碎金。她终于露出一点笑容。</p>
+        </div>
+        <div class="border-t border-stroke p-3 flex items-center gap-2">
+          <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-900 text-white text-[12px] rounded-lg"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i>LLM 拆分镜头</button>
+          <button class="p-2 border border-stroke rounded-lg text-gray-600 hover:bg-gray-50" title="导入剧本"><i data-lucide="upload" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </aside>
+
+      <!-- Storyboard grid -->
+      <section class="flex-1 bg-white border border-stroke rounded-2xl shadow-card flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-stroke flex items-center gap-2 text-[13px] font-semibold">
+          <i data-lucide="layout-grid" class="w-4 h-4 text-accent"></i>分镜板
+          <span class="ml-2 text-[11px] font-normal text-gray-400">6 scenes · 2:35 预计时长</span>
+          <div class="ml-auto flex items-center gap-2 text-[11px] text-gray-500">
+            <button class="flex items-center gap-1 px-2 py-1 rounded border border-stroke hover:bg-gray-50"><i data-lucide="users" class="w-3.5 h-3.5"></i>绑定角色：小米</button>
+            <button class="flex items-center gap-1 px-2 py-1 rounded border border-stroke hover:bg-gray-50"><i data-lucide="play" class="w-3.5 h-3.5"></i>全部运行</button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-auto scroll-soft p-4 grid grid-cols-3 gap-4 auto-rows-min">
+          <!-- scene cards -->
+          <!-- 6 cards -->
+          <template id="tpl-scene"></template>
+          <div data-scene="1" class="rounded-xl border border-stroke overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-slate-800 via-indigo-800 to-slate-900 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 1</span>
+              <span class="absolute bottom-1 right-1 bg-emerald-500/80 text-white text-[10px] px-1.5 rounded">success</span>
+            </div>
+            <div class="p-2 text-[11px] text-gray-600 leading-snug">窗外雨声，沙发上的光。<span class="text-gray-400">img · 00:03</span></div>
+          </div>
+          <div data-scene="2" class="rounded-xl border border-stroke overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-rose-700 via-pink-500 to-amber-400 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 2</span>
+              <span class="absolute bottom-1 right-1 bg-emerald-500/80 text-white text-[10px] px-1.5 rounded">success</span>
+            </div>
+            <div class="p-2 text-[11px] text-gray-600 leading-snug">霓虹街道，快步身影。<span class="text-gray-400">img · 00:05</span></div>
+          </div>
+          <div data-scene="3" class="rounded-xl border-2 border-accent overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-amber-200 via-orange-200 to-yellow-100 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 3</span>
+              <span class="absolute bottom-1 right-1 bg-purple-500/90 text-white text-[10px] px-1.5 rounded is-running">running</span>
+            </div>
+            <div class="p-2 text-[11px] text-gray-600 leading-snug">便利店，玻璃门。<span class="text-accent">video · 生成中 34s</span></div>
+          </div>
+          <div data-scene="4" class="rounded-xl border border-stroke overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-orange-200 via-rose-100 to-sky-200 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 4</span>
+              <span class="absolute bottom-1 right-1 bg-gray-500/80 text-white text-[10px] px-1.5 rounded">queued</span>
+            </div>
+            <div class="p-2 text-[11px] text-gray-600 leading-snug">天桥上的黎明。<span class="text-gray-400">video · 等待</span></div>
+          </div>
+          <div data-scene="5" class="rounded-xl border border-stroke overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-yellow-100 via-stone-100 to-amber-50 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 5</span>
+              <span class="absolute bottom-1 right-1 bg-gray-300 text-gray-700 text-[10px] px-1.5 rounded">idle</span>
+            </div>
+            <div class="p-2 text-[11px] text-gray-600 leading-snug">咖啡馆，湿外套。<span class="text-gray-400">img · 未运行</span></div>
+          </div>
+          <div data-scene="6" class="rounded-xl border border-red-300 overflow-hidden bg-white flex flex-col">
+            <div class="aspect-[16/9] bg-gradient-to-br from-sky-200 via-cyan-100 to-emerald-100 relative">
+              <span class="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">场 6</span>
+              <span class="absolute bottom-1 right-1 bg-red-500 text-white text-[10px] px-1.5 rounded">failed</span>
+            </div>
+            <div class="p-2 text-[11px] text-red-600 leading-snug flex items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i>限流 · 点 "重试" 或稍后。</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div data-include="tpl-topbar"></div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- Screen 4 · 运行面板                                          -->
+  <!-- ========================================================= -->
+  <section id="screen-run" class="screen w-screen h-screen relative overflow-hidden">
+    <div class="canvas-dotgrid absolute inset-0"></div>
+
+    <!-- Canvas nodes with different running states -->
+    <div class="absolute inset-0">
+      <svg class="absolute inset-0 w-full h-full">
+        <path class="wire" d="M 260,260 C 340,260 340,200 420,200" />
+        <path class="wire" d="M 260,260 C 340,260 340,320 420,320" />
+        <path class="wire" d="M 620,200 C 700,200 700,260 780,260" />
+        <path class="wire" d="M 620,320 C 700,320 700,260 780,260" />
+      </svg>
+
+      <div class="absolute" style="left:100px; top:220px; width:160px;">
+        <div class="bg-white border-2 border-emerald-400 rounded-xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="type" class="w-3.5 h-3.5"></i><span class="font-semibold text-gray-800">PROMPT</span>
+            <span class="ml-auto bg-emerald-100 text-emerald-700 px-1.5 rounded text-[10px] font-semibold">success</span>
+          </div>
+          <div class="p-3 text-[11px] text-gray-600">夜色渐浓系列</div>
+        </div>
+      </div>
+      <div class="absolute" style="left:420px; top:160px; width:200px;">
+        <div class="bg-white border-2 border-emerald-400 rounded-xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">场 2 IMAGE</span>
+            <span class="ml-auto bg-emerald-100 text-emerald-700 px-1.5 rounded text-[10px] font-semibold">success</span>
+          </div>
+          <div class="aspect-[16/9] bg-gradient-to-br from-rose-600 via-pink-400 to-amber-300"></div>
+        </div>
+      </div>
+      <div class="absolute" style="left:420px; top:280px; width:200px;">
+        <div class="bg-white border-2 border-accent rounded-xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">场 3 IMAGE</span>
+            <span class="ml-auto bg-purple-100 text-purple-700 px-1.5 rounded text-[10px] font-semibold is-running">running</span>
+          </div>
+          <div class="aspect-[16/9] bg-gray-100 flex items-center justify-center text-gray-400 text-[11px] is-running">14s / 约 28s</div>
+        </div>
+      </div>
+      <div class="absolute" style="left:780px; top:220px; width:200px;">
+        <div class="bg-white border-2 border-red-400 rounded-xl shadow-card overflow-hidden">
+          <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+            <i data-lucide="film" class="w-3.5 h-3.5 text-accent"></i><span class="font-semibold text-gray-800">场 3 VIDEO</span>
+            <span class="ml-auto bg-red-100 text-red-700 px-1.5 rounded text-[10px] font-semibold">failed</span>
+          </div>
+          <div class="aspect-[16/9] bg-red-50 flex flex-col items-center justify-center text-red-500 text-[11px] gap-1">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i>限流 · 429
+            <button class="text-primary text-[11px]">重试</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Run panel drawer -->
+    <aside class="absolute top-4 right-4 bottom-4 w-[380px] bg-white/98 backdrop-blur-md border border-stroke rounded-2xl shadow-float overflow-hidden flex flex-col z-20">
+      <div class="px-4 py-3 border-b border-stroke flex items-center gap-2 text-[13px] font-semibold">
+        <i data-lucide="play-circle" class="w-4 h-4 text-primary"></i>运行
+        <span class="ml-auto text-[11px] font-normal text-gray-500">2 进行中 · 1 失败</span>
+        <button class="p-1 rounded hover:bg-gray-100 text-gray-500"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="p-3 flex flex-col gap-2 border-b border-stroke">
+        <!-- Progress rows -->
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span class="flex-1 text-gray-700">场 1 · PROMPT</span>
+          <span class="text-gray-400 text-[11px]">0.4s</span>
+        </div>
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span class="flex-1 text-gray-700">场 2 · IMAGE</span>
+          <span class="text-gray-400 text-[11px]">12.3s</span>
+        </div>
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent is-running"></span>
+          <span class="flex-1 text-gray-800 font-medium">场 3 · IMAGE</span>
+          <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div class="h-full w-[52%] bg-accent is-running"></div></div>
+          <span class="text-accent text-[11px]">14s</span>
+        </div>
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+          <span class="flex-1 text-red-600">场 3 · VIDEO</span>
+          <span class="text-red-500 text-[11px]">limit · 429</span>
+        </div>
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+          <span class="flex-1 text-gray-500">场 4 · IMAGE</span>
+          <span class="text-gray-400 text-[11px]">queued</span>
+        </div>
+        <div class="flex items-center gap-2 text-[12px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+          <span class="flex-1 text-gray-500">场 4 · VIDEO</span>
+          <span class="text-gray-400 text-[11px]">queued</span>
+        </div>
+      </div>
+
+      <div class="px-4 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+        <i data-lucide="terminal" class="w-3.5 h-3.5"></i>日志
+        <div class="ml-auto flex items-center gap-1">
+          <button class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">info</button>
+          <button class="px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-500">warn</button>
+          <button class="px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-500">error</button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-auto scroll-soft p-3 text-[11.5px] font-mono leading-relaxed text-gray-600 space-y-1">
+        <div><span class="text-gray-400">12:01:02</span> 场 1 prompt 完成</div>
+        <div><span class="text-gray-400">12:01:02</span> 场 2 image 入队 · gpt-image-1</div>
+        <div><span class="text-gray-400">12:01:14</span> <span class="text-emerald-600">success</span> 场 2 image · 12.3s · 512KB</div>
+        <div><span class="text-gray-400">12:01:14</span> 场 3 image 入队 · gpt-image-1</div>
+        <div><span class="text-gray-400">12:01:24</span> <span class="text-accent">running</span> 场 3 image · 进度 52%</div>
+        <div><span class="text-gray-400">12:01:24</span> 场 3 video 请求 kling-v1.6</div>
+        <div><span class="text-gray-400">12:01:25</span> <span class="text-red-600">failed</span> 场 3 video · HTTP 429 rate limit · 2/3 重试</div>
+      </div>
+
+      <div class="border-t border-stroke p-3 flex items-center gap-2">
+        <button class="flex-1 px-3 py-2 bg-gray-900 text-white text-[12px] rounded-lg flex items-center justify-center gap-1.5"><i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>局部重跑失败节点</button>
+        <button class="px-3 py-2 bg-white border border-stroke text-[12px] rounded-lg hover:bg-gray-50 flex items-center gap-1.5"><i data-lucide="square" class="w-3.5 h-3.5"></i>取消全部</button>
+      </div>
+    </aside>
+
+    <div data-include="tpl-topbar"></div>
+    <div data-include="tpl-toolbar"></div>
+    <div data-include="tpl-history"></div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- Screen 5 · 资源库抽屉                                         -->
+  <!-- ========================================================= -->
+  <section id="screen-assets" class="screen w-screen h-screen relative overflow-hidden">
+    <div class="canvas-dotgrid absolute inset-0"></div>
+
+    <!-- Faded canvas (darkened background) -->
+    <div class="absolute inset-0 bg-black/5"></div>
+
+    <!-- Asset drawer (left side) -->
+    <aside class="absolute top-4 left-4 bottom-4 w-[420px] bg-white border border-stroke rounded-2xl shadow-float overflow-hidden flex flex-col z-20">
+      <div class="px-4 py-3 border-b border-stroke flex items-center gap-2 text-[13px] font-semibold">
+        <i data-lucide="library" class="w-4 h-4 text-accent"></i>资源库
+        <span class="ml-auto text-[11px] font-normal text-gray-400">136 项</span>
+        <button class="p-1 rounded hover:bg-gray-100 text-gray-500"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="px-4 pt-3 flex items-center gap-1 text-[12px]">
+        <button class="px-3 py-1.5 rounded-full bg-gray-900 text-white">素材</button>
+        <button class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100">最近生成</button>
+        <button class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100">收藏</button>
+        <button class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100">模板</button>
+      </div>
+
+      <!-- Search bar -->
+      <div class="p-3 border-b border-stroke">
+        <div class="flex items-center gap-2 px-3 py-2 border border-stroke rounded-lg bg-white text-[12px] text-gray-500">
+          <i data-lucide="search" class="w-3.5 h-3.5"></i>
+          <input class="flex-1 outline-none" placeholder="搜索 / 粘贴图片 URL…" />
+          <button class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">↑</button>
+        </div>
+      </div>
+
+      <!-- Grid body -->
+      <div class="flex-1 overflow-auto scroll-soft p-3">
+        <div class="text-[10px] font-semibold text-gray-400 px-1 pb-2">最近使用</div>
+        <div class="grid grid-cols-3 gap-2 pb-4">
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-slate-700 to-indigo-900 cursor-grab"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-rose-400 to-amber-300 cursor-grab"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-emerald-300 to-teal-200 cursor-grab"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-sky-300 to-cyan-200 cursor-grab"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-purple-300 to-pink-200 cursor-grab"></div>
+          <div class="aspect-square rounded-lg border-2 border-dashed border-strokeStrong flex flex-col items-center justify-center text-gray-400 text-[11px] gap-1">
+            <i data-lucide="upload" class="w-4 h-4"></i>上传
+          </div>
+        </div>
+
+        <div class="text-[10px] font-semibold text-gray-400 px-1 pb-2">上周生成</div>
+        <div class="grid grid-cols-3 gap-2 pb-4">
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-neutral-200 to-neutral-400"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-orange-300 to-red-300"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-lime-200 to-emerald-300"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-fuchsia-300 to-purple-400"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-yellow-200 to-lime-200"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-sky-400 to-indigo-500"></div>
+        </div>
+
+        <div class="text-[10px] font-semibold text-gray-400 px-1 pb-2">本地上传</div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-stone-200 to-stone-400"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-amber-100 to-amber-300"></div>
+          <div class="aspect-square rounded-lg border border-stroke bg-gradient-to-br from-pink-200 to-rose-300"></div>
+        </div>
+      </div>
+
+      <div class="border-t border-stroke p-3 text-[11px] text-gray-500 flex items-center gap-2">
+        <i data-lucide="info" class="w-3.5 h-3.5"></i>拖拽任一项到画布即生成对应节点。
+      </div>
+    </aside>
+
+    <!-- Canvas hint behind -->
+    <div class="absolute left-[460px] top-36 text-gray-400 text-[12px]">
+      <div class="flex items-center gap-2">
+        <i data-lucide="move" class="w-4 h-4"></i>把图拖到右侧任意位置即可
+      </div>
+    </div>
+
+    <!-- Templates modal in the middle-right (showing Templates tab preview) -->
+    <div class="absolute top-8 right-8 bottom-8 w-[560px] bg-white border border-stroke rounded-2xl shadow-float overflow-hidden flex flex-col z-10">
+      <div class="px-4 py-3 border-b border-stroke flex items-center gap-2 text-[13px] font-semibold">
+        <i data-lucide="layout-template" class="w-4 h-4 text-accent"></i>F22 模板市场
+        <span class="ml-auto text-[11px] font-normal text-gray-400">6 内建 · 更多即将开放</span>
+      </div>
+      <div class="flex-1 overflow-auto scroll-soft p-4 grid grid-cols-2 gap-4">
+        <div class="rounded-xl border border-stroke overflow-hidden cursor-pointer hover:border-primary">
+          <div class="aspect-[3/2] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-gray-400"><i data-lucide="file" class="w-6 h-6"></i></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">空白画布</div><div class="text-gray-400">从零开始</div></div>
+        </div>
+        <div class="rounded-xl border border-stroke overflow-hidden cursor-pointer hover:border-primary">
+          <div class="aspect-[3/2] bg-gradient-to-br from-rose-200 via-purple-200 to-indigo-200"></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">AI Moodboard</div><div class="text-gray-400">关键词 → 4 图 → 变体</div></div>
+        </div>
+        <div class="rounded-xl border-2 border-primary overflow-hidden cursor-pointer">
+          <div class="aspect-[3/2] bg-gradient-to-br from-amber-100 to-amber-300"></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">产品图变体</div><div class="text-gray-400">上传 1 张 → 12 视角</div></div>
+        </div>
+        <div class="rounded-xl border border-stroke overflow-hidden cursor-pointer hover:border-primary">
+          <div class="aspect-[3/2] bg-gradient-to-br from-indigo-200 via-sky-200 to-emerald-200"></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">短视频分镜</div><div class="text-gray-400">剧本 → 6 scene → MP4</div></div>
+        </div>
+        <div class="rounded-xl border border-stroke overflow-hidden cursor-pointer hover:border-primary">
+          <div class="aspect-[3/2] bg-gradient-to-br from-lime-100 to-emerald-200"></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">角色三视图</div><div class="text-gray-400">正面 / 侧面 / 背面</div></div>
+        </div>
+        <div class="rounded-xl border border-stroke overflow-hidden cursor-pointer hover:border-primary">
+          <div class="aspect-[3/2] bg-gradient-to-br from-fuchsia-200 to-pink-300"></div>
+          <div class="p-2.5 text-[12px]"><div class="font-semibold">风格迁移实验</div><div class="text-gray-400">1 张源 × 6 种风格</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div data-include="tpl-topbar"></div>
+    <div data-include="tpl-toolbar"></div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- Screen 6 · 导出对话框                                         -->
+  <!-- ========================================================= -->
+  <section id="screen-export" class="screen w-screen h-screen relative overflow-hidden">
+    <div class="canvas-dotgrid absolute inset-0"></div>
+    <!-- Modal backdrop -->
+    <div class="absolute inset-0 bg-black/30"></div>
+
+    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] bg-white border border-stroke rounded-2xl shadow-float z-30 overflow-hidden">
+      <div class="px-5 py-4 border-b border-stroke flex items-center gap-2">
+        <i data-lucide="download" class="w-4 h-4 text-primary"></i>
+        <span class="text-[14px] font-semibold">导出与分享</span>
+        <span class="ml-auto text-[11px] text-gray-400">F23 · 多格式</span>
+        <button class="p-1 rounded hover:bg-gray-100 text-gray-500"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="grid grid-cols-[200px_1fr]">
+        <!-- Left format list -->
+        <div class="border-r border-stroke p-3 flex flex-col gap-1 text-[12.5px]">
+          <button class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-900 text-white"><i data-lucide="image" class="w-3.5 h-3.5"></i>PNG 图片</button>
+          <button class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>PDF 分镜</button>
+          <button class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"><i data-lucide="film" class="w-3.5 h-3.5"></i>MP4 拼接</button>
+          <button class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"><i data-lucide="archive" class="w-3.5 h-3.5"></i>ZIP 打包</button>
+          <div class="border-t border-stroke my-2"></div>
+          <button class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"><i data-lucide="link-2" class="w-3.5 h-3.5"></i>只读分享链接</button>
+        </div>
+
+        <!-- Right options -->
+        <div class="p-5 flex flex-col gap-4">
+          <!-- Preview box -->
+          <div class="rounded-xl overflow-hidden border border-stroke">
+            <div class="px-3 py-2 border-b border-stroke flex items-center gap-2 text-[11px] text-gray-500">
+              <i data-lucide="eye" class="w-3.5 h-3.5"></i>预览 · 1920 × 1080
+              <span class="ml-auto text-gray-400">估算 1.4MB · 2x</span>
+            </div>
+            <div class="aspect-[16/9] bg-gradient-to-br from-indigo-200 via-purple-200 to-rose-200 flex items-center justify-center text-gray-500 text-[12px]">
+              当前选区内容
+            </div>
+          </div>
+
+          <!-- Options -->
+          <div class="grid grid-cols-2 gap-3 text-[12px]">
+            <label class="flex flex-col gap-1">
+              <span class="text-gray-500">分辨率</span>
+              <div class="flex items-center gap-1">
+                <button class="flex-1 px-2 py-1.5 border border-stroke rounded-md hover:bg-gray-50">1x</button>
+                <button class="flex-1 px-2 py-1.5 border-2 border-primary rounded-md text-primary font-semibold">2x</button>
+                <button class="flex-1 px-2 py-1.5 border border-stroke rounded-md hover:bg-gray-50">3x</button>
+              </div>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-gray-500">范围</span>
+              <select class="px-2 py-1.5 border border-stroke rounded-md bg-white">
+                <option>整个画布</option>
+                <option>当前视口</option>
+                <option>选中元素</option>
+                <option>拉框选区</option>
+              </select>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" checked class="rounded border-stroke" />
+              <span>透明背景</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" class="rounded border-stroke" />
+              <span>附带元信息（prompt / model）</span>
+            </label>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-2 pt-1">
+            <button class="px-4 py-2 bg-primary text-white rounded-lg text-[12.5px] font-semibold flex items-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i>下载 PNG</button>
+            <button class="px-3 py-2 bg-white border border-stroke rounded-lg text-[12px] hover:bg-gray-50 flex items-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i>复制到剪贴板</button>
+            <div class="ml-auto text-[11px] text-gray-400">快捷键 ⌘E</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div data-include="tpl-topbar"></div>
+  </section>
+
+  <!-- =============== Scripts =============== -->
+  <script>
+    // Inject reusable templates
+    document.querySelectorAll('[data-include]').forEach((slot) => {
+      const id = slot.getAttribute('data-include');
+      const tpl = document.getElementById(id);
+      if (tpl) {
+        const frag = tpl.content.cloneNode(true);
+        slot.replaceWith(frag);
+      }
+    });
+
+    // Initialize Lucide icons after DOM is stable
+    window.lucide && window.lucide.createIcons();
+
+    // Screen switching
+    function goto(name) {
+      document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
+      const target = document.getElementById('screen-' + name);
+      if (target) target.classList.add('active');
+      document.querySelectorAll('.screen-switcher button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.goto === name);
+      });
+      if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+      window.lucide && window.lucide.createIcons();
+    }
+    document.querySelectorAll('.screen-switcher button').forEach((btn) => {
+      btn.addEventListener('click', () => goto(btn.dataset.goto));
+    });
+
+    // Initial screen from hash
+    const initial = (location.hash || '#canvas').slice(1);
+    goto(initial);
+
+    // Keyboard: 1..6
+    document.addEventListener('keydown', (e) => {
+      if (e.target.matches('input, textarea')) return;
+      const idx = ['canvas','nodebar','story','run','assets','export'];
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= 6) goto(idx[n - 1]);
+    });
+  </script>
+</body>
+</html>
