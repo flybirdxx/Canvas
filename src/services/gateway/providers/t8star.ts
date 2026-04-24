@@ -43,7 +43,18 @@ export const T8StarProvider: GatewayProvider = {
   // label 直接使用 wire-level 模型名，避免 t8star 侧的营销别名（"Lib Nano Pro"
   // 之类）让用户误以为 t8star 有独立模型体系。
   models: [
-    { id: 'gpt-image-2', providerId: 't8star', capability: 'image', label: 'gpt-image-2', caption: 'OpenAI DALL·E 协议兼容', supportsSize: true, supportsN: true },
+    {
+      id: 'gpt-image-2',
+      providerId: 't8star',
+      capability: 'image',
+      label: 'gpt-image-2',
+      caption: 'OpenAI DALL·E 协议兼容',
+      supportsSize: true,
+      supportsN: true,
+      // 与 NodeInputBar 的 IMAGE_SIZE_PRESETS 严格一致，避免 UI 出现实际
+      // 不在 preset 表里的 aspect。
+      supportedAspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    },
   ],
 
   async generateImage(req: ImageGenRequest, config: ProviderRuntimeConfig): Promise<ImageGenResult> {
@@ -115,9 +126,10 @@ async function runGenerations(
   config: ProviderRuntimeConfig,
   req: ImageGenRequest,
 ): Promise<ImageGenResult> {
+  const url = `${config.baseUrl}/v1/images/generations`;
   let response: Response;
   try {
-    response = await fetch(`${config.baseUrl}/v1/images/generations`, {
+    response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,8 +149,8 @@ async function runGenerations(
     return {
       ok: false,
       kind: 'network',
-      message: '网络请求失败，请检查网络或 Base URL',
-      detail: e?.message ? String(e.message) : undefined,
+      message: '网络请求失败',
+      detail: buildNetworkErrorDetail(url, e),
     };
   }
   return parseImageBody(response);
@@ -179,9 +191,10 @@ async function runEdits(
     form.append('mask', mask.blob, 'mask.png');
   }
 
+  const url = `${config.baseUrl}/v1/images/edits`;
   let response: Response;
   try {
-    response = await fetch(`${config.baseUrl}/v1/images/edits`, {
+    response = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
@@ -193,8 +206,8 @@ async function runEdits(
     return {
       ok: false,
       kind: 'network',
-      message: '网络请求失败，请检查网络或 Base URL',
-      detail: e?.message ? String(e.message) : undefined,
+      message: '网络请求失败',
+      detail: buildNetworkErrorDetail(url, e),
     };
   }
   return parseImageBody(response);
@@ -298,4 +311,36 @@ function safeStringify(v: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 拼一条能让人自诊断的"fetch 抛异常"详情。
+ *
+ * 背景：浏览器在下列任一情况下都会把 fetch() 直接抛成 `TypeError: Failed to
+ * fetch`，而不给任何 HTTP 状态：
+ *   - CORS 预检被拒（服务端没发 Access-Control-Allow-Origin）
+ *   - DNS 解析失败 / 主机不可达
+ *   - HTTPS 页面访问 HTTP 资源（mixed content）
+ *   - 浏览器扩展 / 代理 / VPN 拦截
+ *   - Base URL 配错（协议缺失、路径错位）
+ *
+ * 这几种我们在代码层都区分不出来——catch 到的异常信息几乎恒定是
+ * "Failed to fetch"。所以给用户一条完整的候选清单，帮他们在 Network
+ * 面板对照排查，比只说"检查网络或 Base URL"实用得多。
+ */
+function buildNetworkErrorDetail(url: string, e: any): string {
+  const rawMsg = e?.message ? String(e.message) : String(e ?? 'unknown');
+  const lines = [
+    `URL: ${url}`,
+    `错误: ${rawMsg}`,
+    '',
+    '常见原因（按可能性排序）：',
+    '  1. 浏览器 CORS 拦截——服务端未对本页面 origin 放行，Network 面板会看到',
+    '     一条红色 preflight 或被 blocked 的请求。需服务端加 Access-Control-* 头。',
+    '  2. VPN / 代理 / 企业网关把请求吞掉；换网络或关代理复测。',
+    '  3. Base URL 配置错（拼错、多/少斜杠、协议缺失）；去设置面板确认。',
+    '  4. 服务临时不可用；直接在浏览器访问 URL 看是否 200。',
+    '  5. 浏览器扩展（广告拦截 / 隐私插件）阻断；在隐私窗口复测。',
+  ];
+  return lines.join('\n');
 }

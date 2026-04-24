@@ -12,16 +12,29 @@ import type {
 /**
  * RunningHub (runninghub.cn) — 全能图片 G-2.0 系列。
  *
- * 和同步风格的 t8star 最大的不同：**异步任务模型**。
+ * 和同步风格的 t8star 最大的不同：**异步任务模型**。所有渠道共用同一套
+ * `submit → poll /openapi/v2/query` 的异步流程，但 **body schema 按渠道分叉**
+ * （`CHANNELS` 常量）。路径段全是 `rhart-image-g-2*`，`rhart` 是 RH 产品线
+ * 的名字，不是 wire-level 的模型代号。
  *
- *   ① 提交任务：
- *        POST {baseUrl}/openapi/v2/rhart-image-g-2/text-to-image
- *        POST {baseUrl}/openapi/v2/rhart-image-g-2/image-to-image
- *        → 立即拿到 { taskId, status: "RUNNING" }
+ * 当前支持两条渠道（`models[]` 里两条 descriptor 各对应一套路径 + body）：
  *
- *   ② 轮询查询：
- *        POST {baseUrl}/openapi/v2/query  { taskId }
- *        → { status: "QUEUED|RUNNING|SUCCESS|FAILED", results: [{url,...}], errorMessage }
+ *   · rhart-image-g-2  —— 低价渠道
+ *       t2i: POST /openapi/v2/rhart-image-g-2/text-to-image
+ *       i2i: POST /openapi/v2/rhart-image-g-2/image-to-image
+ *       body: { prompt, aspectRatio, imageUrls? }
+ *       aspectRatio 限定 10 档枚举
+ *
+ *   · rhart-image-g-2-official  —— 官方稳定版
+ *       t2i: POST /openapi/v2/rhart-image-g-2-official/text-to-image
+ *       i2i: POST /openapi/v2/rhart-image-g-2-official/image-to-image
+ *       body: { prompt, aspectRatio, resolution, quality, imageUrls? }
+ *       比低价多两个**必填**字段：resolution(1k|2k|4k) + quality(low|medium|high)
+ *       aspectRatio 枚举同低价。
+ *
+ * 轮询响应 schema 两条渠道一致：
+ *   POST /openapi/v2/query  { taskId }
+ *   → { status: "QUEUED|RUNNING|SUCCESS|FAILED", results: [{url,...}], errorMessage }
  *
  * 上层语义：`generateImage` **不保证**同步拿到最终图。三种可能：
  *   - ok:true                → 图已就绪
@@ -30,19 +43,15 @@ import type {
  *                              负责把 taskId 持久化到 placeholder，稍后由
  *                              `pollImageTask` / `taskResume` 接回
  *
- * 这样即便服务端排队 20 分钟我们也不会吞钱——刷新 / 重开浏览器都能按
- * taskId 继续查。
- *
  * 其它约束：
  *   · 图生端点 imageUrls[] 只接受**公网 URL**，不接受 base64；
  *     data URL / 裸 base64 在提交前先过 imgbb 转成 https 链接；
- *   · 接口只吃固定 aspectRatio 枚举，不吃自由 WxH——所以我们优先用
- *     req.aspect（NodeInputBar 已经透传），如果不在支持枚举里就 snap 到最近档；
- *   · 没有 n 参数，一次一张。由上层（imageGeneration.ts）扇出 n 次并发调用。
+ *   · 都没有 n 参数，一次一张。由上层（imageGeneration.ts）扇出 n 次并发调用；
+ *   · 官方渠道 imageUrls 最多 4 张（MAX_REFERENCES 已匹配）。
  */
 
-// 文档里 text-to-image 和 image-to-image 支持的 aspectRatio 并集。
-// （t2i 多一个 '5:4/4:5'，i2i 带 '21:9'；我们走并集，请求前按场景再校验。）
+// 两条渠道 t2i + i2i 接受的 aspectRatio 并集。文档里低价 / 官方稳定版的
+// 枚举完全一致，都是这 10 档。
 const SUPPORTED_ASPECTS = [
   '1:1', '3:2', '2:3', '5:4', '4:5',
   '4:3', '3:4', '16:9', '9:16', '21:9',
@@ -62,26 +71,137 @@ const POLL_INTERVALS_MS = [3000, 5000, 8000, 12000, 15000] as const;
 const POLL_MAX_WAIT_MS = 5 * 60_000;
 const RESUME_POLL_MAX_WAIT_MS = 2 * 60_000;
 
+/**
+ * 每条渠道的请求构造策略——URL 路径段 + 对应的 JSON body。
+ *
+ *   · 低价渠道 `rhart-image-g-2`：body 只有 prompt + aspectRatio
+ *   · 官方稳定版 `rhart-image-g-2-official`：body 多了 resolution + quality，
+ *     都是**必填**字段，缺任何一个会直接 400
+ *
+ * 把路径 + body 构造绑在一起，分叉集中在这张表里；`runSingleTask` 只管按 id
+ * 取渠道发请求，不 care 差异细节。
+ */
+interface RHChannel {
+  /** text-to-image 端点相对路径（不含 /openapi/v2/）。 */
+  textPath: string;
+  /** image-to-image 端点相对路径。 */
+  editPath: string;
+  /** 按渠道 body schema 构造提交体。 */
+  buildBody(args: {
+    prompt: string;
+    aspect: string;
+    imageUrls?: string[];
+    resolution?: string;
+    qualityLevel?: string;
+  }): Record<string, unknown>;
+}
+
+const CHANNELS: Record<string, RHChannel> = {
+  'rhart-image-g-2': {
+    textPath: 'rhart-image-g-2/text-to-image',
+    editPath: 'rhart-image-g-2/image-to-image',
+    buildBody: ({ prompt, aspect, imageUrls }) => {
+      const aspectRatio = snapAspect(aspect);
+      return imageUrls && imageUrls.length > 0
+        ? { prompt, aspectRatio, imageUrls }
+        : { prompt, aspectRatio };
+    },
+  },
+  'rhart-image-g-2-official': {
+    textPath: 'rhart-image-g-2-official/text-to-image',
+    editPath: 'rhart-image-g-2-official/image-to-image',
+    buildBody: ({ prompt, aspect, imageUrls, resolution, qualityLevel }) => {
+      const aspectRatio = snapAspect(aspect);
+      // 文档里 resolution / quality 都是必填。UI 没传就给个稳妥默认，别让
+      // 请求因为缺字段被 400 兜底——用户会以为是 provider 挂了。
+      const res = toOfficialResolution(resolution);
+      const q = toOfficialQualityLevel(qualityLevel);
+      const base = { prompt, aspectRatio, resolution: res, quality: q };
+      return imageUrls && imageUrls.length > 0
+        ? { ...base, imageUrls }
+        : base;
+    },
+  },
+};
+
+/**
+ * UI 里的 '1K' / '2K' / '4K' / 'auto' 映射到官方文档接受的小写 '1k|2k|4k'。
+ * 文档没有 'auto' 档——传 auto 或未知值一律落回 '1k'，避免 400。
+ */
+function toOfficialResolution(resolution: string | undefined): string {
+  if (!resolution) return '1k';
+  const v = resolution.toLowerCase();
+  if (v === '1k' || v === '2k' || v === '4k') return v;
+  return '1k';
+}
+
+/**
+ * UI quality level 容错：只认 low/medium/high，空值 / 未识别一律 medium。
+ * 选 medium 作为默认是因为文档示例就用的 medium；low 出图会明显劣化，不想
+ * 让"没选"的用户被劣化体验坑到。
+ */
+function toOfficialQualityLevel(level: string | undefined): string {
+  if (!level) return 'medium';
+  const v = level.toLowerCase();
+  if (v === 'low' || v === 'medium' || v === 'high') return v;
+  return 'medium';
+}
+
 export const RunningHubProvider: GatewayProvider = {
   id: 'runninghub',
   name: 'RunningHub',
   capabilities: ['image'],
   auth: 'bearer',
   authHint: '异步任务模型，提交后轮询查询；图生参考图会自动经 imgbb 托管',
-  // label 和 id 都使用 wire-level 路径名（URL 里就是 `rhart-image-g-2`），
-  // 和 t8star 的 `gpt-image-2` 同构。caption 给出官方中文正式名。
   models: [
     {
       id: 'rhart-image-g-2',
       providerId: 'runninghub',
       capability: 'image',
       label: 'rhart-image-g-2',
-      caption: '全能图片 G-2.0 · 异步任务',
+      caption: '全能图片 G-2.0 · 低价渠道（不稳定）',
       supportsSize: false, // 只吃 aspectRatio
       // 注意：RH 协议本身一次一张；n>1 由上层（imageGeneration.ts）为每个
       // placeholder 各扇出一条 generateImage(n=1) 调用来实现，provider 内部
       // 不再做并发 fanout。这样 taskId 和 placeholder 天然是 1:1 对应。
       supportsN: true,
+      // 文档里 t2i + i2i 接受的 aspectRatio 并集（10 档）。
+      supportedAspects: [
+        '1:1', '3:2', '2:3', '5:4', '4:5',
+        '4:3', '3:4', '16:9', '9:16', '21:9',
+      ],
+      // 低价渠道 RH 页面标注 "仅需 ¥0.1"，所有档位一口价。
+      pricing: { currency: '¥', flat: 0.1 },
+    },
+    {
+      id: 'rhart-image-g-2-official',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: 'rhart-image-g-2-official',
+      caption: '全能图片 G-2.0 · 官方稳定版',
+      // 不是 WxH 自由尺寸，但要求 UI 显示 resolution 档位（见 supportedResolutions）。
+      supportsSize: false,
+      supportsN: true,
+      // 官方文档 aspect 枚举和低价完全一致，都是这 10 档。
+      supportedAspects: [
+        '1:1', '3:2', '2:3', '5:4', '4:5',
+        '4:3', '3:4', '16:9', '9:16', '21:9',
+      ],
+      // resolution 是**必填**，UI 必须给出选择器。注意值用 UI 的大写 '1K/2K/4K'，
+      // provider 内部 toOfficialResolution() 会转成小写 wire 形式。
+      supportedResolutions: ['1K', '2K', '4K'],
+      // quality 也是**必填**，多一个档位选择器。
+      supportedQualityLevels: ['low', 'medium', 'high'],
+      // RH 官网「价格与权益」页面公示的 9 档单价（¥/次）。
+      // 矩阵 key 走小写——查表前会 toLowerCase，UI 传 '1K'/'Medium' 都能命中。
+      pricing: {
+        currency: '¥',
+        matrix: {
+          low:    { '1k': 0.29, '2k': 0.42, '4k': 0.96 },
+          medium: { '1k': 0.37, '2k': 0.89, '4k': 1.32 },
+          high:   { '1k': 1.54, '2k': 2.82, '4k': 4.52 },
+        },
+      },
     },
   ],
 
@@ -93,7 +213,6 @@ export const RunningHubProvider: GatewayProvider = {
       return { ok: false, kind: 'unknown', message: 'RunningHub Base URL 未配置' };
     }
 
-    const aspect = snapAspect(req.aspect);
     const hasMask = typeof req.maskImage === 'string' && req.maskImage.length > 0;
     const hasRefs = (req.referenceImages?.length ?? 0) > 0;
 
@@ -113,12 +232,23 @@ export const RunningHubProvider: GatewayProvider = {
       imageUrls = prepared.urls;
     }
 
+    // 渠道白名单——手滑写错模型名被静默打到错误 URL 会返回 404 而不是
+    // 我们可处理的结构化错误；兜底回低价版以免彻底废掉。
+    const channelId = CHANNELS[req.model] ? req.model : 'rhart-image-g-2';
+
     // 一次调用对应一个 taskId、一个 placeholder。提交成功后立即触发
     // onTaskSubmitted 让上层落盘 pendingTask——哪怕后续轮询超时，taskId
     // 也已经持久化，不会丢。
     const outcome = await runSingleTask(
       config,
-      { prompt: req.prompt, aspect, imageUrls },
+      {
+        prompt: req.prompt,
+        aspect: req.aspect,
+        imageUrls,
+        channelId,
+        resolution: req.resolution,
+        qualityLevel: req.qualityLevel,
+      },
       req.onTaskSubmitted,
       POLL_MAX_WAIT_MS,
     );
@@ -189,18 +319,31 @@ async function prepareReferenceUrls(
  */
 async function runSingleTask(
   config: ProviderRuntimeConfig,
-  task: { prompt: string; aspect: string; imageUrls?: string[] },
+  task: {
+    prompt: string;
+    aspect: string;
+    imageUrls?: string[];
+    channelId: string;
+    resolution?: string;
+    qualityLevel?: string;
+  },
   onTaskSubmitted: ImageGenRequest['onTaskSubmitted'],
   maxWaitMs: number,
 ): Promise<ImageGenResult> {
+  // channelId 已在 generateImage 里白名单过，这里 CHANNELS[id] 必然有值；
+  // 兜底一份只是为了防御未来直接调本函数的 caller 漏过校验。
+  const channel = CHANNELS[task.channelId] ?? CHANNELS['rhart-image-g-2'];
   const isImg2Img = !!task.imageUrls && task.imageUrls.length > 0;
-  const endpoint = isImg2Img
-    ? `${config.baseUrl}/openapi/v2/rhart-image-g-2/image-to-image`
-    : `${config.baseUrl}/openapi/v2/rhart-image-g-2/text-to-image`;
+  const path = isImg2Img ? channel.editPath : channel.textPath;
+  const endpoint = `${config.baseUrl}/openapi/v2/${path}`;
 
-  const body = isImg2Img
-    ? { prompt: task.prompt, aspectRatio: task.aspect, imageUrls: task.imageUrls }
-    : { prompt: task.prompt, aspectRatio: task.aspect };
+  const body = channel.buildBody({
+    prompt: task.prompt,
+    aspect: task.aspect,
+    imageUrls: task.imageUrls,
+    resolution: task.resolution,
+    qualityLevel: task.qualityLevel,
+  });
 
   let submitResp: Response;
   try {
@@ -216,8 +359,8 @@ async function runSingleTask(
     return {
       ok: false,
       kind: 'network',
-      message: '网络请求失败，请检查网络或 Base URL',
-      detail: e?.message ? String(e.message) : undefined,
+      message: '网络请求失败',
+      detail: buildRhNetworkErrorDetail(endpoint, e),
     };
   }
 
@@ -269,9 +412,10 @@ async function runSingleTask(
  * 返回 pending 表示"还在跑"；返回 success/failure 表示已终结。
  */
 async function queryOnce(config: ProviderRuntimeConfig, taskId: string): Promise<ImageGenResult> {
+  const url = `${config.baseUrl}/openapi/v2/query`;
   let resp: Response;
   try {
-    resp = await fetch(`${config.baseUrl}/openapi/v2/query`, {
+    resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -284,7 +428,7 @@ async function queryOnce(config: ProviderRuntimeConfig, taskId: string): Promise
       ok: false,
       kind: 'network',
       message: '查询任务失败',
-      detail: e?.message ? String(e.message) : undefined,
+      detail: buildRhNetworkErrorDetail(url, e),
     };
   }
   if (!resp.ok) {
@@ -439,4 +583,26 @@ function safeStringify(v: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 同 t8star 那份 buildNetworkErrorDetail——fetch 抛 TypeError 时几乎拿不到
+ * 有效信息，需要给用户一份完整的候选排查清单，替代原来只有一行
+ * "Failed to fetch" 的空窗期。参见 t8star.ts 注释。
+ */
+function buildRhNetworkErrorDetail(url: string, e: any): string {
+  const rawMsg = e?.message ? String(e.message) : String(e ?? 'unknown');
+  const lines = [
+    `URL: ${url}`,
+    `错误: ${rawMsg}`,
+    '',
+    '常见原因（按可能性排序）：',
+    '  1. 浏览器 CORS 拦截——服务端未对本页面 origin 放行，Network 面板会看到',
+    '     一条红色 preflight 或被 blocked 的请求。需服务端加 Access-Control-* 头。',
+    '  2. VPN / 代理 / 企业网关把请求吞掉；换网络或关代理复测。',
+    '  3. Base URL 配置错（拼错、多/少斜杠、协议缺失）；去设置面板确认。',
+    '  4. 服务临时不可用；直接在浏览器访问 URL 看是否 200。',
+    '  5. 浏览器扩展（广告拦截 / 隐私插件）阻断；在隐私窗口复测。',
+  ];
+  return lines.join('\n');
 }

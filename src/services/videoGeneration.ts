@@ -93,7 +93,9 @@ function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, pr
     activeVersionIndex = versions.length - 1;
   }
 
-  store.deleteElements([placeholderId]);
+  // 与图像路径保持一致：replaceElement 承继 placeholder 从视频锚点带来的
+  // 端口 id，让 img→video 的 seed 连线在整条生成链路上都不断。参考
+  // imageGeneration.replacePlaceholderWithImage 的同名修复。
   const newElement: MediaElement = {
     id: uuidv4(),
     type: 'video',
@@ -105,7 +107,7 @@ function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, pr
     prompt,
     ...(versions ? { versions, activeVersionIndex } : {}),
   };
-  store.addElement(newElement as CanvasElement);
+  store.replaceElement(placeholderId, newElement as CanvasElement, '视频生成完成');
 }
 
 /**

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Plus, Search, Type, Image as ImageIcon, Video, Music, Layers,
-  Square, Circle, StickyNote,
+  Square, Circle, StickyNote, FileUp,
 } from 'lucide-react';
 
 /**
@@ -17,10 +17,26 @@ import {
  */
 export function ToolDock({
   onCreate,
+  onUploadFiles,
 }: {
   onCreate: (type: string) => void;
+  /**
+   * 通用文件上传入口的回调。和 `onCreate` 分开是因为：这条通路不创建空
+   * 节点再等用户喂数据，而是先挑文件、读完内容后才一次性落地成 FileElement
+   * —— 所以它的 payload 不是一个 type 字符串，而是已经到手的 File 数组。
+   */
+  onUploadFiles?: (files: File[]) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * 打开 OS 文件对话框。必须同步触发 `input.click()`（不能 await 任何东西），
+   * 否则部分浏览器会把异步调用识别为"非用户手势"而拒绝打开对话框。
+   */
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
     <div
@@ -149,6 +165,13 @@ export function ToolDock({
                   hotkey="A"
                   onClick={() => onCreate('audio')}
                 />
+                <PickerItem
+                  icon={<FileUp />}
+                  title="File"
+                  desc="任意格式 · 附件"
+                  hotkey="U"
+                  onClick={openFilePicker}
+                />
               </div>
             </div>
 
@@ -185,6 +208,27 @@ export function ToolDock({
       <DockBtn label="便签" onClick={() => onCreate('sticky')}>
         <StickyNote className="w-4 h-4" strokeWidth={1.6} />
       </DockBtn>
+
+      {/*
+        通用文件上传通道 —— 故意不走 image/video/audio 分流，accept 设为
+        星斜杠星（任意格式）。`multiple` 允许一次选多份。读完内容后交由
+        App.handleUploadFiles 组装成 FileElement。value 清空是为了让用户
+        同一个文件能被连续选两次。
+      */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="*/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = '';
+          if (files.length > 0 && onUploadFiles) {
+            onUploadFiles(files);
+          }
+        }}
+      />
     </div>
   );
 }

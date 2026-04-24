@@ -21,10 +21,73 @@ export interface ModelDescriptor {
   capability: Capability;
   label: string;
   caption?: string;
-  /** Whether the vendor supports the `size` parameter (WxH). */
+  /**
+   * Whether the vendor supports the `size` parameter (WxH free-form). When
+   * false, the UI hides the quality (1K/2K/4K) dropdown — for ratio-locked
+   * vendors like RunningHub the only meaningful spatial parameter is aspect,
+   * a quality picker would lie to the user (no matter what they pick the
+   * server returns the same fixed size).
+   */
   supportsSize?: boolean;
   /** Whether the vendor supports returning multiple images per call (`n > 1`). */
   supportsN?: boolean;
+  /**
+   * Aspect ratios this model actually accepts (wire-level). The UI uses this
+   * to filter the aspect dropdown so users can't pick a value that the
+   * provider would silently snap to something else. Format: '1:1' / '16:9' /
+   * '3:2' style — same conventions as the global ASPECT_OPTIONS.
+   *
+   * Omitted = "use the UI's full default list" (back-compat for models that
+   * accept everything in the picker).
+   */
+  supportedAspects?: string[];
+  /**
+   * Resolution tier values this model accepts (UI-level, e.g. '1K' / '2K' /
+   * '4K' / 'auto'). When present, the UI's resolution dropdown shows ONLY
+   * these options (provider-side mapping converts to whatever wire format
+   * the vendor wants).
+   *
+   * Omitted + `supportsSize: false` → hide the resolution dropdown entirely
+   * (vendor has nothing to choose; e.g. RH 低价渠道).
+   * Omitted + `supportsSize: true`  → show the global 1K/2K/4K/Auto preset
+   * (current default for t8star).
+   */
+  supportedResolutions?: string[];
+  /**
+   * Some vendors expose an extra "quality" axis orthogonal to resolution
+   * (RH 官方稳定版的 low/medium/high 就是典型例子）。声明后 UI 多渲染一个
+   * 下拉。值原样传到 provider，由 provider 决定是否映射。
+   *
+   * Omitted → 不渲染该控件（绝大多数模型走这条路径）。
+   */
+  supportedQualityLevels?: string[];
+  /**
+   * 每次调用的单价。UI 右下角那个小徽章会把"单价 × 张数 = 本次费用"
+   * 实时算给用户看，避免跑一次才惊觉消费 ¥4.52 的尴尬。
+   *
+   * 缺省 → UI 徽章显示占位符（`—`），不会显示错误价格。
+   */
+  pricing?: ModelPricing;
+}
+
+/**
+ * 单价数据：为什么不直接一个 number？因为 RH 官方稳定版的价格是
+ * {quality × resolution} 的 3×3 矩阵（最低 ¥0.29，最高 ¥4.52，差 15 倍）；
+ * 低价版则是所有档位一口价。两种形态必须都支持。
+ *
+ * 查价优先级：`flat` 存在就用 flat；否则按 (qualityLevel, resolution) 查
+ * `matrix`。查不到（档位未声明）返回 undefined，UI 降级为占位符。
+ *
+ * 注意：矩阵 key 必须是**小写**（'low' / 'medium' / 'high' / '1k' / '2k' / '4k'），
+ * 查询前会统一 toLowerCase。这样 UI 传 '1K' 也能命中。
+ */
+export interface ModelPricing {
+  /** 币种显示前缀，如 '¥' / '$'。 */
+  currency: string;
+  /** 一口价（任何档位都是这个值）。声明后 `matrix` 会被忽略。 */
+  flat?: number;
+  /** 按 (qualityLevel, resolution) 查单价。 */
+  matrix?: Record<string, Record<string, number>>;
 }
 
 export interface ImageGenRequest {
@@ -40,6 +103,17 @@ export interface ImageGenRequest {
    * reading `size`. Callers should set both so all providers work.
    */
   aspect?: string;
+  /**
+   * 原样透传的 UI "分辨率档位"（"1K" / "2K" / "4K" / "auto"）。ratio-based
+   * provider（如 RH 官方稳定版）会直接拿这个值映射到自家的 resolution 字段；
+   * 其它 provider 视而不见——它们走 `size` 的 WxH 路径。
+   */
+  resolution?: string;
+  /**
+   * 原样透传的 UI "生成质量档位"（如 'low' / 'medium' / 'high'）。只有声明
+   * `supportedQualityLevels` 的模型才会实际使用；其它 provider 忽略。
+   */
+  qualityLevel?: string;
   /** Number of images to produce in this call. */
   n: number;
   /**

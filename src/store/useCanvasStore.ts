@@ -1,7 +1,71 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { StateStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { CanvasElement, Connection } from '../types/canvas';
+// [telemetry] file-node discovery（2 周观察窗，结束后删这一行 + 3 处 bumpTelemetry）
+import { bumpTelemetry } from '../services/fileNodeTelemetry';
+
+/**
+ * Throttled localStorage 适配器。
+ *
+ * 背景：zustand persist 默认会在每次 set() 后同步把整份持久化切片
+ * `JSON.stringify` 再 `localStorage.setItem`。拖拽节点时 `updateElementPosition`
+ * 每一帧都在 set，一旦 `elements` 里含 data URL（图像 / 视频 / file 节
+ * 点，通常 MB 级 base64 字符串），每帧都要序列化几 MB 再写磁盘，很容易
+ * 让主线程一次 stop-the-world 几十 ms，表现就是拖动节点卡顿。
+ *
+ * 这里用"最后一次胜出"的防抖策略：
+ * - `setItem` 只记待写内容，起 300ms 定时器，期间新写入会覆盖上一次
+ * - 定时器触发时才真正 `localStorage.setItem` 并清空待写
+ * - `removeItem` 同步执行（删除不频繁，直接落盘），并取消待写
+ * - 页面 `beforeunload` 强制 flush，避免关闭标签页时丢最后几百 ms 编辑
+ *
+ * 不会改变 persist 的语义（读仍是同步 `localStorage.getItem`），只是把
+ * 高频写批量化。对用户而言：拖拽丝滑；离手后 ≤300ms 自动落盘；关闭
+ * 标签时 flush 兜底。
+ */
+function createThrottledLocalStorage(delayMs: number): StateStorage {
+  let pending: { key: string; value: string } | null = null;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (timerId !== null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    if (pending) {
+      try {
+        localStorage.setItem(pending.key, pending.value);
+      } catch (err) {
+        console.warn('[canvas-store] persist flush failed', err);
+      }
+      pending = null;
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    // 标签关闭 / 刷新时确保最后一次 set 被写入。
+    window.addEventListener('beforeunload', flush);
+    // 页面切后台时浏览器会冻结定时器，pagehide 是比 beforeunload 更可靠
+    // 的保底（移动端 / bfcache 场景）。
+    window.addEventListener('pagehide', flush);
+  }
+
+  return {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => {
+      pending = { key, value };
+      if (timerId !== null) clearTimeout(timerId);
+      timerId = setTimeout(flush, delayMs);
+    },
+    removeItem: (key) => {
+      if (timerId !== null) { clearTimeout(timerId); timerId = null; }
+      pending = null;
+      localStorage.removeItem(key);
+    },
+  };
+}
 
 export interface HistorySnapshot {
   elements: CanvasElement[];
@@ -68,6 +132,20 @@ interface CanvasState {
    */
   batchUpdatePositions: (updates: { id: string; x: number; y: number }[], label?: string) => void;
   deleteElements: (ids: string[]) => void;
+  /**
+   * 原子地把 `oldId` 节点换成 `newEl`，并把所有指向 `oldId` 的连线
+   * `fromId`/`toId` 改写成 `newEl.id`。关键语义：
+   *   1. 如果 `newEl.inputs`/`outputs` 没给（或为空数组），**继承**老节点的
+   *      端口对象（连同它们的 `id`）。连接里记的是 portId 而非 index，
+   *      所以只要 portId 不变，连线就仍落在合法端口上。
+   *   2. 数组位置原地替换（elements.map），不会把节点挪到 z-order 顶端。
+   *   3. 一次推入 past，整个替换作为单步可 undo。
+   *
+   * 之所以需要它：生成 / 重绘 / "in-place" 替换锚点时，老路径是
+   * `deleteElements + addElement`，但 `deleteElements` 会**连带删掉**所有
+   * 与老节点相连的 connection，导致 img2img 的连线在点击生成那一刻就蒸发。
+   */
+  replaceElement: (oldId: string, newElement: CanvasElement, label?: string) => void;
   addConnection: (connection: Connection) => void;
   deleteConnections: (ids: string[]) => void;
   setSelection: (ids: string[]) => void;
@@ -110,6 +188,7 @@ const typeLabelMap: Record<string, string> = {
   video: '视频',
   audio: '音频',
   aigenerating: 'AI 生成',
+  file: '文件',
 };
 
 function snapshot(state: Pick<CanvasState, 'elements' | 'connections' | 'currentLabel' | 'currentTimestamp'>): HistorySnapshot {
@@ -153,6 +232,7 @@ export const useCanvasStore = create<CanvasState>()(
           if (element.type === 'rectangle' || element.type === 'circle' || element.type === 'sticky') {
             element.inputs.push({ id: uuidv4(), type: 'any', label: 'In' });
           }
+          // 'file' 不接 input —— 它本身是"素材源"，只输出不消费。
         }
 
         if (!element.outputs) {
@@ -164,7 +244,20 @@ export const useCanvasStore = create<CanvasState>()(
           if (element.type === 'rectangle' || element.type === 'circle' || element.type === 'sticky') {
             element.outputs.push({ id: uuidv4(), type: 'any', label: 'Out' });
           }
+          // file(image)：按 MIME 暴露 image output，让上传的图能直接连到生成节点
+          // 的 image 输入槽（img2img / 参考图）。非图类型（PDF / 音频 / 压缩包等）
+          // 当前没有合适的 AI 管道消费路径，暂不开放 output —— Phase 2 再考虑为
+          // text-like MIME 加 'text' 输出。
+          if (element.type === 'file') {
+            const mt = String((element as any).mimeType || '').toLowerCase();
+            if (mt.startsWith('image/')) {
+              element.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+            }
+          }
         }
+
+        // [telemetry] 观察：file 节点创建频次（上传 / 拖入 / Replace 重建都会过这里）
+        if (element.type === 'file') bumpTelemetry('fileNodeCreated');
 
         const label = `添加${typeLabelMap[element.type] ?? element.type}`;
         return {
@@ -261,8 +354,87 @@ export const useCanvasStore = create<CanvasState>()(
         };
       }),
 
+      replaceElement: (oldId, newElement, label) => set((state) => {
+        const oldEl = state.elements.find(e => e.id === oldId);
+        if (!oldEl) {
+          // 老节点已经不在（可能被 undo / 用户手动删了）——降级成 addElement
+          // 的等价语义，避免丢事件。不走 addElement 是因为要自己管 history label。
+          return {
+            past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+            future: [],
+            elements: [...state.elements, newElement],
+            currentLabel: label ?? `添加${typeLabelMap[newElement.type] ?? newElement.type}`,
+            currentTimestamp: Date.now(),
+            _coalesceKey: undefined,
+            _coalesceAt: undefined,
+          };
+        }
+
+        // 端口承继：调用方没显式给或者给了空数组时，直接复用老节点的端口
+        // 对象（包括它们的 id）。这一步是连线存活的关键——connections 里
+        // 记的是 portId，只要 portId 不换，下面的 fromId/toId 改写就能让
+        // 连接整体落到新节点同一组端口上。
+        const inheritInputs = !newElement.inputs || newElement.inputs.length === 0;
+        const inheritOutputs = !newElement.outputs || newElement.outputs.length === 0;
+        const finalEl: CanvasElement = {
+          ...newElement,
+          inputs: inheritInputs ? oldEl.inputs : newElement.inputs,
+          outputs: inheritOutputs ? oldEl.outputs : newElement.outputs,
+        } as CanvasElement;
+
+        const nextElements = state.elements.map(e => (e.id === oldId ? finalEl : e));
+
+        // 连线改写：仅改 fromId / toId，不动 portId。self-loop（同一节点自连）
+        // 用三元连续 spread 兼容 from / to 都是 oldId 的情况。
+        const nextConnections = state.connections.map(c => {
+          if (c.fromId === oldId || c.toId === oldId) {
+            return {
+              ...c,
+              fromId: c.fromId === oldId ? finalEl.id : c.fromId,
+              toId: c.toId === oldId ? finalEl.id : c.toId,
+            };
+          }
+          return c;
+        });
+
+        const nextSelected = state.selectedIds.map(id => (id === oldId ? finalEl.id : id));
+
+        return {
+          past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+          future: [],
+          elements: nextElements,
+          connections: nextConnections,
+          selectedIds: nextSelected,
+          currentLabel: label ?? `替换${typeLabelMap[finalEl.type] ?? finalEl.type}`,
+          currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
+        };
+      }),
+
       addConnection: (connection) => set((state) => {
         const filteredConnections = state.connections.filter(c => c.toPortId !== connection.toPortId);
+
+        // [telemetry] 观察：file(image) 有没有被真的连到"图生"节点上。
+        // 判定条件：source 是 file 且 MIME 起步于 image/；target 的输入口是
+        // image 或 any（AIGeneratingElement 的 image 输入口 / shape 的 any 都算）。
+        // 只有满足这两个条件，这根连线才代表"我真的想拿上传的图做 img2img / 参考"。
+        try {
+          const src = state.elements.find(e => e.id === connection.fromId);
+          if (src && src.type === 'file') {
+            const mt = String((src as any).mimeType || '').toLowerCase();
+            if (mt.startsWith('image/')) {
+              const target = state.elements.find(e => e.id === connection.toId);
+              const toPort = target?.inputs?.find(p => p.id === connection.toPortId);
+              if (toPort && (toPort.type === 'image' || toPort.type === 'any')) {
+                bumpTelemetry('fileNodeConnectedAsImageSource');
+              }
+            }
+          }
+        } catch {
+          // 埋点不得影响主流程，静默吞掉
+        }
+
         return {
           past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
           future: [],
@@ -371,8 +543,10 @@ export const useCanvasStore = create<CanvasState>()(
     }),
     {
       name: 'ai-canvas-document',
-      version: 4,
-      storage: createJSONStorage(() => localStorage),
+      version: 6,
+      // 拖拽帧写入会触发高频 JSON.stringify + setItem；用 300ms 防抖把
+      // 连续写合并为一次，消除拖动卡顿。语义见 createThrottledLocalStorage。
+      storage: createJSONStorage(() => createThrottledLocalStorage(300)),
       partialize: (state) => ({
         elements: state.elements,
         connections: state.connections,
@@ -414,6 +588,19 @@ export const useCanvasStore = create<CanvasState>()(
               ],
             };
           });
+        }
+        // v4 -> v5: 引入 'file' 附件节点类型。老数据里没有这个 type，
+        // 所以不需要改写任何元素；bump 版本只是为了让 migrate 链条可追溯，
+        // 也方便未来 v6+ 时在这里做 file 结构迁移（比如 v2 的 blob 降级）。
+        // 留一个显式的 no-op 分支，签个到就走。
+        if (version < 5 && persistedState) {
+          // no-op
+        }
+        // v5 -> v6: FileElement 扩展了 thumbnailDataUrl / durationMs / pageCount
+        // 三个可选字段。老 file 节点没有它们，渲染层自动回退到"通用附件卡"路径，
+        // 不需要回填；用户下次重新上传就会走新抽取链路，给出真正的预览。
+        if (version < 6 && persistedState) {
+          // no-op
         }
         // v3 -> v4: 为了让 NodeInputBar 底栏在 image/video 模式下不再挤压，
         // 节点最小宽度提升至 image=480、video=520。将既有过窄节点等比补齐，

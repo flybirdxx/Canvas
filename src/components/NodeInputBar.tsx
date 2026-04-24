@@ -25,9 +25,11 @@ import { CanvasElement, AppliedPreset, NodeVersion } from '../types/canvas';
 import { PromptPreset } from '../data/promptLibrary';
 import { PromptLibraryPanel } from './PromptLibraryPanel';
 import { runGeneration, GenRequest } from '../services/imageGeneration';
+// [telemetry] file-node discovery（观察窗结束后删这一行 + 下方 2 处 bumpTelemetry）
+import { bumpTelemetry } from '../services/fileNodeTelemetry';
 import { createRectMaskPng, loadImageNaturalSize } from '../utils/mask';
 import { runVideoGeneration, VideoGenRequest } from '../services/videoGeneration';
-import { listModels, getProvider } from '../services/gateway';
+import { listModels, getProvider, findModel, computeUnitPrice } from '../services/gateway';
 import { computeBatchGrid } from '../utils/gridLayout';
 import {
   getUpstreamTextContributions,
@@ -223,7 +225,7 @@ export interface NodeInputBarProps {
 }
 
 export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps) {
-  const { updateElement, deleteElements, addElement } = useCanvasStore();
+  const { updateElement, deleteElements, addElement, replaceElement } = useCanvasStore();
   const deleteConnections = useCanvasStore(s => s.deleteConnections);
   const elementsAll = useCanvasStore(s => s.elements);
   const connectionsAll = useCanvasStore(s => s.connections);
@@ -250,6 +252,8 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   const model = gen.model ?? modelOptions[0]?.value ?? '';
   const aspect = gen.aspect ?? '1:1';
   const quality = gen.quality ?? (mode === 'video' ? '720P' : '1K');
+  // qualityLevel 只有少数模型用（如 RH 官方稳定版），默认 medium 对齐文档示例。
+  const qualityLevel = gen.qualityLevel ?? 'medium';
   const count = gen.count ?? '1';
   const duration = gen.duration ?? '5s';
   const appliedPresets: AppliedPreset[] = gen.appliedPresets ?? [];
@@ -459,10 +463,11 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       // Anchor is the video node itself; reuse its footprint for the placeholder.
       // F2: seed the placeholder with the anchor's existing history so the
       // successful replacement keeps all prior versions reachable.
+      // Bug fix: 用 replaceElement 原地替换锚点，保留"上游图 → anchor.seed"
+      // 这根连线；否则 deleteElements 会顺手把连线一起删了。
       const pid = uuidv4();
       const inheritedVersions = computeInheritedVersions(element);
-      deleteElements([element.id]);
-      addElement({
+      replaceElement(element.id, {
         id: pid,
         type: 'aigenerating',
         x: element.x,
@@ -471,7 +476,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
         height: element.height,
         inheritedVersions,
         inheritedPrompt: prompt,
-      } as any);
+      } as any, '开始视频生成');
 
       const vreq: VideoGenRequest = {
         model,
@@ -527,9 +532,10 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
 
       // Clear the inpaint session before deleting the source so the overlay
       // doesn't flicker onto the placeholder.
+      // Bug fix: 同图像生成路径——replaceElement 保留锚点上的连线（比如
+      // 有人连了一个 prompt 节点 → image.Prompt，inpaint 后还要接着用）。
       setInpaintMask(null);
-      deleteElements([element.id]);
-      addElement({
+      replaceElement(element.id, {
         id: pid,
         type: 'aigenerating',
         x: element.x,
@@ -538,7 +544,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
         height: element.height,
         inheritedVersions,
         inheritedPrompt: prompt,
-      } as any);
+      } as any, '开始局部重绘');
 
       const req: GenRequest = {
         model: inpaintModel,
@@ -578,14 +584,32 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       typeof (element as any).src === 'string' &&
       (element as any).src.length === 0;
 
+    // 失败的 placeholder 也当成"锚点"：用户在 bar 里改完参数提交，就地把
+    // 这个坏点换成新 placeholder，不再在边上另外开一块。不然画布会越挂
+    // 越多空框，用户也不知道该删哪个。
+    const isErroredAnchor =
+      element.type === 'aigenerating' && !!(element as any).error;
+
     // F2: "regenerate in place" — when the anchor is a non-empty image and
     // the user wants a single output, we replace the anchor (rather than
     // spawning a sibling) and preserve its history via inheritedVersions.
     // Batches (n>1) keep spawning siblings since each becomes its own node.
+    // 失败占位符同理，但它本身没有 image 历史，不需要 inheritedVersions。
     const isReplaceInPlace =
-      element.type === 'image' &&
-      !isEmptyImageAnchor &&
-      n === 1;
+      (element.type === 'image' && !isEmptyImageAnchor && n === 1) ||
+      (isErroredAnchor && n === 1);
+
+    // Merge connection-sourced images with user-uploaded references. Upstream
+    // images go first so they take priority when we hit the MAX cap. Dedup by
+    // URL so the same image linked + uploaded doesn't count twice.
+    const linkedUrls = upstreamImages.map(u => u.src);
+    const mergedRefs: string[] = [];
+    for (const url of [...linkedUrls, ...references]) {
+      if (!url) continue;
+      if (mergedRefs.includes(url)) continue;
+      if (mergedRefs.length >= MAX_REFERENCES) break;
+      mergedRefs.push(url);
+    }
 
     // For empty anchor: pretend there is a virtual node one slot to the left,
     // so computeBatchGrid places slot 0 exactly at the original element's coords.
@@ -602,44 +626,60 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       : computeBatchGrid(anchorRect, n);
 
     // Capture versions BEFORE deleting the anchor.
+    // image 锚点：从它自己的 versions 里拿；
+    // errored placeholder 锚点：从它之前 inherit 的 versions 透传（别丢历史）。
     const inheritedVersions = isReplaceInPlace
-      ? computeInheritedVersions(element)
+      ? (element.type === 'aigenerating'
+          ? ((element as any).inheritedVersions as NodeVersion[] | undefined)
+          : computeInheritedVersions(element))
       : undefined;
 
-    if (isEmptyImageAnchor || isReplaceInPlace) {
-      deleteElements([element.id]);
-    }
+    // 快照给 placeholder：如果生成失败，bar 重新显示时能原样恢复用户的 prompt
+    // 和所有档位。不塞的话用户只能从零重填，体验极差。
+    const placeholderGeneration = {
+      model,
+      aspect,
+      quality,
+      qualityLevel,
+      count,
+      references: mergedRefs.length > 0 ? mergedRefs : undefined,
+      appliedPresets,
+    };
 
+    // Bug fix: 替换锚点时不再走 "deleteElements + addElement" ——
+    // deleteElements 会把所有指向 anchor 的连线（尤其 img2img 的 file→Ref）
+    // 一起清除，点击生成连线就蒸发。改用 replaceElement 在原地交换节点，
+    // 端口 id 继承自锚点、连线的 fromId/toId 统一改写到新 placeholder。
+    //
+    // 只有第一个 placeholder 落在原锚点位置、能真正"替换"；批量 n>1 的
+    // 其它 slot 仍然走 addElement（它们落在新格子里，天然没有连线需要继承）。
     const placeholderIds: string[] = [];
+    const shouldReplaceAnchor = (isEmptyImageAnchor || isReplaceInPlace);
     for (let i = 0; i < slots.length; i++) {
       const slot = slots[i];
       const id = uuidv4();
       placeholderIds.push(id);
-      addElement({
+      const placeholderEl = {
         id,
         type: 'aigenerating',
         x: slot.x,
         y: slot.y,
         width: slot.w,
         height: slot.h,
+        prompt,
+        generation: placeholderGeneration,
         // Only the first (and in practice, only) placeholder in in-place
         // mode inherits history.
         ...(isReplaceInPlace && i === 0
           ? { inheritedVersions, inheritedPrompt: prompt }
           : {}),
-      } as any);
-    }
+      } as any;
 
-    // Merge connection-sourced images with user-uploaded references. Upstream
-    // images go first so they take priority when we hit the MAX cap. Dedup by
-    // URL so the same image linked + uploaded doesn't count twice.
-    const linkedUrls = upstreamImages.map(u => u.src);
-    const mergedRefs: string[] = [];
-    for (const url of [...linkedUrls, ...references]) {
-      if (!url) continue;
-      if (mergedRefs.includes(url)) continue;
-      if (mergedRefs.length >= MAX_REFERENCES) break;
-      mergedRefs.push(url);
+      if (shouldReplaceAnchor && i === 0) {
+        replaceElement(element.id, placeholderEl, '开始图像生成');
+      } else {
+        addElement(placeholderEl);
+      }
     }
 
     const req: GenRequest = {
@@ -649,6 +689,10 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       size: resolved.size,
       // 归一化比例值直接给那些只吃 aspectRatio 的 provider（e.g. RunningHub）。
       aspect,
+      // UI 档位原样透传。走 size 的 provider（t8star）根本不读；走 resolution
+      // 的 provider（RH 官方稳定版）靠这个字段发送必填 body。
+      resolution: quality,
+      qualityLevel: qualityLevelOpts ? qualityLevel : undefined,
       n,
       // w/h 记的是"画布显示尺寸"（和 placeholder 一致）——不是 API 像素分辨率。
       // 这两个字段只在 retry / pendingTask 快照里兜底，用来记录节点形状，
@@ -658,6 +702,21 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       references: mergedRefs.length > 0 ? mergedRefs : undefined,
     };
 
+    // [telemetry] 观察窗：img2img 中上游源是 file 还是 image 节点。
+    // 只在"这次生成带有连线参考"时记一笔；纯 text2img / 纯手动上传参考的
+    // run 都不计，避免稀释分母。分类依据：第 1 条上游贡献（和 seedImage
+    // 的挑选逻辑保持一致，单图 provider 实际就是它）。
+    try {
+      if (upstreamImages.length > 0) {
+        const firstSourceId = upstreamImages[0].sourceId;
+        const srcEl = elementsAll.find(e => e.id === firstSourceId);
+        if (srcEl?.type === 'file') bumpTelemetry('img2imgFromFileNode');
+        else if (srcEl?.type === 'image') bumpTelemetry('img2imgFromImageNode');
+      }
+    } catch {
+      // 埋点不允许影响主流程
+    }
+
     setIsGenerating(true);
     try {
       await runGeneration(placeholderIds, req);
@@ -666,8 +725,88 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     }
   };
 
-  const qualityOpts = mode === 'video' ? QUALITY_OPTIONS_VIDEO : QUALITY_OPTIONS_IMAGE;
-  const credits = 14;
+  // 按当前选中的模型决定 aspect / resolution / qualityLevel 下拉的内容。
+  //   · `supportedAspects` 缺省 → 用全集（向后兼容老 descriptor）
+  //   · `supportedResolutions` 缺省 + `supportsSize === false` → 隐藏分辨率下拉；
+  //     缺省 + `supportsSize === true` → 用全局 1K/2K/4K/Auto；显式给出 → 过滤成子集。
+  //   · `supportedQualityLevels` 缺省 → 不渲染质量轴下拉；显式给出 → 显示这些档位。
+  //   · 任意档位在模型切换后如果不在新模型的支持集里，自动 snap 到第一档，
+  //     避免发出去一个 provider 直接拒绝的请求。
+  const selectedModelDesc = useMemo(
+    () => (mode !== 'text' ? findModel(model)?.model : undefined),
+    [mode, model],
+  );
+  const aspectOpts = useMemo(() => {
+    const supported = selectedModelDesc?.supportedAspects;
+    if (!supported || supported.length === 0) return ASPECT_OPTIONS;
+    // 保留 ASPECT_OPTIONS 里出现过的标签顺序，没列进来的（如 RH 低价的 21:9）
+    // 直接拼到末尾，免得 UI 突然多/少几条让人困惑。
+    const known = ASPECT_OPTIONS.filter(o => supported.includes(o.value));
+    const extras = supported
+      .filter(v => !ASPECT_OPTIONS.some(o => o.value === v))
+      .map(v => ({ value: v, label: v }));
+    return [...known, ...extras];
+  }, [selectedModelDesc]);
+
+  // 分辨率下拉：默认 image 档位列表，根据 model.supportedResolutions 过滤。
+  const imageResolutionOpts = useMemo<DropdownOption[]>(() => {
+    const supported = selectedModelDesc?.supportedResolutions;
+    if (!supported || supported.length === 0) return QUALITY_OPTIONS_IMAGE;
+    const known = QUALITY_OPTIONS_IMAGE.filter(o => supported.includes(o.value));
+    const extras = supported
+      .filter(v => !QUALITY_OPTIONS_IMAGE.some(o => o.value === v))
+      .map(v => ({ value: v, label: v }));
+    return [...known, ...extras];
+  }, [selectedModelDesc]);
+
+  // 质量轴下拉（可选控件）。只有显式声明 supportedQualityLevels 的模型才渲染。
+  const qualityLevelOpts = useMemo<DropdownOption[] | null>(() => {
+    const supported = selectedModelDesc?.supportedQualityLevels;
+    if (!supported || supported.length === 0) return null;
+    return supported.map(v => ({ value: v, label: v }));
+  }, [selectedModelDesc]);
+
+  // 模型一换：任意当前选中的档位如果不再被支持，静默 snap 到第一项。
+  useEffect(() => {
+    if (mode === 'text') return;
+    if (aspectOpts.length > 0 && !aspectOpts.some(o => o.value === aspect)) {
+      updateGen({ aspect: aspectOpts[0].value });
+    }
+  }, [aspectOpts, aspect, mode]);
+  useEffect(() => {
+    if (mode !== 'image') return;
+    if (imageResolutionOpts.length > 0 && !imageResolutionOpts.some(o => o.value === quality)) {
+      updateGen({ quality: imageResolutionOpts[0].value });
+    }
+  }, [imageResolutionOpts, quality, mode]);
+  useEffect(() => {
+    if (mode !== 'image') return;
+    if (!qualityLevelOpts) return;
+    if (!qualityLevelOpts.some(o => o.value === qualityLevel)) {
+      updateGen({ qualityLevel: qualityLevelOpts[0].value });
+    }
+  }, [qualityLevelOpts, qualityLevel, mode]);
+
+  // image 模式下是否展示分辨率下拉。video 不走 supportsSize 逻辑，自有清晰度档位。
+  const showResolutionDropdown =
+    mode === 'video' ||
+    // 显式给出就一定展示，否则尊重 supportsSize 的布尔语义
+    !!selectedModelDesc?.supportedResolutions?.length ||
+    selectedModelDesc?.supportsSize !== false;
+  const qualityOpts = mode === 'video' ? QUALITY_OPTIONS_VIDEO : imageResolutionOpts;
+
+  // 当前参数组合下的单价 + 总价。provider 没配 pricing（如 t8star）→ undefined，
+  // UI 降级为占位符 '—'；配了但档位查不到 → 同样 undefined（保守显示，不编价）。
+  const unitPrice = useMemo(() => {
+    if (!selectedModelDesc) return undefined;
+    if (mode !== 'image') return undefined; // 视频定价逻辑留待后续；文本无费用
+    return computeUnitPrice(selectedModelDesc, {
+      resolution: quality,
+      qualityLevel,
+    });
+  }, [selectedModelDesc, mode, quality, qualityLevel]);
+  const nNum = Math.max(1, Number(count) || 1);
+  const totalPrice = unitPrice ? unitPrice.amount * nNum : undefined;
 
   return (
     <div
@@ -779,8 +918,8 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
                     type="button"
                     disabled={references.length >= MAX_REFERENCES || isGenerating}
                     onClick={() => fileInputRef.current?.click()}
-                    className="btn btn-ghost"
-                    style={{ padding: '3px 8px', fontSize: 11 }}
+                    className="btn btn-ghost shrink-0 whitespace-nowrap"
+                    style={{ padding: '4px 9px', fontSize: 11.5 }}
                     title={
                       references.length >= MAX_REFERENCES
                         ? `最多 ${MAX_REFERENCES} 张参考图`
@@ -1029,9 +1168,9 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
               autoFocus
               className="w-full resize-none bg-transparent focus:outline-none"
               style={{
-                minHeight: 48,
+                minHeight: 52,
                 fontFamily: 'var(--font-sans)',
-                fontSize: 12.5,
+                fontSize: 13,
                 lineHeight: 1.55,
                 color: 'var(--ink-0)',
               }}
@@ -1042,7 +1181,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
           <div
             className="flex items-center gap-1 min-w-0 hairline-t"
             style={{
-              padding: '6px 8px',
+              padding: '7px 9px',
               background: 'var(--bg-2)',
               borderBottomLeftRadius: 'var(--r-lg)',
               borderBottomRightRadius: 'var(--r-lg)',
@@ -1063,14 +1202,19 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
               {mode === 'image' && !isInpaintMode && (
                 <>
                   <ToolbarDivider />
-                  <Dropdown options={ASPECT_OPTIONS} value={aspect} onChange={v => updateGen({ aspect: v })} disabled={isGenerating} />
-                  <Dropdown options={qualityOpts} value={quality} onChange={v => updateGen({ quality: v })} disabled={isGenerating} />
+                  <Dropdown options={aspectOpts} value={aspect} onChange={v => updateGen({ aspect: v })} disabled={isGenerating} />
+                  {showResolutionDropdown && (
+                    <Dropdown options={qualityOpts} value={quality} onChange={v => updateGen({ quality: v })} disabled={isGenerating} />
+                  )}
+                  {qualityLevelOpts && (
+                    <Dropdown options={qualityLevelOpts} value={qualityLevel} onChange={v => updateGen({ qualityLevel: v })} disabled={isGenerating} />
+                  )}
                 </>
               )}
               {mode === 'video' && (
                 <>
                   <ToolbarDivider />
-                  <Dropdown options={ASPECT_OPTIONS} value={aspect} onChange={v => updateGen({ aspect: v })} disabled={isGenerating} />
+                  <Dropdown options={aspectOpts} value={aspect} onChange={v => updateGen({ aspect: v })} disabled={isGenerating} />
                   <Dropdown options={qualityOpts} value={quality} onChange={v => updateGen({ quality: v })} disabled={isGenerating} />
                   <Dropdown options={DURATION_OPTIONS} value={duration} onChange={v => updateGen({ duration: v })} disabled={isGenerating} />
                 </>
@@ -1100,20 +1244,30 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
               {mode !== 'text' && !isInpaintMode && (
                 <Dropdown options={COUNT_OPTIONS} value={count} onChange={v => updateGen({ count: v })} disabled={isGenerating} />
               )}
+              {/* Price tag: unit × count = total. Provider 没配 pricing 时占位符
+                  '—'——比编一个假数字要诚实。hover tooltip 拆开给出"{单价}/张 × N"
+                  方便用户核算。 */}
               <div
                 className="flex items-center gap-1 mono"
                 style={{
-                  padding: '3px 7px',
-                  fontSize: 11,
+                  padding: '4px 8px',
+                  fontSize: 11.5,
                   color: 'var(--warning)',
                   background: 'color-mix(in oklch, var(--warning) 14%, transparent)',
                   border: '1px solid color-mix(in oklch, var(--warning) 22%, transparent)',
                   borderRadius: 'var(--r-sm)',
                 }}
-                title="剩余积分"
+                title={
+                  unitPrice
+                    ? `本次预估：${unitPrice.currency}${unitPrice.amount.toFixed(2)}/张 × ${nNum} = ${unitPrice.currency}${(unitPrice.amount * nNum).toFixed(2)}`
+                    : '该模型未提供价格信息'
+                }
               >
-                <span>⚡</span>
-                <span style={{ fontWeight: 600 }}>{credits}</span>
+                <span style={{ fontWeight: 600 }}>
+                  {totalPrice !== undefined && unitPrice
+                    ? `${unitPrice.currency}${totalPrice.toFixed(2)}`
+                    : '—'}
+                </span>
               </div>
               <button
                 type="submit"
@@ -1124,7 +1278,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
                 }
                 className="ml-1 flex items-center justify-center transition-colors"
                 style={{
-                  width: 28, height: 28,
+                  width: 30, height: 30,
                   borderRadius: 'var(--r-sm)',
                   background: (isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect))
                     ? 'var(--bg-3)'
@@ -1202,10 +1356,13 @@ function QuickChip({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex items-center gap-1 transition-colors"
+      // shrink-0 + whitespace-nowrap：当 bar 被节点宽度限制得很窄时（小节点），
+      // 防止 flex 容器把 chip 压扁、让中文标签换行（"提示词库" → "提示\n词库"）。
+      // 宁可 chip 行横向溢出/裁切，也不让单个 chip 内部看起来破碎。
+      className="flex items-center gap-1 shrink-0 whitespace-nowrap transition-colors"
       style={{
-        padding: '3px 8px',
-        fontSize: 11,
+        padding: '4px 9px',
+        fontSize: 11.5,
         fontWeight: 500,
         borderRadius: 'var(--r-pill)',
         background: bg,
@@ -1376,8 +1533,8 @@ function Dropdown({
           maxLabelWidth ? 'min-w-0' : 'whitespace-nowrap'
         }`}
         style={{
-          padding: '4px 7px',
-          fontSize: 11,
+          padding: '5px 8px',
+          fontSize: 11.5,
           fontWeight: 500,
           borderRadius: 'var(--r-sm)',
           background: open ? 'var(--bg-3)' : 'transparent',
@@ -1508,7 +1665,7 @@ function MoreMenu({ items, disabled }: { items: MoreMenuItem[]; disabled?: boole
         title="更多"
         className="transition-colors"
         style={{
-          padding: 4,
+          padding: 5,
           borderRadius: 'var(--r-sm)',
           background: open ? 'var(--bg-3)' : 'transparent',
           color: open ? 'var(--ink-0)' : 'var(--ink-2)',
@@ -1569,7 +1726,7 @@ function ToolbarDivider() {
   return (
     <div
       className="shrink-0"
-      style={{ width: 1, height: 14, background: 'var(--line-1)', margin: '0 3px', opacity: 0.6 }}
+      style={{ width: 1, height: 15, background: 'var(--line-1)', margin: '0 3px', opacity: 0.6 }}
     />
   );
 }

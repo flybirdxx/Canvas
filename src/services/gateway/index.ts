@@ -56,6 +56,35 @@ export function findModel(modelId: string): { model: ModelDescriptor; provider: 
 }
 
 /**
+ * 查本次调用的**单价**（不是总价）。UI 按 count 乘出来做总价显示。
+ *
+ * 语义：
+ *   - `pricing.flat` 存在  → 直接用 flat 价（适合一口价渠道）
+ *   - 否则查 matrix[level][res]，值缺失时返回 undefined，由 UI 降级显示
+ *   - 模型没有 pricing       → undefined（UI 徽章显示 '—'）
+ *
+ * 输入容错：resolution / qualityLevel 大小写无关，统一转小写后再查表。
+ */
+export function computeUnitPrice(
+  model: ModelDescriptor,
+  args: { resolution?: string; qualityLevel?: string },
+): { amount: number; currency: string } | undefined {
+  const p = model.pricing;
+  if (!p) return undefined;
+  if (typeof p.flat === 'number') {
+    return { amount: p.flat, currency: p.currency };
+  }
+  if (p.matrix) {
+    const level = (args.qualityLevel ?? 'medium').toLowerCase();
+    const res = (args.resolution ?? '1k').toLowerCase();
+    const row = p.matrix[level];
+    const val = row ? row[res] : undefined;
+    if (typeof val === 'number') return { amount: val, currency: p.currency };
+  }
+  return undefined;
+}
+
+/**
  * Pull the live runtime config (apiKey, baseUrl) for a provider from the
  * settings store. Always returns a config object — providers without any
  * stored entry (e.g. the video preview stub) get an empty shell, and each

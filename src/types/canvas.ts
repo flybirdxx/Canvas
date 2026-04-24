@@ -1,4 +1,4 @@
-export type ElementType = 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'aigenerating';
+export type ElementType = 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'aigenerating' | 'file';
 
 export type DataType = 'any' | 'text' | 'image' | 'video' | 'audio';
 
@@ -19,6 +19,13 @@ export interface GenerationConfig {
   model?: string;
   aspect?: string;
   quality?: string;
+  /**
+   * 可选的"生成质量档位"（low/medium/high 之类）。与 `quality` 不同：
+   * `quality` 在本项目里一直语义上是"分辨率档位"（1K/2K/4K），这里
+   * `qualityLevel` 才是真正的质量轴。只在声明 supportedQualityLevels 的
+   * 模型（如 RH 官方稳定版）上才会用到。
+   */
+  qualityLevel?: string;
   count?: string;
   duration?: string;
   /** Prompt-library presets currently applied to this node's prompt. */
@@ -173,6 +180,10 @@ export interface PendingGenerationTask {
     prompt: string;
     size: string;
     aspect?: string;
+    /** UI 分辨率档位（'1K' / '2K' / '4K' / 'auto'）。resume 需要原样重放。 */
+    resolution?: string;
+    /** UI 质量档位（RH 官方稳定版的 'low'/'medium'/'high'）。 */
+    qualityLevel?: string;
     n: number;
     w: number;
     h: number;
@@ -201,6 +212,46 @@ export interface AIGeneratingElement extends BaseElement {
   inheritedPrompt?: string;
 }
 
+/**
+ * 通用文件附件节点：绕开 image/video/audio 的生成管线，单纯把任意格式的
+ * 文件挂到画布上做资料引用。按 `mimeType` 在 CanvasElements 里分派智能
+ * 预览（image/video/audio/PDF 原生展示，其它降级为附件卡片）。
+ *
+ * 持久化 v1 策略：`src` 只写 data URL，直接走 zustand persist。
+ * 已知取舍：大文件（>5MB 级）会把 localStorage 撑爆，v2 再换 blob URL
+ * 或 IndexedDB 大对象存储。`persistence` 字段先占一个 'data'，之后扩出
+ * 'blob' / 'remote' 时可做 UI 降级（刷新后提示"附件已丢失，点此重传"）。
+ *
+ * 故意没有 inputs/outputs —— 附件节点不接入工作流连线。
+ */
+export interface FileElement extends BaseElement {
+  type: 'file';
+  /** 原始文件名（含扩展名），UI 展示用。 */
+  name: string;
+  /** 标准 MIME，空串代表浏览器没能识别（偶尔发生于自定义后缀）。 */
+  mimeType: string;
+  /** 字节数，UI 显示为人类可读（KB / MB）。 */
+  sizeBytes: number;
+  /** 文件内容源：v1 只存 data URL。 */
+  src: string;
+  /** v1 只有 'data'；v2 扩出 'blob' / 'remote' 做大文件降级。 */
+  persistence: 'data';
+  /**
+   * 缩略图 data URL（可选）。上传时一次性生成，之后永远是静态图——
+   *  - video：第一帧 JPEG（ffmpeg 不引入，直接用浏览器 `<video>` + canvas drawImage）
+   *  - audio：波形 PNG（WebAudio decode + 手写 peaks 采样）
+   *  - image：该字段不写，直接用 `src` 本身（图像文件 = 自己就是缩略图）
+   *  - pdf/其它：不生成缩略图，回退到 AttachmentCardBody
+   * 存在时，渲染路径走纯 Konva image，获得和图像一致的拖拽 / 缩放性能；
+   * 不存在时回落到卡片式占位。
+   */
+  thumbnailDataUrl?: string;
+  /** 多媒体时长（毫秒）。video / audio 有；其它文件缺省。 */
+  durationMs?: number;
+  /** PDF 页数。尽量解析 `/Count` 获得；拿不到就缺省，UI 不显示。 */
+  pageCount?: number;
+}
+
 export interface Connection {
   id: string;
   fromId: string;
@@ -209,4 +260,4 @@ export interface Connection {
   toPortId: string;
 }
 
-export type CanvasElement = ShapeElement | TextElement | ImageElement | StickyElement | MediaElement | AIGeneratingElement;
+export type CanvasElement = ShapeElement | TextElement | ImageElement | StickyElement | MediaElement | AIGeneratingElement | FileElement;

@@ -15,6 +15,7 @@ import { ToolDock } from './components/chrome/ToolDock';
 import { exportSelection } from './utils/exportPng';
 import { useCanvasStore } from './store/useCanvasStore';
 import { resumePendingImageTasks } from './services/taskResume';
+import { buildFileElement } from './services/fileIngest';
 
 /**
  * App shell — Warm Paper Studio.
@@ -112,13 +113,21 @@ export default function App() {
     const centerY =
       (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
 
+    // 默认几何遵循 **和 NodeInputBar 的默认 aspect 对齐** 的原则：
+    //   · image → 1:1（NodeInputBar `aspect` 默认值也是 '1:1'），避免生图回填
+    //     时占位符从 4:3 跳到 1:1 造成视觉跳变
+    //   · video → 16:9（视频场景的默认 aspect）
+    //   · text / sticky / audio 走人因舒适度：正文宽度 ~ 420ch 可读，便签维持
+    //     200 见方足够写几行字而不过份占屏
+    // 尺寸在 scale=1 下比旧版放大约 30%，让节点在 1920+ 屏幕上有足够存在感，
+    // 同时让输入框的 min-width 退化为兜底值（只有手动缩小节点时才触发）。
     let defaultWidth = 100;
     let defaultHeight = 100;
-    if (type === 'sticky') { defaultWidth = 200; defaultHeight = 200; }
-    else if (type === 'text') { defaultWidth = 360; defaultHeight = 240; }
-    else if (type === 'image') { defaultWidth = 480; defaultHeight = 360; }
-    else if (type === 'video') { defaultWidth = 520; defaultHeight = 360; }
-    else if (type === 'audio') { defaultWidth = 300; defaultHeight = 80; }
+    if (type === 'sticky') { defaultWidth = 220; defaultHeight = 220; }
+    else if (type === 'text') { defaultWidth = 420; defaultHeight = 280; }
+    else if (type === 'image') { defaultWidth = 560; defaultHeight = 560; }
+    else if (type === 'video') { defaultWidth = 640; defaultHeight = 360; }
+    else if (type === 'audio') { defaultWidth = 360; defaultHeight = 96; }
 
     const id = uuidv4();
     const isMedia = ['image', 'video', 'audio'].includes(type);
@@ -152,6 +161,51 @@ export default function App() {
     setActiveTool('select');
   };
 
+  /**
+   * 来自 ToolDock "File / 文件" 通道的上传回调。FlowDock 已经帮我们取到
+   * 了 File[] （已通过用户手势打开的对话框），这里负责：
+   *   1) 把画布中心换算成元素左上角基准点（和 handleCreateNode 对齐）
+   *   2) 异步把每个 File 读成 data URL，组装成 FileElement
+   *   3) 多文件错开位置（24px 阶梯）防堆叠
+   *   4) 读完后批量 addElement 并选中它们，让用户一眼看到成果
+   *
+   * 读失败的单个文件会被跳过（不中断整批），控制台打 warn 就行；后续
+   * 若要更友好，可改成向某个 error bus 发事件。
+   */
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const centerX =
+      (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
+    const centerY =
+      (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
+
+    const settled = await Promise.allSettled(
+      files.map((file, idx) =>
+        buildFileElement(
+          file,
+          { x: centerX, y: centerY },
+          { dx: idx * 24, dy: idx * 24 },
+        ),
+      ),
+    );
+
+    const createdIds: string[] = [];
+    settled.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        addElement(result.value);
+        createdIds.push(result.value.id);
+      } else {
+        // 单个文件读取失败不阻塞其它文件落地
+        console.warn('[upload] failed to read file', files[idx]?.name, result.reason);
+      }
+    });
+
+    if (createdIds.length > 0) {
+      setSelection(createdIds);
+      setActiveTool('select');
+    }
+  };
+
   return (
     <div
       className="relative w-screen h-screen overflow-hidden select-none"
@@ -181,7 +235,7 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
       />
-      <ToolDock onCreate={handleCreateNode} />
+      <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} />
       <PropertiesPanel />
       <HistoryPanel />
       <AssetLibraryPanel />

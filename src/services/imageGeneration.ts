@@ -44,6 +44,17 @@ export interface GenRequest {
    * verbatim so users don't lose their selection on transient errors.
    */
   maskImage?: string;
+  /**
+   * 透传给 provider 的 UI 分辨率档位（'1K' / '2K' / '4K' / 'auto'）。
+   * 给 RH 官方稳定版之类把档位当 wire-level 必填字段的 provider 用；
+   * 其它 provider 走 `size` 路径，看不到这个值。retry 快照也一并保留。
+   */
+  resolution?: string;
+  /**
+   * 透传给 provider 的 UI 生成质量档位（RH 官方稳定版的 low/medium/high）。
+   * 只有声明 supportedQualityLevels 的模型才会实际使用。
+   */
+  qualityLevel?: string;
 }
 
 export type GenErrorKind = GatewayErrorKind;
@@ -145,7 +156,10 @@ export function replacePlaceholderWithImage(placeholderId: string, imageUrl: str
     activeVersionIndex = versions.length - 1;
   }
 
-  store.deleteElements([placeholderId]);
+  // 用 replaceElement 替换 placeholder → image，承继 placeholder 从锚点带来
+  // 的端口 id。这样"file(image) → 锚点图" 这根连线在锚点 → placeholder
+  // → 最终 image 的整条链路上都不会断，方便用户接着以同一张图再做 img2img
+  // 迭代。之前的 deleteElements + addElement 模式会把连线连带炸掉。
   const newElement: ImageElement = {
     id: uuidv4(),
     type: 'image',
@@ -157,7 +171,7 @@ export function replacePlaceholderWithImage(placeholderId: string, imageUrl: str
     prompt,
     ...(versions ? { versions, activeVersionIndex } : {}),
   };
-  store.addElement(newElement as CanvasElement);
+  store.replaceElement(placeholderId, newElement as CanvasElement, '生成完成');
 
   // Auto-archive every successful generation into the asset library so users
   // can re-find / re-use it without scrolling the canvas. Name defaults to
@@ -193,6 +207,8 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
     prompt: request.prompt,
     size: request.size,
     aspect: request.aspect,
+    resolution: request.resolution,
+    qualityLevel: request.qualityLevel,
     n: 1,
     referenceImages: request.references,
     maskImage: request.maskImage,
@@ -209,6 +225,8 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
           prompt: request.prompt,
           size: request.size,
           aspect: request.aspect,
+          resolution: request.resolution,
+          qualityLevel: request.qualityLevel,
           n: 1,
           w: request.w,
           h: request.h,

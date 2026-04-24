@@ -109,9 +109,12 @@ export interface UpstreamImageContribution {
 
 /**
  * Compute incoming image connections for `targetId`. Accepts connections
- * whose target port type is `'image'` or `'any'` and whose source is an
- * `image` node with a non-empty `src`. Results preserve connection order so
- * callers that only need "the first one" get deterministic behavior.
+ * whose target port type is `'image'` or `'any'` and whose source is one of:
+ *   - `image` 节点（AI 生成结果或 ToolDock "Image" 占位节点）
+ *   - `file` 节点且 MIME 为 image/\*（用户上传/拖入的图片附件）
+ * 两条路径产出同构的 `{ src, label }`，下游 gateway / NodeInputBar 不用关心
+ * 这是生成图还是上传图。Results preserve connection order so callers that
+ * only need "the first one" get deterministic behavior.
  */
 export function getUpstreamImageContributions(
   targetId: string,
@@ -132,21 +135,29 @@ export function getUpstreamImageContributions(
     if (toPort.type !== 'image' && toPort.type !== 'any') continue;
 
     const src = elementsById.get(c.fromId);
-    if (!src || src.type !== 'image') continue;
-    const url = (src as any).src as string | undefined;
+    if (!src) continue;
+
+    let url: string | undefined;
+    let label: string;
+    if (src.type === 'image') {
+      url = (src as any).src;
+      const promptPreview = ((src as any).prompt ?? '').trim().slice(0, 20);
+      label = promptPreview
+        ? `图像 · ${promptPreview}${promptPreview.length >= 20 ? '…' : ''}`
+        : '图像';
+    } else if (src.type === 'file') {
+      const mt = String((src as any).mimeType || '').toLowerCase();
+      if (!mt.startsWith('image/')) continue; // 非图文件不是图源
+      url = (src as any).src;
+      const name = String((src as any).name || '').trim();
+      const preview = name.length > 20 ? `${name.slice(0, 20)}…` : name;
+      label = preview ? `图像 · ${preview}` : '图像';
+    } else {
+      continue;
+    }
+
     if (!url) continue;
-
-    const promptPreview = ((src as any).prompt ?? '').trim().slice(0, 20);
-    const label = promptPreview
-      ? `图像 · ${promptPreview}${promptPreview.length >= 20 ? '…' : ''}`
-      : '图像';
-
-    out.push({
-      connectionId: c.id,
-      sourceId: src.id,
-      src: url,
-      label,
-    });
+    out.push({ connectionId: c.id, sourceId: src.id, src: url, label });
   }
 
   return out;
