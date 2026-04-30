@@ -282,6 +282,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // F15 inpaint: toggleable sub-mode available only when anchor is a
@@ -817,21 +818,19 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
         width,
         transform: `scale(${scale})`,
         transformOrigin: 'top left',
-        filter: 'drop-shadow(0 4px 6px rgba(40,30,20,0.08)) drop-shadow(0 12px 24px rgba(40,30,20,0.10))',
+        filter: 'none',
       }}
       onMouseDown={e => e.stopPropagation()}
       onWheel={e => e.stopPropagation()}
     >
       <div
-        className="chip-paper overflow-visible transition-colors"
+        className="overflow-visible transition-colors"
         style={{
-          borderRadius: 'var(--r-lg)',
-          borderColor: isDragOverRef
-            ? 'var(--accent)'
-            : 'color-mix(in oklch, var(--accent) 28%, var(--line-1))',
-          boxShadow: isDragOverRef
-            ? '0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent), var(--shadow-ink-2)'
-            : 'var(--shadow-ink-2)',
+          background: 'var(--bg-2)',
+          border: 'none',
+          borderRadius: '16px',
+          boxShadow: 'var(--shadow-ink-1)',
+          overflow: 'hidden',
         }}
         onDragOver={(e) => {
           if (mode !== 'image') return;
@@ -850,6 +849,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
         }}
         onDrop={handleRefDrop}
       >
+        <div style={{ maxHeight: expanded ? '600px' : '0', overflow: 'hidden', transition: 'max-height 300ms ease' }}>
         {/* Quick chip row — all modes get the prompt-library entry; image/video get extra chips */}
         <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
           <div className="relative">
@@ -1148,6 +1148,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
           </div>
         )}
 
+        </div> {/* collapse wrapper */}
         {/* Textarea */}
         <form onSubmit={handleSubmit} className="flex flex-col">
           <div className="px-3 pt-2 pb-2">
@@ -1155,6 +1156,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
               ref={textareaRef}
               value={prompt}
               onChange={e => updatePrompt(e.target.value)}
+              onFocus={() => setExpanded(true)}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -1181,10 +1183,10 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
           <div
             className="flex items-center gap-1 min-w-0 hairline-t"
             style={{
-              padding: '7px 9px',
+              padding: '5px 8px',
               background: 'var(--bg-2)',
-              borderBottomLeftRadius: 'var(--r-lg)',
-              borderBottomRightRadius: 'var(--r-lg)',
+              borderBottomLeftRadius: '0',
+              borderBottomRightRadius: '0',
             }}
           >
             <div className="flex items-center gap-0.5 flex-1 min-w-0">
@@ -1533,8 +1535,8 @@ function Dropdown({
           maxLabelWidth ? 'min-w-0' : 'whitespace-nowrap'
         }`}
         style={{
-          padding: '5px 8px',
-          fontSize: 11.5,
+          padding: '4px 6px',
+          fontSize: 11,
           fontWeight: 500,
           borderRadius: 'var(--r-sm)',
           background: open ? 'var(--bg-3)' : 'transparent',

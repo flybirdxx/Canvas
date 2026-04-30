@@ -12,6 +12,7 @@ import { Atmosphere } from './components/Atmosphere';
 import { StatusBar } from './components/StatusBar';
 import { TopBar } from './components/chrome/TopBar';
 import { ToolDock } from './components/chrome/ToolDock';
+import { FloatingActions } from './components/FloatingActions';
 import { exportSelection } from './utils/exportPng';
 import { useCanvasStore } from './store/useCanvasStore';
 import { resumePendingImageTasks } from './services/taskResume';
@@ -39,6 +40,7 @@ export default function App() {
   const redo = useCanvasStore(s => s.redo);
   const deleteElements = useCanvasStore(s => s.deleteElements);
   const selectedIds = useCanvasStore(s => s.selectedIds);
+  const elements = useCanvasStore(s => s.elements);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -96,16 +98,28 @@ export default function App() {
       } else if (e.key === 'Escape') {
         setActiveTool('select');
         setSelection([]);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setSelection(elements.map(el => el.id));
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        const sel = elements.filter(el => selectedIds.includes(el.id));
+        sel.forEach(el => { const nid = uuidv4(); addElement({...el, id: nid, x: el.x + 24, y: el.y + 24} as any); });
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedIds.length > 0) {
-          e.preventDefault();
-          deleteElements(selectedIds);
-        }
+        if (selectedIds.length > 0) { e.preventDefault(); deleteElements(selectedIds); }
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const k = e.key.toLowerCase();
+        if (k === 'v') { e.preventDefault(); setActiveTool('select'); }
+        else if (k === 'h') { e.preventDefault(); setActiveTool('hand'); }
+        else if (k === 't') { e.preventDefault(); handleCreateNode('text'); }
+        else if (k === 'r') { e.preventDefault(); handleCreateNode('rectangle'); }
+        else if (k === 'i') { e.preventDefault(); handleCreateNode('image'); }
+        else if (k === 's') { e.preventDefault(); handleCreateNode('sticky'); }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, deleteElements, selectedIds, setActiveTool, setSelection]);
+  }, [undo, redo, deleteElements, selectedIds, elements, addElement, setActiveTool, setSelection]);
 
   const handleCreateNode = (type: string) => {
     const centerX =
@@ -235,7 +249,8 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
       />
-      <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} />
+      <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} activeTool={activeTool} onSetActiveTool={setActiveTool} />
+      <FloatingActions onOpenTemplates={() => setIsTemplatesOpen(true)} onOpenChat={() => setIsTemplatesOpen(true)} />
       <PropertiesPanel />
       <HistoryPanel />
       <AssetLibraryPanel />

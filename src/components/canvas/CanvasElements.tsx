@@ -25,11 +25,11 @@ import type { FilePreviewKind } from '../../services/fileIngest';
  */
 function getPortColor(type: string) {
   switch (type) {
-    case 'text':  return '#3F8FA6';   // teal
-    case 'image': return '#C67654';   // terracotta
-    case 'video': return '#8866B5';   // plum
-    case 'audio': return '#6FA26A';   // green
-    default:      return '#8A7F74';   // neutral ink
+    case 'text':  return '#4A88E9';   // blue
+    case 'image': return '#FF6B6B';   // coral red
+    case 'video': return '#9254DE';   // purple
+    case 'audio': return '#52C41A';   // green
+    default:      return '#999999';   // neutral gray
   }
 }
 
@@ -37,7 +37,7 @@ function getPortColor(type: string) {
 /*  Tokens (sRGB mirrors) — keeping Konva and DOM in visual sync        */
 /* -------------------------------------------------------------------- */
 
-const INK_1 = '#5A4E42';             // secondary ink — selection border
+const INK_1 = '#666666';             // port label / selection border
 const PAPER_EDGE = 'rgba(40,30,20,0.12)'; // polaroid hairline
 const BG_1 = '#F5EFE4';              // --bg-1 sRGB mirror (warm paper)
 
@@ -45,10 +45,8 @@ const BG_1 = '#F5EFE4';              // --bg-1 sRGB mirror (warm paper)
    DOM overlays. We don't use backdrop blur: the canvas already has a
    paper ground, blur stacked on opaque paper produces muddy tones. */
 const POLAROID_STYLE: React.CSSProperties = {
-  background: 'var(--bg-1)',
-  border: '1px solid var(--line-1)',
-  borderRadius: 'var(--r-md)',
-  boxShadow: 'var(--shadow-ink-2)',
+  background: 'var(--bg-2)',
+  borderRadius: '16px',
   overflow: 'hidden',
 };
 
@@ -89,6 +87,7 @@ function URLImage({ el, width, height }: { el: any; width: number; height: numbe
         cornerRadius={13}
         stroke={PAPER_EDGE}
         strokeWidth={1}
+        fill={"#FFFFFF"}
         listening={false}
       />
       <KonvaImage
@@ -149,30 +148,17 @@ function SelectionHandles({ el }: { el: any }) {
 
   return (
     <>
-      {/* Selection border — hand-drawn ink dashed rect */}
-      <Rect
-        x={x - 2}
-        y={y - 2}
-        width={width + 4}
-        height={height + 4}
-        stroke={INK_1}
-        strokeWidth={1.4}
-        dash={[6, 4]}
-        fill="transparent"
-        cornerRadius={4}
-        listening={false}
-        opacity={0.9}
-      />
-      {/* Corner handles — circular ink dots on paper disc */}
+      {/* Corner handles */}
       {corners.map(({ corner, cx, cy }) => (
         <Circle
           key={corner}
           x={cx}
           y={cy}
           radius={HANDLE_HALF}
-          fill="#F7EFE1"
+          fill="#FFFFFF"
           stroke={INK_1}
-          strokeWidth={1.2}
+          strokeWidth={1}
+          opacity={0.6}
           draggable
           onDragStart={(e) => {
             e.cancelBubble = true;
@@ -276,6 +262,7 @@ export function CanvasElements() {
     elements, selectedIds, setSelection, updateElement, updateElementPosition,
     deleteElements, activeTool, setDrawingConnection, drawingConnection,
   } = useCanvasStore();
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
     <>
@@ -319,6 +306,10 @@ export function CanvasElements() {
               updateElement(id, { x: e.target.x(), y: e.target.y() });
             }
           },
+          onMouseEnter: () => {
+            if (el.type !== 'video' && el.type !== 'audio') setHoveredId(id);
+          },
+          onMouseLeave: () => { setHoveredId(null); },
         };
 
         let nodeContent: React.JSX.Element | null = null;
@@ -369,32 +360,7 @@ export function CanvasElements() {
             <Group>
               <Rect width={width} height={height} fill="transparent" />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
-                <div
-                  className="flex flex-col"
-                  style={{
-                    ...POLAROID_STYLE,
-                    width,
-                    height,
-                    fontFamily: textEl.fontFamily || 'var(--font-serif)',
-                  }}
-                >
-                  <div
-                    className="flex items-center justify-between hairline-b"
-                    style={{ padding: '8px 12px', background: 'var(--bg-2)' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <AlignLeft size={13} strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />
-                      <span
-                        className="meta"
-                        style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--ink-2)' }}
-                      >
-                        Text
-                      </span>
-                    </div>
-                    <span className="meta" style={{ fontSize: 9.5, color: 'var(--ink-3)' }}>
-                      {textEl.fontSize || 14}px
-                    </span>
-                  </div>
+                <div className="flex flex-col" style={{ ...POLAROID_STYLE, width, height, fontFamily: textEl.fontFamily || 'var(--font-serif)' }}>
                   <div className="flex-1" style={{ padding: 14 }}>
                     <textarea
                       className="w-full h-full bg-transparent border-none outline-none resize-none pointer-events-auto paper-scroll"
@@ -424,36 +390,11 @@ export function CanvasElements() {
         }
         else if (el.type === 'sticky') {
           const sticky = el as any;
-          // Sticky notes are the one exception to the uniform polaroid
-          // treatment — wax-yellow paper, folded corner ink shadow, and
-          // a tiny -0.4° rotation via Konva's own rotation (applied at
-          // the outer group so hit-box still matches).
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
-                <div
-                  className="flex"
-                  style={{
-                    width,
-                    height,
-                    background: sticky.fill || 'var(--sticky-yellow)',
-                    border: '1px solid var(--sticky-yellow-edge)',
-                    borderRadius: 'var(--r-sm)',
-                    boxShadow: 'var(--shadow-ink-2)',
-                    padding: 14,
-                    overflow: 'hidden',
-                    position: 'relative',
-                  }}
-                >
-                  {/* Folded corner hint */}
-                  <svg
-                    aria-hidden="true"
-                    style={{ position: 'absolute', right: 0, bottom: 0, width: 16, height: 16, opacity: 0.35 }}
-                    viewBox="0 0 16 16"
-                  >
-                    <path d="M0 16 L16 0 L16 16 Z" fill="rgba(40,30,20,0.20)" />
-                  </svg>
+                <div className="flex" style={{ width, height, background: sticky.fill || 'var(--sticky-yellow)', borderRadius: 'var(--r-sm)', overflow: 'hidden', position: 'relative', padding: 14 }}>
                   <textarea
                     className="w-full h-full bg-transparent border-none outline-none resize-none pointer-events-auto paper-scroll"
                     style={{
@@ -496,8 +437,6 @@ export function CanvasElements() {
                       ...POLAROID_STYLE,
                       width,
                       height,
-                      borderColor: 'color-mix(in oklch, var(--accent) 26%, var(--line-1))',
-                      boxShadow: '0 0 0 1px color-mix(in oklch, var(--accent) 18%, transparent), var(--shadow-ink-2)',
                     }}
                   >
                     {/* Ink bloom halo */}
@@ -546,39 +485,18 @@ export function CanvasElements() {
             <Group>
               <Rect width={width} height={height} fill="transparent" />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
-                <div
-                  className="flex flex-col"
-                  style={{ ...POLAROID_STYLE, width, height }}
-                >
+                <div className="flex flex-col" style={{ ...POLAROID_STYLE, width, height }}>
                   <div
-                    className="hairline-b flex items-center justify-between"
-                    style={{
-                      height: 26,
-                      padding: '0 12px',
-                      background: 'var(--bg-2)',
-                    }}
-                  >
-                    <span className="meta" style={{ fontSize: 9.5 }}>
-                      {el.type === 'video' ? 'VIDEO' : 'AUDIO'}
-                    </span>
-                    <span
-                      style={{
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: el.type === 'video' ? 'var(--port-video)' : 'var(--port-audio)',
-                      }}
-                    />
-                  </div>
-                  <div
-                    className="flex-1 pointer-events-auto flex items-center justify-center overflow-hidden"
-                    style={{ background: 'var(--bg-3)' }}
+                    className="flex-1 flex items-center justify-center overflow-hidden"
+                    style={{ background: 'var(--bg-2)' }}
                   >
                     {el.type === 'video' ? (
                       media.src
-                        ? <video controls src={media.src} className="w-full h-full object-contain" onPointerDown={(e) => e.stopPropagation()} />
+                        ? <video controls src={media.src} className="w-full h-full object-contain" style={{ pointerEvents: 'auto' }} />
                         : <EmptyMedia label="空白视频节点" icon="▶" />
                     ) : (
                       media.src
-                        ? <audio controls src={media.src} className="w-[90%]" onPointerDown={(e) => e.stopPropagation()} />
+                        ? <audio controls src={media.src} className="w-[90%]" style={{ pointerEvents: 'auto' }} />
                         : <EmptyMedia label="空白音频节点" icon="♪" />
                     )}
                   </div>
@@ -642,9 +560,10 @@ export function CanvasElements() {
           }
         }
 
-        const portRadius = 5;
+        const portRadius = 7;
         const renderPorts = () => {
           if (!el.inputs && !el.outputs) return null;
+          const showPorts = isSelected || hoveredId === el.id;
 
           const inputSpacing = height / ((el.inputs?.length || 0) + 1);
           const outputSpacing = height / ((el.outputs?.length || 0) + 1);
@@ -654,22 +573,14 @@ export function CanvasElements() {
               {el.inputs?.map((port, i) => {
                 const portY = inputSpacing * (i + 1);
                 return (
-                  <Group key={`in-${port.id}`} x={0} y={portY}>
-                    {/* Halo ring */}
-                    <Circle
-                      x={0} y={0} radius={portRadius + 3}
-                      fill="#F7EFE1"
-                      stroke="rgba(40,30,20,0.10)"
-                      strokeWidth={1}
-                      listening={false}
-                    />
+                  <Group key={`in-${port.id}`} x={0} y={portY} opacity={showPorts ? 1 : 0} listening={showPorts}>
                     <Circle
                       x={0}
                       y={0}
                       radius={portRadius}
-                      fill={getPortColor(port.type)}
-                      stroke="#F7EFE1"
-                      strokeWidth={1.2}
+                      fill="#FFFFFF"
+                      stroke={getPortColor(port.type)}
+                      strokeWidth={1.8}
                       onMouseEnter={(e) => {
                         const stage = e.target.getStage();
                         if (stage) stage.container().style.cursor = 'crosshair';
@@ -697,17 +608,12 @@ export function CanvasElements() {
                               existingConnectionId: existingConn.id,
                             });
                           }
+                        } else {
+                          setDrawingConnection({fromElementId: el.id, fromPortId: port.id, fromPortType: port.type, startX: x, startY: y + portY, toX: x, toY: y + portY, isDisconnecting: true});
                         }
                       }}
                     />
-                    <Text
-                      text={port.label}
-                      x={12}
-                      y={-5}
-                      fontSize={9.5}
-                      fontFamily="IBM Plex Mono, ui-monospace, monospace"
-                      fill={INK_1}
-                    />
+
                   </Group>
                 );
               })}
@@ -715,21 +621,14 @@ export function CanvasElements() {
               {el.outputs?.map((port, i) => {
                 const portY = outputSpacing * (i + 1);
                 return (
-                  <Group key={`out-${port.id}`} x={width} y={portY}>
-                    <Circle
-                      x={0} y={0} radius={portRadius + 3}
-                      fill="#F7EFE1"
-                      stroke="rgba(40,30,20,0.10)"
-                      strokeWidth={1}
-                      listening={false}
-                    />
+                  <Group key={`out-${port.id}`} x={width} y={portY} opacity={showPorts ? 1 : 0} listening={showPorts}>
                     <Circle
                       x={0}
                       y={0}
                       radius={portRadius}
-                      fill={getPortColor(port.type)}
-                      stroke="#F7EFE1"
-                      strokeWidth={1.2}
+                      fill="#FFFFFF"
+                      stroke={getPortColor(port.type)}
+                      strokeWidth={1.8}
                       onMouseEnter={(e) => {
                         const stage = e.target.getStage();
                         if (stage) stage.container().style.cursor = 'crosshair';
@@ -752,15 +651,7 @@ export function CanvasElements() {
                         });
                       }}
                     />
-                    <Text
-                      text={port.label}
-                      x={-12 - (port.label?.length || 0) * 6}
-                      y={-5}
-                      fontSize={9.5}
-                      fontFamily="IBM Plex Mono, ui-monospace, monospace"
-                      fill={INK_1}
-                      align="right"
-                    />
+
                   </Group>
                 );
               })}
@@ -769,9 +660,7 @@ export function CanvasElements() {
         };
 
         // Sticky gets a subtle rotation for paper charm.
-        const rotOverride = el.type === 'sticky'
-          ? (rotation ?? -0.4)
-          : (rotation || 0);
+        const rotOverride = rotation || 0;
 
         return (
           <Group key={id} {...outerGroupProps} rotation={rotOverride}>
@@ -863,9 +752,7 @@ function GenErrorPanel({
         ...POLAROID_STYLE,
         width,
         height,
-        borderColor: 'color-mix(in oklch, var(--danger) 32%, var(--line-1))',
-        background: 'color-mix(in oklch, var(--danger) 4%, var(--bg-0))',
-        boxShadow: '0 0 0 1px color-mix(in oklch, var(--danger) 18%, transparent), var(--shadow-ink-2)',
+        background: 'color-mix(in oklch, var(--danger) 4%, var(--bg-2))',
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >

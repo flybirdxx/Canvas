@@ -89,6 +89,17 @@ export function getUpstreamTextContributions(
     });
   }
 
+  // 按源元素在画布上的位置排序（从上到下、从左到右），使拼接顺序可预测：
+  // 用户可以通过调整源节点的画布位置来控制最终 prompt 中内容的先后。
+  out.sort((a, b) => {
+    const sa = elementsById.get(a.sourceId);
+    const sb = elementsById.get(b.sourceId);
+    if (!sa || !sb) return 0;
+    const dy = sa.y - sb.y;
+    if (Math.abs(dy) > 4) return dy;
+    return sa.x - sb.x;
+  });
+
   return out;
 }
 
@@ -159,6 +170,16 @@ export function getUpstreamImageContributions(
     if (!url) continue;
     out.push({ connectionId: c.id, sourceId: src.id, src: url, label });
   }
+
+  // 同样按源元素画布位置排序，与文本贡献顺序保持一致。
+  out.sort((a, b) => {
+    const sa = elementsById.get(a.sourceId);
+    const sb = elementsById.get(b.sourceId);
+    if (!sa || !sb) return 0;
+    const dy = sa.y - sb.y;
+    if (Math.abs(dy) > 4) return dy;
+    return sa.x - sb.x;
+  });
 
   return out;
 }

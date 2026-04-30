@@ -413,6 +413,29 @@ export const useCanvasStore = create<CanvasState>()(
       }),
 
       addConnection: (connection) => set((state) => {
+        // 环形检测：从 toId 出发沿所有连线 DFS，如果能回到 fromId，说明添加
+        // 这条连线会形成有向环。拒绝创建——环在视觉和语义（flowResolver 上游
+        // 收集）上都可能让用户困惑，而且递归收集上游内容时可能陷入无限循环。
+        {
+          const allCons = [
+            ...state.connections.filter(c => c.toPortId !== connection.toPortId),
+            connection,
+          ];
+          const visited = new Set<string>();
+          const stack = [connection.toId];
+          while (stack.length > 0) {
+            const cur = stack.pop()!;
+            if (cur === connection.fromId) return state; // ← 检测到环，拒绝
+            if (visited.has(cur)) continue;
+            visited.add(cur);
+            for (const c of allCons) {
+              if (c.fromId === cur && !visited.has(c.toId)) {
+                stack.push(c.toId);
+              }
+            }
+          }
+        }
+
         const filteredConnections = state.connections.filter(c => c.toPortId !== connection.toPortId);
 
         // [telemetry] 观察：file(image) 有没有被真的连到"图生"节点上。

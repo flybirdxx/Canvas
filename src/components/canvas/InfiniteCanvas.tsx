@@ -13,7 +13,7 @@ import { NodeNoteIndicator } from '../NodeNoteIndicator';
 import { setStage } from '../../utils/stageRegistry';
 import { exportCanvasRect } from '../../utils/exportPng';
 import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
-import { Type, ImageIcon, Video, Music, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
+import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
 import { buildFileElement } from '../../services/fileIngest';
 
 // Bar 的宽度和间距用画布单位表达，由 CSS transform:scale 在渲染时等比缩放。
@@ -33,7 +33,7 @@ const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
   aigenerating: 400,
 };
 const INPUT_BAR_MIN_WIDTH_FALLBACK = 260;
-const INPUT_BAR_GAP_CANVAS = 10;
+const INPUT_BAR_GAP_CANVAS = 6;
 const INPUT_BAR_VISIBLE_SCALE = 0.5;
 
 function getBezierPoints(startX: number, startY: number, endX: number, endY: number) {
@@ -65,6 +65,17 @@ function getPortColor(type: string) {
 /** Ink-1 mirror for selection marquees. */
 const INK_LINE = '#5A4E42';
 
+interface QuickAddMenuState {
+  x: number;
+  y: number;
+  canvasX: number;
+  canvasY: number;
+  fromElementId?: string;
+  fromPortId?: string;
+  fromPortType?: string;
+  isDisconnecting?: boolean;
+}
+
 export function InfiniteCanvas() {
   const { 
     stageConfig, setStageConfig, 
@@ -89,15 +100,7 @@ export function InfiniteCanvas() {
   }, []);
 
   // Quick Add Menu state
-  const [quickAddMenu, setQuickAddMenu] = useState<{
-    x: number;
-    y: number;
-    canvasX: number;
-    canvasY: number;
-    fromElementId?: string;
-    fromPortId?: string;
-    fromPortType?: string;
-  } | null>(null);
+  const [quickAddMenu, setQuickAddMenu] = useState<QuickAddMenuState | null>(null);
 
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
@@ -163,6 +166,7 @@ export function InfiniteCanvas() {
   // Refs for tracking manual middle-mouse panning
   const isPanningRef = useRef(false);
   const lastPanPositionRef = useRef({ x: 0, y: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle Resize
   useEffect(() => {
@@ -289,7 +293,11 @@ export function InfiniteCanvas() {
     const currentY = (pointer.y - stage.y()) / scale;
 
     if (drawingConnection) {
-      setDrawingConnection({ ...drawingConnection, toX: currentX, toY: currentY });
+      if (drawingConnection.isDisconnecting) {
+        setDrawingConnection({ ...drawingConnection, startX: currentX, startY: currentY });
+      } else {
+        setDrawingConnection({ ...drawingConnection, toX: currentX, toY: currentY });
+      }
       return;
     }
 
@@ -601,6 +609,20 @@ export function InfiniteCanvas() {
     setQuickAddMenu(null);
   };
 
+  const handleQuickAddUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0 || !quickAddMenu) return;
+    const canvasX = quickAddMenu.canvasX, canvasY = quickAddMenu.canvasY;
+    const createdIds: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      try { const fileEl = await buildFileElement(files[i], { x: canvasX, y: canvasY }, { dx: i * 24, dy: i * 24 }); addElement(fileEl as any); createdIds.push(fileEl.id); }
+      catch (err) { console.warn('[quickadd] file ingest failed', files[i].name, err); }
+    }
+    if (createdIds.length > 0) { setSelection(createdIds); setActiveTool('select'); }
+    setQuickAddMenu(null);
+  };
+
   return (
     <div 
       ref={containerRef} 
@@ -631,6 +653,7 @@ export function InfiniteCanvas() {
         onPointerUp={handlePointerUp}
         onDblClick={(e) => {
           if (e.target === e.target.getStage()) {
+            setSelectionBox(null);
             const pointer = e.target.getStage()?.getPointerPosition();
             if (!pointer) return;
             const scale = stageConfig.scale;
@@ -821,7 +844,7 @@ export function InfiniteCanvas() {
           })
           .map(el => {
             const canvasRightX = el.x + el.width;
-            const canvasTopY = el.y;
+            const canvasTopY = el.y - 28;
             const screenX = stageConfig.x + canvasRightX * stageConfig.scale;
             const screenY = stageConfig.y + canvasTopY * stageConfig.scale;
             return (
@@ -866,6 +889,7 @@ export function InfiniteCanvas() {
           })}
       </div>
 
+      <input ref={fileInputRef} type="file" accept="*/*" multiple style={{ display: 'none' }} onChange={handleQuickAddUpload} />
       {/* Quick Add Menu Overlay */}
       {quickAddMenu && (
         <div
@@ -886,6 +910,7 @@ export function InfiniteCanvas() {
           <QuickAddRow icon={<ImageIcon className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-image)' }} />} label="Image" onClick={() => handleQuickAdd('image')} />
           <QuickAddRow icon={<Video className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-video)' }} />} label="Video" onClick={() => handleQuickAdd('video')} />
           <QuickAddRow icon={<Music className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--port-audio)' }} />} label="Audio" onClick={() => handleQuickAdd('audio')} />
+          <QuickAddRow icon={<FileUp className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />} label="Upload" onClick={() => fileInputRef.current?.click()} />
         </div>
       )}
 
@@ -992,9 +1017,12 @@ export function InfiniteCanvas() {
           style={{
             minWidth: 40,
             textAlign: 'center',
-            color: 'var(--ink-0)',
-            fontWeight: 500,
+            color: stageConfig.scale < 0.2 ? 'var(--ink-2)' : 'var(--ink-0)',
+            fontWeight: stageConfig.scale < 0.2 ? 400 : 500,
+            fontStyle: stageConfig.scale < 0.2 ? 'italic' : 'normal',
+            opacity: stageConfig.scale < 0.15 ? 0.55 : 1,
           }}
+          title={stageConfig.scale < 0.2 ? 'Zoom is very low' : undefined}
         >
           {Math.round(stageConfig.scale * 100)}%
         </span>

@@ -8,79 +8,79 @@
 :root,
 [data-theme="light"] {
   /* -- Paper ground ------------------------------------------------------- */
-  --bg-0: oklch(0.985 0.012 85);    /* app bg — warm off-white */
-  --bg-1: oklch(0.975 0.015 82);    /* canvas area */
-  --bg-2: oklch(0.945 0.020 78);    /* chip surface */
-  --bg-3: oklch(0.910 0.024 75);    /* sunken / input */
+  --bg-0: #F5F6F8;                    /* app bg — bright neutral gray */
+  --bg-1: #EEF0F2;                    /* canvas area */
+  --bg-2: #FFFFFF;                    /* chip surface / cards */
+  --bg-3: #E8E8E8;                    /* sunken / input */
 
   /* -- Ink / foreground --------------------------------------------------- */
-  --ink-0: oklch(0.220 0.022 55);   /* primary text */
-  --ink-1: oklch(0.380 0.022 55);   /* secondary */
-  --ink-2: oklch(0.560 0.020 55);   /* meta */
-  --ink-3: oklch(0.720 0.018 55);   /* disabled */
+  --ink-0: #333333;                   /* primary text */
+  --ink-1: #666666;                   /* secondary */
+  --ink-2: #999999;                   /* meta */
+  --ink-3: #CCCCCC;                   /* disabled */
 
   /* -- Lines (1px hairlines) --------------------------------------------- */
-  --line-0: oklch(0.860 0.020 65);  /* ultra subtle */
-  --line-1: oklch(0.800 0.024 60);  /* default border */
-  --line-2: oklch(0.700 0.028 55);  /* strong / hover */
-  --line-3: oklch(0.380 0.022 55);  /* ink — equals ink-1 for diagrams */
+  --line-0: #F0F0F0;                  /* ultra subtle */
+  --line-1: #E8E8E8;                  /* default border */
+  --line-2: #D0D0D0;                  /* strong / hover */
+  --line-3: #888888;                  /* ink — diagrams */
 
   /* -- Accents ------------------------------------------------------------ */
-  --accent: oklch(0.612 0.162 32);   /* terracotta — CTA, brand */
-  --accent-hover: oklch(0.560 0.175 30);
-  --accent-soft: oklch(0.930 0.045 35);
-  --accent-fg: oklch(0.985 0.012 85);
+  --accent: #2C2D2F;                  /* dark charcoal — active/selected */
+  --accent-hover: #444548;
+  --accent-soft: #F0F0F0;
+  --accent-fg: #FFFFFF;
 
-  --signal: oklch(0.640 0.125 200);  /* teal — links, focus */
-  --signal-soft: oklch(0.920 0.040 200);
+  --signal: #4A88E9;                  /* blue — links, focus */
+  --signal-soft: #E8F0FE;
 
   /* -- Semantic ----------------------------------------------------------- */
-  --success: oklch(0.620 0.120 150);
-  --warning: oklch(0.780 0.130 75);
-  --danger:  oklch(0.560 0.170 25);
-  --danger-soft: oklch(0.940 0.045 25);
+  --success: #52C41A;
+  --warning: #FAAD14;
+  --danger:  #FF4D4F;
+  --danger-soft: #FFF1F0;
 
   /* -- Sticky waxes ------------------------------------------------------- */
-  --sticky-yellow: oklch(0.940 0.080 92);
-  --sticky-yellow-edge: oklch(0.880 0.070 92);
-  --sticky-peach:  oklch(0.920 0.070 45);
-  --sticky-peach-edge: oklch(0.860 0.070 45);
-  --sticky-mint:   oklch(0.925 0.055 160);
-  --sticky-mint-edge: oklch(0.870 0.060 160);
-  --sticky-fg:     oklch(0.500 0.120 75);   /* ochre ink for sticky content */
+  --sticky-yellow: #FFF7E6;
+  --sticky-yellow-edge: #FFE7BA;
+  --sticky-peach:  #FFF2F0;
+  --sticky-peach-edge: #FFD8D2;
+  --sticky-mint:   #F0FFF5;
+  --sticky-mint-edge: #D5F5E3;
+  --sticky-fg:     #8C6D1F;
 
   /* -- Ports -------------------------------------------------------------- */
-  --port-text:  oklch(0.640 0.125 200);  /* teal */
-  --port-image: oklch(0.612 0.162 32);   /* terracotta */
-  --port-video: oklch(0.520 0.140 295);  /* plum */
-  --port-audio: oklch(0.620 0.120 150);  /* green */
+  --port-text:  #4A88E9;              /* blue */
+  --port-image: #FF6B6B;              /* coral red */
+  --port-video: #9254DE;              /* purple */
+  --port-audio: #52C41A;              /* green */
 
-  /* -- Shadows (paper lift — never glow) ---------------------------------- */
-  --shadow-ink-0: 0 1px 0 rgba(40, 30, 20, 0.04);
+  /* -- Shadows (lighter, airy) -------------------------------------------- */
+  --shadow-ink-0: 0 1px 0 rgba(0, 0, 0, 0.03);
   --shadow-ink-1:
-    0 1px 1px rgba(40, 30, 20, 0.05),
-    0 2px 4px rgba(40, 30, 20, 0.06);
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.04);
   --shadow-ink-2:
-    0 2px 2px rgba(40, 30, 20, 0.07),
-    0 6px 14px rgba(40, 30, 20, 0.08);
+    0 2px 4px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.06);
   --shadow-ink-3:
-    0 4px 4px rgba(40, 30, 20, 0.08),
-    0 12px 28px rgba(40, 30, 20, 0.11);
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08);
   --shadow-press:
-    inset 0 1px 2px rgba(40, 30, 20, 0.12),
-    0 0 0 1px rgba(40, 30, 20, 0.04);
+    inset 0 1px 2px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
 
   /* -- Atmosphere --------------------------------------------------------- */
-  --paper-grain: 0.035;    /* opacity multiplier */
-  --grid-dot: oklch(0.820 0.020 65);
-  --vignette-ink: rgba(40, 30, 20, 0.10);
+  --paper-grain: 0.012;    /* much lighter grain */
+  --grid-dot: #DDDDDD;
+  --vignette-ink: rgba(0, 0, 0, 0.04);
 
   /* -- Radii -------------------------------------------------------------- */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 20px;
-  --r-pill: 999px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+  --r-pill: 99px;
 
   /* -- Motion ------------------------------------------------------------- */
   --ease-soft: cubic-bezier(0.32, 0.72, 0.35, 1);
@@ -242,8 +242,7 @@ button, input, textarea, select {
 }
 
 *:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* Tailwind v4 preflight disables default border color; restore to our hairline */

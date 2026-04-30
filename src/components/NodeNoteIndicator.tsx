@@ -92,7 +92,7 @@ export function NodeNoteIndicator({ element, x, y, scale }: NodeNoteIndicatorPro
         left: x,
         top: y,
         transform: `scale(${scale})`,
-        transformOrigin: 'top right',
+        transformOrigin: 'bottom right',
       }}
       onMouseDown={e => e.stopPropagation()}
       onWheel={e => e.stopPropagation()}
@@ -107,7 +107,7 @@ export function NodeNoteIndicator({ element, x, y, scale }: NodeNoteIndicatorPro
           className="flex items-center gap-1 transition-colors"
           style={{
             transform: 'translate(-6px, -6px)',
-            transformOrigin: 'top right',
+            transformOrigin: 'bottom right',
             padding: '3px 8px',
             fontSize: 10.5,
             fontWeight: 500,
@@ -137,7 +137,7 @@ export function NodeNoteIndicator({ element, x, y, scale }: NodeNoteIndicatorPro
           className="chip-paper anim-pop"
           style={{
             transform: 'translate(-6px, -6px)',
-            transformOrigin: 'top right',
+            transformOrigin: 'bottom right',
             padding: 10,
             width: 264,
             borderColor: 'color-mix(in oklch, var(--sticky-fg) 48%, var(--line-1))',

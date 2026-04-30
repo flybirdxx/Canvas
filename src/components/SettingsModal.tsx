@@ -23,21 +23,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center anim-fade-in"
-      style={{ background: 'color-mix(in oklch, var(--ink-0) 32%, transparent)', backdropFilter: 'blur(6px)' }}
+      style={{ background: 'rgba(0,0,0,0.15)', backdropFilter: 'blur(8px)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="chip-paper anim-pop flex flex-col overflow-hidden"
+        className="anim-pop flex flex-col overflow-hidden"
         style={{
           width: '100%',
           maxWidth: 720,
           borderRadius: 'var(--r-xl)',
-          boxShadow: 'var(--shadow-ink-3)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)', background: 'var(--bg-2)',
         }}
       >
         {/* Header */}
         <div
-          className="hairline-b flex items-center justify-between"
+          className="flex items-center justify-between"
           style={{ padding: '14px 20px', background: 'var(--bg-2)' }}
         >
           <div className="flex items-center gap-2" style={{ color: 'var(--ink-0)' }}>
@@ -59,7 +59,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="flex" style={{ height: 420 }}>
           {/* Sidebar */}
           <div
-            className="hairline-r paper-scroll flex flex-col overflow-y-auto"
+            className="paper-scroll flex flex-col overflow-y-auto"
             style={{ width: 192, padding: 12, gap: 2, background: 'var(--bg-2)' }}
           >
             <div className="meta" style={{ padding: '6px 10px', fontSize: 9.5 }}>
@@ -81,7 +81,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                     fontWeight: 500,
                     background: isActive ? 'var(--bg-0)' : 'transparent',
                     color: isActive ? 'var(--ink-0)' : 'var(--ink-1)',
-                    boxShadow: isActive ? 'var(--shadow-ink-1)' : 'none',
+                    boxShadow: 'none',
                     border: isActive ? '1px solid var(--line-1)' : '1px solid transparent',
                   }}
                 >
@@ -119,7 +119,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                     fontWeight: 500,
                     background: isActive ? 'var(--bg-0)' : 'transparent',
                     color: isActive ? 'var(--ink-0)' : 'var(--ink-1)',
-                    boxShadow: isActive ? 'var(--shadow-ink-1)' : 'none',
+                    boxShadow: 'none',
                     border: isActive ? '1px solid var(--line-1)' : '1px solid transparent',
                   }}
                 >
