@@ -235,7 +235,9 @@ export interface FileElement extends BaseElement {
   /** 文件内容源：v1 只存 data URL。 */
   src: string;
   /** v1 只有 'data'；v2 扩出 'blob' / 'remote' 做大文件降级。 */
-  persistence: 'data';
+  persistence: 'data' | 'blob';
+  /** IndexedDB key when persistence === 'blob'. Used for re-hydration. */
+  blobKey?: string;
   /**
    * 缩略图 data URL（可选）。上传时一次性生成，之后永远是静态图——
    *  - video：第一帧 JPEG（ffmpeg 不引入，直接用浏览器 `<video>` + canvas drawImage）

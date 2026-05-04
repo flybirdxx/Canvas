@@ -566,7 +566,7 @@ export const useCanvasStore = create<CanvasState>()(
     }),
     {
       name: 'ai-canvas-document',
-      version: 6,
+      version: 7,
       // 拖拽帧写入会触发高频 JSON.stringify + setItem；用 300ms 防抖把
       // 连续写合并为一次，消除拖动卡顿。语义见 createThrottledLocalStorage。
       storage: createJSONStorage(() => createThrottledLocalStorage(300)),
@@ -624,6 +624,20 @@ export const useCanvasStore = create<CanvasState>()(
         // 不需要回填；用户下次重新上传就会走新抽取链路，给出真正的预览。
         if (version < 6 && persistedState) {
           // no-op
+        }
+        // v6 -> v7: blob persistence migration.
+        // FileElements with sizeBytes > 1MB get queued for async IndexedDB migration.
+        // The actual async blob writes run after rehydration via window.__canvasBlobMigration.
+        if (version < 7 && persistedState && Array.isArray(persistedState.elements)) {
+          const toMigrate: Array<{ id: string; dataUrl: string }> = [];
+          persistedState.elements.forEach((el: any) => {
+            if (el?.type === 'file' && el?.persistence === 'data' && el?.src && el?.sizeBytes > 1 * 1024 * 1024) {
+              toMigrate.push({ id: el.id, dataUrl: el.src });
+            }
+          });
+          if (toMigrate.length > 0) {
+            (window as any).__canvasBlobMigration = toMigrate;
+          }
         }
         // v3 -> v4: 为了让 NodeInputBar 底栏在 image/video 模式下不再挤压，
         // 节点最小宽度提升至 image=480、video=520。将既有过窄节点等比补齐，

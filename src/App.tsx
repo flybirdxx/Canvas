@@ -17,6 +17,7 @@ import { exportSelection } from './utils/exportPng';
 import { useCanvasStore } from './store/useCanvasStore';
 import { resumePendingImageTasks } from './services/taskResume';
 import { buildFileElement } from './services/fileIngest';
+import { storeBlob, blobKey } from './services/fileStorage';
 
 /**
  * App shell — Warm Paper Studio.
@@ -67,6 +68,30 @@ export default function App() {
     resumePendingImageTasks();
     const id = setInterval(resumePendingImageTasks, 3 * 60 * 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Process IndexedDB blob migration queue (v6→v7 persist migration).
+  useEffect(() => {
+    const queue = (window as any).__canvasBlobMigration as Array<{ id: string; dataUrl: string }> | undefined;
+    if (!queue || queue.length === 0) return;
+    delete (window as any).__canvasBlobMigration;
+
+    queue.forEach(async ({ id, dataUrl }) => {
+      try {
+        const key = blobKey(id);
+        await storeBlob(key, dataUrl);
+        const el = useCanvasStore.getState().elements.find(e => e.id === id);
+        if (el && el.type === 'file') {
+          useCanvasStore.getState().updateElement(id, {
+            persistence: 'blob',
+            blobKey: key,
+            src: '',
+          } as Partial<typeof el>);
+        }
+      } catch (err) {
+        console.warn(`[migration] blob store failed for ${id}, keeping data`, err);
+      }
+    });
   }, []);
 
   // Global keyboard shortcuts.
