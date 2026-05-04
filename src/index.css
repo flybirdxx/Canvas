@@ -548,6 +548,12 @@ textarea.input-paper {
 }
 .anim-pop { animation: paper-pop var(--dur-3) var(--ease-ink) both; }
 
+@keyframes dock-menu-in {
+  0%   { transform: translateY(6px) scale(0.92); opacity: 0; transform-origin: bottom center; }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; transform-origin: bottom center; }
+}
+.anim-dock-menu-in { animation: dock-menu-in var(--dur-3) var(--ease-soft) both; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition-duration: 1ms !important; }
 }

@@ -16,7 +16,7 @@ export function ToolDock({ onCreate, onUploadFiles, activeTool, onSetActiveTool 
         </button>
         {menuOpen && (<>
           <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setMenuOpen(false)} />
-          <div className="anim-pop" style={{ position:'absolute', bottom:'calc(100% + 12px)', left:0, width:260, padding:8, background:'var(--bg-2)', borderRadius:'12px', boxShadow:'var(--shadow-ink-3)', zIndex:50, display:'flex', flexDirection:'column', gap:6 }}>
+          <div className="anim-dock-menu-in" style={{ position:'absolute', bottom:'calc(100% + 12px)', left:0, width:260, padding:8, background:'var(--bg-2)', borderRadius:'12px', boxShadow:'var(--shadow-ink-3)', zIndex:50, display:'flex', flexDirection:'column', gap:6 }}>
             <div style={{ position:'relative' }}>
               <Search size={13} strokeWidth={1.6} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--ink-3)' }} />
               <input placeholder="Search nodes & models" style={{ width:'100%', padding:'6px 10px 6px 28px', fontSize:11, borderRadius:'6px', border:'1px solid var(--line-1)', background:'var(--bg-1)', color:'var(--ink-0)', outline:'none', fontFamily:'inherit' }} />
