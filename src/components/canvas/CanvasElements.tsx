@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Rect, Text, Group, Image as KonvaImage, Circle } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import useImage from 'use-image';
@@ -15,6 +15,7 @@ import {
   formatBytes, formatDuration, previewKindForMime, buildFileElement,
 } from '../../services/fileIngest';
 import type { FilePreviewKind } from '../../services/fileIngest';
+import { readBlob } from '../../services/fileStorage';
 
 /**
  * Warm-paper port palette.
@@ -506,58 +507,7 @@ export function CanvasElements() {
           );
         }
         else if (el.type === 'file') {
-          const fileEl = el as any;
-          const fileKind = previewKindForMime(String(fileEl.mimeType || ''));
-          // "有视觉缩略图"的三条路径合并走 Konva：image 用 src 本身；video
-          // 用首帧 thumbnailDataUrl；audio 用波形 thumbnailDataUrl。Konva
-          // 渲染 + 透明 hit rect 能保证全卡面拖拽、缩放期间命中开销恒定。
-          //
-          // pdf / other 或抽取失败时回落到 DOM 卡面（AttachmentCardBody），
-          // 靠 pointer-events: none 让 Konva 接管拖拽；卡内无任何交互元素，
-          // 不会抢事件。
-          const hasThumb = fileKind === 'image'
-            ? !!fileEl.src
-            : !!fileEl.thumbnailDataUrl;
-
-          if (hasThumb) {
-            const thumbSrc = fileKind === 'image' ? fileEl.src : fileEl.thumbnailDataUrl;
-            nodeContent = (
-              <Group>
-                {/* Hit target：和 rectangle / circle / text 等分支一致，留一
-                    张透明 Rect 专门承接 Konva 的 hit canvas；这是节点能被
-                    选中/拖拽/缩放的唯一命中面。FileImageKonvaBody 里所有
-                    shapes 都 listening=false，是故意让命中测试只打到这
-                    一层，保持拖拽期间命中开销恒定。 */}
-                <Rect width={width} height={height} fill="transparent" />
-                <FileImageKonvaBody el={fileEl} src={thumbSrc} width={width} height={height} />
-                <Html divProps={{ style: { pointerEvents: 'none' } }}>
-                  <div className="relative" style={{ width, height, pointerEvents: 'none' }}>
-                    {/* video 需要一个"▶"中央覆盖层暗示这是可打开播放的视频，
-                        而不是一张普通截图；audio / image 不需要（波形 / 图
-                        自己即表达）。 */}
-                    {fileKind === 'video' && <FileVideoPlayBadge />}
-                    <FileNodeOverlayChips
-                      el={fileEl}
-                      width={width}
-                      height={height}
-                      kind={fileKind}
-                      absoluteInCard
-                    />
-                    <FileNodeInfoBand el={fileEl} />
-                  </div>
-                </Html>
-              </Group>
-            );
-          } else {
-            nodeContent = (
-              <Group>
-                <Rect width={width} height={height} fill="transparent" />
-                <Html divProps={{ style: { pointerEvents: 'none' } }}>
-                  <FileNodeBody el={fileEl} width={width} height={height} />
-                </Html>
-              </Group>
-            );
-          }
+          nodeContent = <FileElementNode el={el} width={width} height={height} />;
         }
 
         const portRadius = 7;
@@ -1416,4 +1366,127 @@ function pickAttachmentIcon(name: string, mime: string) {
   if (['txt', 'md', 'markdown', 'rtf', 'log', 'csv', 'doc', 'docx'].includes(ext)) return FileText;
 
   return FileIcon;
+}
+
+/* -------------------------------------------------------------------- */
+/*  File element with blob rehydration                                  */
+/* -------------------------------------------------------------------- */
+
+/**
+ * File-element rendering that handles IndexedDB blob rehydration.
+ *
+ * When `el.persistence === 'blob'` and `el.blobKey` is set, the element's
+ * `src` is initially empty (the data was moved to IndexedDB to save
+ * localStorage space). On mount we fetch the actual data URL from
+ * IndexedDB and use it locally for rendering — without modifying the
+ * store's `src` (which would defeat the purpose of IndexedDB offload).
+ *
+ * If the blob fetch fails (DB cleared, key missing, etc.) a
+ * "broken attachment" placeholder is shown instead.
+ */
+function FileElementNode({
+  el, width, height,
+}: {
+  el: any;
+  width: number;
+  height: number;
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
+  const [blobFailed, setBlobFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (el.persistence === 'blob' && el.blobKey) {
+      readBlob(el.blobKey).then((dataUrl) => {
+        if (cancelled) return;
+        if (dataUrl) {
+          setResolvedSrc(dataUrl);
+        } else {
+          setBlobFailed(true);
+        }
+      }).catch(() => {
+        if (!cancelled) setBlobFailed(true);
+      });
+    } else {
+      // Not blob-persisted — use the element's inline src directly
+      setResolvedSrc(el.src || '');
+    }
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [el.id, el.blobKey]);
+
+  // Build a local copy of the element with the hydrated src so all
+  // sub-components (Konva image, "打开" link, etc.) see the real data.
+  const hydratedEl = (el.persistence === 'blob' && resolvedSrc)
+    ? { ...el, src: resolvedSrc }
+    : el;
+
+  const fileKind = previewKindForMime(String(el.mimeType || ''));
+  const hasThumb = blobFailed
+    ? false
+    : fileKind === 'image'
+      ? !!hydratedEl.src
+      : !!el.thumbnailDataUrl;
+
+  /* ---- Broken attachment state ----------------------------------- */
+  if (blobFailed) {
+    return (
+      <Group>
+        <Rect
+          width={width} height={height}
+          fill="#FFFFFF" cornerRadius={12}
+          stroke="rgba(40,30,20,0.12)" strokeWidth={1}
+        />
+        <Html divProps={{ style: { pointerEvents: 'none' } }}>
+          <div style={{
+            ...POLAROID_STYLE,
+            width, height,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            color: 'var(--ink-2)', gap: 4,
+          }}>
+            <Upload style={{ width: 22, height: 22, color: 'var(--ink-3)' }} />
+            <span style={{ fontSize: 11 }}>附件已丢失</span>
+            <span style={{ fontSize: 9.5, color: 'var(--ink-3)' }}>点此重传</span>
+          </div>
+        </Html>
+      </Group>
+    );
+  }
+
+  /* ---- Konva thumbnail path (image/video/audio with thumbnail) ---- */
+  if (hasThumb) {
+    const thumbSrc = fileKind === 'image' ? hydratedEl.src : el.thumbnailDataUrl;
+    return (
+      <Group>
+        <Rect width={width} height={height} fill="transparent" />
+        <FileImageKonvaBody el={hydratedEl} src={thumbSrc} width={width} height={height} />
+        <Html divProps={{ style: { pointerEvents: 'none' } }}>
+          <div className="relative" style={{ width, height, pointerEvents: 'none' }}>
+            {fileKind === 'video' && <FileVideoPlayBadge />}
+            <FileNodeOverlayChips
+              el={hydratedEl}
+              width={width}
+              height={height}
+              kind={fileKind}
+              absoluteInCard
+            />
+            <FileNodeInfoBand el={hydratedEl} />
+          </div>
+        </Html>
+      </Group>
+    );
+  }
+
+  /* ---- DOM card path (pdf / other / loading before blob resolves) -- */
+  return (
+    <Group>
+      <Rect width={width} height={height} fill="transparent" />
+      <Html divProps={{ style: { pointerEvents: 'none' } }}>
+        <FileNodeBody el={hydratedEl} width={width} height={height} />
+      </Html>
+    </Group>
+  );
 }
