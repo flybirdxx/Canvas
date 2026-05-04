@@ -3,6 +3,7 @@ import { Download, ChevronDown, Scissors, Frame, SquareDashed, FileImage, FileTe
 import { exportSelection, exportVisible } from '../utils/exportPng';
 import { exportSelectionAsSvg } from '../utils/exportSvg';
 import { exportViewportAsPdf, exportSelectionAsPdf } from '../utils/exportPdf';
+import { exportAsStandaloneHtml } from '../utils/exportHtml';
 
 /**
  * ExportMenu — paper-chip dropdown anchored in TopBar.
@@ -100,6 +101,12 @@ export function ExportMenu() {
             icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
             label="导出为 PDF（A4）"
             onClick={() => handle(() => exportSelectionAsPdf())}
+          />
+          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
+          <MenuRow
+            icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
+            label="导出为网页 (HTML)"
+            onClick={() => handle(() => exportAsStandaloneHtml())}
           />
         </div>
       )}
