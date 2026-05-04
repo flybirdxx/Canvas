@@ -1,9 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, ChevronDown, Scissors, Frame, SquareDashed, FileImage, FileText } from 'lucide-react';
+import {
+  Download,
+  ChevronDown,
+  Scissors,
+  Frame,
+  SquareDashed,
+  FileImage,
+  FileText,
+  FileJson,
+  Globe,
+} from 'lucide-react';
 import { exportSelection, exportVisible } from '../utils/exportPng';
 import { exportSelectionAsSvg } from '../utils/exportSvg';
 import { exportViewportAsPdf, exportSelectionAsPdf } from '../utils/exportPdf';
 import { exportAsStandaloneHtml } from '../utils/exportHtml';
+
+/* ---------- helpers ---------- */
+
+const SEP = (
+  <div style={{ height: 1, background: 'var(--bg-3)', margin: '3px 0' }} />
+);
+
+function SectionHdr({ label }: { label: string }) {
+  return (
+    <div
+      className="mono"
+      style={{
+        padding: '5px 9px 3px',
+        fontSize: 9.5,
+        fontWeight: 600,
+        letterSpacing: '0.08em',
+        color: 'var(--ink-3)',
+        textTransform: 'uppercase' as const,
+      }}
+    >
+      {label}
+    </div>
+  );
+}
 
 /**
  * ExportMenu — paper-chip dropdown anchored in TopBar.
@@ -33,16 +67,16 @@ export function ExportMenu() {
 
   const handle = (fn: () => void) => {
     setOpen(false);
-    setTimeout(fn, 0);  // close menu before any util-raised dialog
+    setTimeout(fn, 0); // close menu before any util-raised dialog
   };
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className="btn btn-ghost"
-        title="导出 PNG"
+        title="导出"
         style={{ padding: '6px 10px', fontSize: 12 }}
       >
         <Download className="w-4 h-4" strokeWidth={1.6} />
@@ -64,6 +98,8 @@ export function ExportMenu() {
             boxShadow: 'var(--shadow-ink-3)',
           }}
         >
+          {/* ——— 图片导出 ——— */}
+          <SectionHdr label="图片导出" />
           <MenuRow
             icon={<Scissors className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--signal)' }} />}
             label="导出选中"
@@ -85,26 +121,33 @@ export function ExportMenu() {
             label="导出可视区"
             onClick={() => handle(() => exportVisible())}
           />
-          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
           <MenuRow
             icon={<FileImage className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
             label="导出为 SVG"
             onClick={() => handle(() => exportSelectionAsSvg())}
           />
-          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
+
+          {SEP}
+
+          {/* ——— 文档导出 ——— */}
+          <SectionHdr label="文档导出" />
           <MenuRow
             icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--signal)' }} />}
-            label="导出为 PDF（视口尺寸）"
+            label="PDF（视口尺寸）"
             onClick={() => handle(() => exportViewportAsPdf())}
           />
           <MenuRow
-            icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
-            label="导出为 PDF（A4）"
+            icon={<FileJson className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
+            label="PDF（A4）"
             onClick={() => handle(() => exportSelectionAsPdf())}
           />
-          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
+
+          {SEP}
+
+          {/* ——— 网页 ——— */}
+          <SectionHdr label="网页" />
           <MenuRow
-            icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
+            icon={<Globe className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
             label="导出为网页 (HTML)"
             onClick={() => handle(() => exportAsStandaloneHtml())}
           />
@@ -137,8 +180,12 @@ function MenuRow({
         border: '1px solid transparent',
         cursor: 'pointer',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg-2)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+      }}
     >
       <div className="w-5 h-5 flex items-center justify-center shrink-0">{icon}</div>
       <span
