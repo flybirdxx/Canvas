@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '../store/useCanvasStore';
 import { useAssetLibraryStore } from '../store/useAssetLibraryStore';
+import { useGenerationHistoryStore } from '../store/useGenerationHistoryStore';
 import { useGenerationQueueStore } from '../store/useGenerationQueueStore';
 import {
   AIGeneratingElement,
@@ -125,7 +126,7 @@ const materializing = new Set<string>();
  * 导出供 `taskResume` 复用。对同一 placeholderId 并发调用是幂等的——
  * 第二次会被 `materializing` 集合挡住，不会出现重复节点。
  */
-export function replacePlaceholderWithImage(placeholderId: string, imageUrl: string, prompt: string) {
+export function replacePlaceholderWithImage(placeholderId: string, imageUrl: string, prompt: string, model?: string) {
   if (materializing.has(placeholderId)) return;
   materializing.add(placeholderId);
 
@@ -185,6 +186,17 @@ export function replacePlaceholderWithImage(placeholderId: string, imageUrl: str
     width,
     height,
     source: 'generated',
+  });
+
+  // Record to generation history so users can browse past results across nodes.
+  useGenerationHistoryStore.getState().addEntry({
+    id: uuidv4(),
+    elementId: newElement.id,
+    prompt,
+    model: model || '',
+    thumbnailUrl: imageUrl,
+    resultUrls: [imageUrl],
+    modality: 'image',
   });
 
   // 保留 claim 几秒再释放：虽然节点 id 已换新，后到者再跑时 store.elements
@@ -247,7 +259,7 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
       });
       return 'failure';
     }
-    replacePlaceholderWithImage(placeholderId, url, request.prompt);
+    replacePlaceholderWithImage(placeholderId, url, request.prompt, request.model);
     return 'success';
   }
 
