@@ -90,7 +90,7 @@ export function InfiniteCanvas() {
   
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   // Register the Konva Stage in the module-level registry so export utilities
   // can grab it without prop drilling. Clean up on unmount.
