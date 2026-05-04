@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { CanvasElement, Connection } from '../types/canvas';
+import { deleteBlob } from '../services/fileStorage';
 // [telemetry] file-node discovery（2 周观察窗，结束后删这一行 + 3 处 bumpTelemetry）
 import { bumpTelemetry } from '../services/fileNodeTelemetry';
 
@@ -339,6 +340,15 @@ export const useCanvasStore = create<CanvasState>()(
       }),
 
       deleteElements: (ids) => set((state) => {
+        // Clean up IndexedDB blobs for deleted file elements.
+        state.elements.forEach((el) => {
+          if (ids.includes(el.id) && el.type === 'file') {
+            const fileEl = el as import('../types/canvas').FileElement;
+            if (fileEl.persistence === 'blob' && fileEl.blobKey) {
+              deleteBlob(fileEl.blobKey).catch(() => {});
+            }
+          }
+        });
         const nextElements = state.elements.filter((el) => !ids.includes(el.id));
         const nextConnections = state.connections.filter((conn) => !ids.includes(conn.fromId) && !ids.includes(conn.toId));
         return {
