@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { FileElement } from '../types/canvas';
+import { storeBlob, blobKey, BLOB_THRESHOLD_BYTES } from './fileStorage';
 
 /**
  * 通用文件 → FileElement 适配层。两个入口共享同一套逻辑：
@@ -282,7 +283,27 @@ export async function buildFileElement(
   offset: { dx: number; dy: number } = { dx: 0, dy: 0 },
 ): Promise<FileElement> {
   const dataUrl = await readFileAsDataUrl(file);
+  const id = uuidv4();
   const mt = (file.type || '').toLowerCase();
+
+  let src: string;
+  let persistence: 'data' | 'blob' = 'data';
+  let blobStorageKey: string | undefined;
+
+  if (file.size > BLOB_THRESHOLD_BYTES) {
+    try {
+      blobStorageKey = blobKey(id);
+      await storeBlob(blobStorageKey, dataUrl);
+      persistence = 'blob';
+      src = '';
+    } catch (err) {
+      console.warn('[fileIngest] blob store failed, falling back to data', err);
+      persistence = 'data';
+      src = dataUrl;
+    }
+  } else {
+    src = dataUrl;
+  }
 
   let width: number;
   let height: number;
@@ -327,7 +348,7 @@ export async function buildFileElement(
   }
 
   const el: FileElement = {
-    id: uuidv4(),
+    id,
     type: 'file',
     x: origin.x + offset.dx - width / 2,
     y: origin.y + offset.dy - height / 2,
@@ -336,8 +357,9 @@ export async function buildFileElement(
     name: file.name,
     mimeType: file.type || '',
     sizeBytes: file.size,
-    src: dataUrl,
-    persistence: 'data',
+    src,
+    persistence,
+    ...(blobStorageKey ? { blobKey: blobStorageKey } : {}),
     thumbnailDataUrl,
     durationMs,
     pageCount,
