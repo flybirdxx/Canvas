@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, ChevronDown, Scissors, Frame, SquareDashed, FileImage } from 'lucide-react';
+import { Download, ChevronDown, Scissors, Frame, SquareDashed, FileImage, FileText } from 'lucide-react';
 import { exportSelection, exportVisible } from '../utils/exportPng';
 import { exportSelectionAsSvg } from '../utils/exportSvg';
+import { exportViewportAsPdf, exportSelectionAsPdf } from '../utils/exportPdf';
 
 /**
  * ExportMenu — paper-chip dropdown anchored in TopBar.
@@ -88,6 +89,17 @@ export function ExportMenu() {
             icon={<FileImage className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
             label="导出为 SVG"
             onClick={() => handle(() => exportSelectionAsSvg())}
+          />
+          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
+          <MenuRow
+            icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--signal)' }} />}
+            label="导出为 PDF（视口尺寸）"
+            onClick={() => handle(() => exportViewportAsPdf())}
+          />
+          <MenuRow
+            icon={<FileText className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
+            label="导出为 PDF（A4）"
+            onClick={() => handle(() => exportSelectionAsPdf())}
           />
         </div>
       )}
