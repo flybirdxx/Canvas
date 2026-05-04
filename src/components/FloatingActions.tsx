@@ -11,9 +11,9 @@ export function FloatingActions({ onOpenTemplates, onOpenChat }: FloatingActions
       className="anim-fade-in"
       style={{
         position: 'absolute',
-        right: 24,
-        top: '50%',
-        transform: 'translateY(-60%)',
+        right: 16,
+        bottom: 120,
+        transform: 'none',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,

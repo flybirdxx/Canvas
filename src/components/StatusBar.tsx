@@ -11,7 +11,7 @@ export function StatusBar() {
   const zoom = Math.round(stageConfig.scale * 100);
 
   return (
-    <div className="anim-fade-in" style={{ position:'absolute', bottom:28, left:28, display:'flex', alignItems:'center', gap:4, zIndex:30, pointerEvents:'auto' }}>
+    <div className="anim-fade-in" style={{ position:'absolute', bottom:12, left:16, display:'flex', alignItems:'center', gap:4, zIndex:30, pointerEvents:'auto' }}>
       <CtrlBtn onClick={undo} disabled={past.length===0} title="Undo Ctrl+Z"><Undo2 strokeWidth={1.8} /></CtrlBtn>
       <CtrlBtn onClick={redo} disabled={future.length===0} title="Redo Ctrl+Y"><Redo2 strokeWidth={1.8} /></CtrlBtn>
       <CtrlBtn title="Layers"><Layers strokeWidth={1.8} /></CtrlBtn>

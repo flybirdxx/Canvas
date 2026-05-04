@@ -19,8 +19,8 @@ export function GenerationHistoryPanel() {
       className="z-30 pointer-events-auto select-none anim-fade-in"
       style={{
         position: 'absolute',
-        bottom: 72,
-        right: 312,
+        bottom: 68,
+        right: 200,
         width: panelOpen ? 280 : 'auto',
       }}
     >

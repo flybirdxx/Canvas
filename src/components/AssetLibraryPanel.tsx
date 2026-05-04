@@ -110,7 +110,7 @@ export function AssetLibraryPanel() {
   return (
     <div
       className="absolute z-20 flex items-end gap-2 anim-fade-in"
-      style={{ bottom: 56, left: 76 }}
+      style={{ bottom: 68, left: 16 }}
     >
       <button
         onClick={() => setIsOpen(v => !v)}

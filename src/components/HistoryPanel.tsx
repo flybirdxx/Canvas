@@ -36,7 +36,7 @@ export function HistoryPanel() {
   return (
     <div
       className="absolute z-20 flex items-end gap-2 anim-fade-in"
-      style={{ bottom: 56, right: 16 }}
+      style={{ bottom: 68, right: 16 }}
     >
       {isOpen && (
         <div
