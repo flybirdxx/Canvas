@@ -809,6 +809,25 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   const nNum = Math.max(1, Number(count) || 1);
   const totalPrice = unitPrice ? unitPrice.amount * nNum : undefined;
 
+  // Compute estimated cost for current model + settings
+  const costEstimate = useMemo(() => {
+    const modelId = element.generation?.model;
+    if (!modelId) return undefined;
+    const found = findModel(modelId);
+    if (!found) return undefined;
+    const cnt = parseInt(String(element.generation?.count || '1'), 10) || 1;
+    const unit = computeUnitPrice(found.model, {
+      resolution: element.generation?.quality,
+      qualityLevel: element.generation?.qualityLevel,
+    });
+    if (!unit) return undefined;
+    return {
+      unit,
+      total: { amount: unit.amount * cnt, currency: unit.currency },
+      count: cnt,
+    };
+  }, [element.generation?.model, element.generation?.quality, element.generation?.qualityLevel, element.generation?.count]);
+
   return (
     <div
       className="absolute z-10 pointer-events-auto"
@@ -1271,6 +1290,22 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
                     : '—'}
                 </span>
               </div>
+              {costEstimate && (
+                <span
+                  className="chip-meta mono"
+                  style={{
+                    fontSize: 9.5,
+                    padding: '2px 6px',
+                    background: 'var(--bg-3)',
+                    color: 'var(--ink-2)',
+                    borderRadius: 'var(--r-sm)',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`单价 ${costEstimate.unit.currency}${costEstimate.unit.amount.toFixed(2)} × ${costEstimate.count} 张`}
+                >
+                  约 {costEstimate.total.currency}{costEstimate.total.amount.toFixed(2)}
+                </span>
+              )}
               <button
                 type="submit"
                 disabled={
