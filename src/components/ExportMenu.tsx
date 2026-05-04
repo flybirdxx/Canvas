@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, ChevronDown, Scissors, Frame, SquareDashed } from 'lucide-react';
+import { Download, ChevronDown, Scissors, Frame, SquareDashed, FileImage } from 'lucide-react';
 import { exportSelection, exportVisible } from '../utils/exportPng';
+import { exportSelectionAsSvg } from '../utils/exportSvg';
 
 /**
  * ExportMenu — paper-chip dropdown anchored in TopBar.
@@ -81,6 +82,12 @@ export function ExportMenu() {
             icon={<Frame className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--success)' }} />}
             label="导出可视区"
             onClick={() => handle(() => exportVisible())}
+          />
+          <div style={{ height: 1, background: 'var(--bg-3)', margin: '4px 0' }} />
+          <MenuRow
+            icon={<FileImage className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
+            label="导出为 SVG"
+            onClick={() => handle(() => exportSelectionAsSvg())}
           />
         </div>
       )}
