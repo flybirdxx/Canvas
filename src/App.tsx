@@ -8,6 +8,7 @@ import { AssetLibraryPanel } from './components/AssetLibraryPanel';
 import { TemplatesModal } from './components/TemplatesModal';
 import { AlignmentToolbar } from './components/AlignmentToolbar';
 import { GenerationQueuePanel } from './components/GenerationQueuePanel';
+import { GenerationHistoryPanel } from './components/GenerationHistoryPanel';
 import { Atmosphere } from './components/Atmosphere';
 import { StatusBar } from './components/StatusBar';
 import { TopBar } from './components/chrome/TopBar';
@@ -281,6 +282,7 @@ export default function App() {
       <AssetLibraryPanel />
       <AlignmentToolbar />
       <GenerationQueuePanel />
+      <GenerationHistoryPanel />
       <StatusBar />
 
       {/* Tool hint when not select — tiny serif chip at the top-center
