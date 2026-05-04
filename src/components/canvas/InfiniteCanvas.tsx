@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Stage, Layer, Rect, Line, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
@@ -15,6 +15,7 @@ import { exportCanvasRect } from '../../utils/exportPng';
 import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
 import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
 import { buildFileElement } from '../../services/fileIngest';
+import { runGeneration } from '../../services/imageGeneration';
 
 // Bar 的宽度和间距用画布单位表达，由 CSS transform:scale 在渲染时等比缩放。
 // 各模式底栏最小宽度——仅用于"用户把节点手动缩得很小时"的保护兜底。
@@ -623,6 +624,19 @@ export function InfiniteCanvas() {
     setQuickAddMenu(null);
   };
 
+  // Nodes eligible for batch generation: selected image/video nodes that
+  // have both a non-empty prompt and a configured model.
+  const batchTargets = useMemo(() => {
+    if (selectedIds.length < 2) return [];
+    return elements.filter(
+      (el) =>
+        selectedIds.includes(el.id) &&
+        (el.type === 'image' || el.type === 'video') &&
+        el.prompt?.trim() &&
+        el.generation?.model,
+    );
+  }, [elements, selectedIds]);
+
   return (
     <div 
       ref={containerRef} 
@@ -914,6 +928,62 @@ export function InfiniteCanvas() {
         </div>
       )}
 
+      {/* Batch generation toolbar — appears when 2+ eligible generation nodes are selected */}
+      {batchTargets.length >= 2 && (
+        <div
+          className="chip-paper absolute z-35 flex items-center gap-1.5 anim-fade-in"
+          style={{
+            top: 80,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '4px 6px',
+            borderRadius: 'var(--r-pill)',
+            boxShadow: 'var(--shadow-ink-2)',
+          }}
+        >
+          <span className="serif-it" style={{ fontSize: 11.5, paddingLeft: 4, color: 'var(--ink-0)' }}>
+            已选 {batchTargets.length} 个生成节点
+          </span>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '5px 14px', fontSize: 11, borderRadius: 'var(--r-pill)' }}
+            onClick={async () => {
+              // Sequentially trigger generation for each target.
+              // Each target is in-place replaced with an AIGeneratingElement placeholder,
+              // then runGeneration handles the rest.
+              for (const target of batchTargets) {
+                const phId = uuidv4();
+                const store = useCanvasStore.getState();
+                store.replaceElement(target.id, {
+                  id: phId,
+                  type: 'aigenerating',
+                  x: target.x,
+                  y: target.y,
+                  width: target.width,
+                  height: target.height,
+                  inheritedVersions: (target as any).versions,
+                  inheritedPrompt: target.prompt,
+                } as any, '批量生成');
+                await runGeneration([phId], {
+                  model: target.generation!.model!,
+                  prompt: target.prompt!,
+                  size: `${target.width}x${target.height}`,
+                  aspect: target.generation?.aspect,
+                  resolution: target.generation?.quality,
+                  qualityLevel: target.generation?.qualityLevel,
+                  n: 1,
+                  w: target.width,
+                  h: target.height,
+                  references: target.generation?.references,
+                });
+              }
+            }}
+          >
+            全部生成
+          </button>
+        </div>
+      )}
+
       {/* Marquee-export UI overlays */}
       {marquee.active && (
         <>
@@ -994,46 +1064,6 @@ export function InfiniteCanvas() {
         </>
       )}
 
-      {/* Mini Zoom Control — sits bottom-left under the ToolDock */}
-      <div
-        className="chip-paper chip-paper--flat absolute flex items-center mono"
-        style={{
-          bottom: 16,
-          left: 16,
-          padding: '2px 4px',
-          fontSize: 10.5,
-          color: 'var(--ink-1)',
-          zIndex: 30,
-        }}
-      >
-        <button
-          className="btn btn-ghost btn-icon"
-          style={{ width: 22, height: 22, padding: 0 }}
-          onClick={() => setStageConfig({ scale: Math.max(0.1, stageConfig.scale / 1.1) })}
-        >
-          −
-        </button>
-        <span
-          style={{
-            minWidth: 40,
-            textAlign: 'center',
-            color: stageConfig.scale < 0.2 ? 'var(--ink-2)' : 'var(--ink-0)',
-            fontWeight: stageConfig.scale < 0.2 ? 400 : 500,
-            fontStyle: stageConfig.scale < 0.2 ? 'italic' : 'normal',
-            opacity: stageConfig.scale < 0.15 ? 0.55 : 1,
-          }}
-          title={stageConfig.scale < 0.2 ? 'Zoom is very low' : undefined}
-        >
-          {Math.round(stageConfig.scale * 100)}%
-        </span>
-        <button
-          className="btn btn-ghost btn-icon"
-          style={{ width: 22, height: 22, padding: 0 }}
-          onClick={() => setStageConfig({ scale: Math.min(5, stageConfig.scale * 1.1) })}
-        >
-          +
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { ImageIcon, Video, MapPin, X, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { ImageIcon, Video, MapPin, X, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useGenerationHistoryStore, GenHistoryEntry } from '../store/useGenerationHistoryStore';
 import { useCanvasStore } from '../store/useCanvasStore';
 
@@ -9,6 +10,8 @@ export function GenerationHistoryPanel() {
   const setSelection = useCanvasStore(s => s.setSelection);
   const elements = useCanvasStore(s => s.elements);
 
+  const [panelOpen, setPanelOpen] = useState(false);
+
   if (entries.length === 0) return null;
 
   return (
@@ -16,45 +19,78 @@ export function GenerationHistoryPanel() {
       className="z-30 pointer-events-auto select-none anim-fade-in"
       style={{
         position: 'absolute',
-        bottom: 48,
+        bottom: 72,
         right: 312,
-        width: 280,
-        maxHeight: 'calc(100vh - 300px)',
+        width: panelOpen ? 280 : 'auto',
       }}
     >
-      <div
-        className="chip-paper flex flex-col overflow-hidden"
-        style={{ boxShadow: 'var(--shadow-ink-2)' }}
-      >
-        <div
-          className="flex items-center justify-between"
-          style={{ padding: '8px 12px', borderBottom: '1px solid var(--line-1)' }}
+      {/* Collapsed chip — just a hint */}
+      {!panelOpen && (
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          className="chip-paper flex items-center gap-2 transition-colors"
+          style={{
+            padding: '6px 10px',
+            boxShadow: 'var(--shadow-ink-2)',
+            border: '1px solid var(--line-1)',
+            borderRadius: 'var(--r-pill)',
+            cursor: 'pointer',
+            background: 'var(--bg-2)',
+          }}
         >
-          <span className="serif" style={{ fontSize: 12.5, fontWeight: 500 }}>
-            生成历史
+          <History className="w-3.5 h-3.5" strokeWidth={1.8} style={{ color: 'var(--ink-2)' }} />
+          <span className="serif" style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-0)' }}>
+            {entries.length} 条历史
           </span>
-          <button
-            onClick={clearAll}
-            className="btn btn-ghost"
-            style={{ padding: '2px 6px', fontSize: 10 }}
+        </button>
+      )}
+
+      {/* Expanded panel */}
+      {panelOpen && (
+        <div
+          className="chip-paper flex flex-col overflow-hidden"
+          style={{ boxShadow: 'var(--shadow-ink-2)' }}
+        >
+          <div
+            className="flex items-center justify-between"
+            style={{ padding: '7px 12px', borderBottom: '1px solid var(--line-1)' }}
           >
-            清空
-          </button>
+            <span className="serif" style={{ fontSize: 12.5, fontWeight: 500 }}>
+              生成历史
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={clearAll}
+                className="btn btn-ghost"
+                style={{ padding: '2px 6px', fontSize: 10 }}
+              >
+                清空
+              </button>
+              <button
+                onClick={() => setPanelOpen(false)}
+                className="btn btn-ghost btn-icon"
+                style={{ width: 22, height: 22, padding: 0 }}
+              >
+                <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.6} />
+              </button>
+            </div>
+          </div>
+          <div className="paper-scroll overflow-y-auto flex-1 min-h-0" style={{ maxHeight: 220 }}>
+            {entries.slice(0, 50).map((entry) => (
+              <HistoryRow
+                key={entry.id}
+                entry={entry}
+                onLocate={() => {
+                  const live = elements.find(el => el.id === entry.elementId);
+                  if (live) setSelection([entry.elementId]);
+                }}
+                onRemove={() => removeEntry(entry.id)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="paper-scroll overflow-y-auto flex-1 min-h-0" style={{ maxHeight: 300 }}>
-          {entries.slice(0, 50).map((entry) => (
-            <HistoryRow
-              key={entry.id}
-              entry={entry}
-              onLocate={() => {
-                const live = elements.find(el => el.id === entry.elementId);
-                if (live) setSelection([entry.elementId]);
-              }}
-              onRemove={() => removeEntry(entry.id)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
