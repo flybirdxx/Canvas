@@ -133,6 +133,13 @@ export interface ImageGenRequest {
    */
   maskImage?: string;
   /**
+   * F3 fix: AbortSignal for request cancellation.
+   * When aborted, the underlying fetch call is cancelled and the
+   * promise rejects as AbortError, allowing the execution engine to
+   * reset the node to idle instead of failed.
+   */
+  signal?: AbortSignal;
+  /**
    * 异步 provider（如 RunningHub）在提交成功、开始轮询前会调用此回调告知
    * 上层 taskId。上层利用该信号把 `taskId` 持久化到 placeholder 上，这样
    * 即便本次轮询超时、甚至页面刷新，下次启动也能凭这个 taskId 接着查任务。
@@ -155,6 +162,8 @@ export interface ImageGenFailure {
   kind: GatewayErrorKind;
   message: string;
   detail?: string;
+  /** F3 fix: true when the request was aborted by an AbortSignal. */
+  aborted?: boolean;
 }
 
 /**

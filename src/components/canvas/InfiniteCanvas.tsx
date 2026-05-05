@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { Stage, Layer, Rect, Line, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
@@ -16,6 +16,7 @@ import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
 import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
 import { buildFileElement } from '../../services/fileIngest';
 import { runGeneration } from '../../services/imageGeneration';
+import { findSnapTargets, type GuideLine } from '../../utils/alignmentUtils';
 
 // Bar 的宽度和间距用画布单位表达，由 CSS transform:scale 在渲染时等比缩放。
 // 各模式底栏最小宽度——仅用于"用户把节点手动缩得很小时"的保护兜底。
@@ -112,6 +113,9 @@ export function InfiniteCanvas() {
     height: number;
   } | null>(null);
 
+  // FR1: Alignment snapping — guide lines rendered in canvas space
+  const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
+
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
   // Marquee-export tool mode. `active` means we're in the mode (awaiting draw or
@@ -144,17 +148,29 @@ export function InfiniteCanvas() {
     return () => window.removeEventListener('keydown', onKey);
   }, [marquee.active]);
 
+  const isPanningRef = useRef(false);
+  const lastPanPositionRef = useRef({ x: 0, y: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // FR1: Track Alt/Shift key state for snapping override and additive marquee selection
+  const isAltRef = useRef(false);
+  const isShiftRef = useRef(false);
+
+  // Unified keyboard listener: Space (pan mode) + Alt (snap override) + Shift (additive marquee).
+  // Previously three separate useEffects each registering their own keydown/keyup listeners,
+  // causing double-firing when HMR remounted without cleanup.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         setIsSpacePressed(true);
       }
+      if (e.key === 'Alt') isAltRef.current = true;
+      if (e.key === 'Shift') isShiftRef.current = true;
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        setIsSpacePressed(false);
-      }
+      if (e.code === 'Space') setIsSpacePressed(false);
+      if (e.key === 'Alt') isAltRef.current = false;
+      if (e.key === 'Shift') isShiftRef.current = false;
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -164,10 +180,120 @@ export function InfiniteCanvas() {
     };
   }, []);
 
-  // Refs for tracking manual middle-mouse panning
-  const isPanningRef = useRef(false);
-  const lastPanPositionRef = useRef({ x: 0, y: 0 });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const snapOnDragMove = useCallback((id: string, dx: number, dy: number, originX: number, originY: number, width: number, height: number) => {
+    const store = useCanvasStore.getState();
+    const allElements = store.elements;
+    const groups = store.groups;
+
+    const newX = originX + dx;
+    const newY = originY + dy;
+
+    // Alt: suppress snapping but move freely
+    if (isAltRef.current) {
+      const group = groups.find(g => g.childIds.includes(id));
+      if (group) {
+        // Synchronously update all group members' positions via a single set()
+        // so the React re-render from setGuideLines sees correct positions.
+        const updates = new Map<string, { x: number; y: number }>();
+        for (const sid of group.childIds) {
+          if (sid === id) { updates.set(sid, { x: newX, y: newY }); continue; }
+          const sibling = allElements.find(el => el.id === sid);
+          if (sibling) updates.set(sid, { x: sibling.x + dx, y: sibling.y + dy });
+        }
+        useCanvasStore.setState({
+          elements: allElements.map(el => {
+            const u = updates.get(el.id);
+            return u ? ({ ...el, x: u.x, y: u.y }) : el;
+          }),
+        });
+      } else {
+        store.updateElementPosition(id, newX, newY);
+      }
+      setGuideLines([]);
+      return;
+    }
+
+    const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
+    const finalDx = dx + result.snapDx;
+    const finalDy = dy + result.snapDy;
+
+    // Update the store synchronously BEFORE calling setGuideLines.
+    // This is critical: setGuideLines triggers a React re-render; if the store
+    // still has stale positions, Konva Groups receive old x/y props and the node
+    // visually jumps back for one frame → the flickering bug.
+    const group = groups.find(g => g.childIds.includes(id));
+    if (group) {
+      const updates = new Map<string, { x: number; y: number }>();
+      for (const sid of group.childIds) {
+        if (sid === id) { updates.set(sid, { x: newX + result.snapDx, y: newY + result.snapDy }); continue; }
+        const sibling = allElements.find(el => el.id === sid);
+        if (sibling) updates.set(sid, { x: sibling.x + finalDx, y: sibling.y + finalDy });
+      }
+      useCanvasStore.setState({
+        elements: allElements.map(el => {
+          const u = updates.get(el.id);
+          return u ? ({ ...el, x: u.x, y: u.y }) : el;
+        }),
+      });
+    } else {
+      store.updateElementPosition(id, newX + result.snapDx, newY + result.snapDy);
+    }
+
+    setGuideLines(result.guideLines);
+  }, []);
+
+  const snapOnDragEnd = useCallback((id: string, finalX: number, finalY: number) => {
+    const allElements = useCanvasStore.getState().elements;
+    const groups = useCanvasStore.getState().groups;
+    const el = allElements.find(n => n.id === id);
+
+    // FR1 grouping: if element belongs to a group, commit all siblings in one undo step
+    const group = groups.find(g => g.childIds.includes(id));
+    if (group && el) {
+      const finalDx = finalX - el.x;
+      const finalDy = finalY - el.y;
+      const allUpdates = group.childIds.map(sid => {
+        const sibling = allElements.find(e => e.id === sid);
+        return sibling ? { id: sid, x: sibling.x + finalDx, y: sibling.y + finalDy } : null;
+      }).filter((u): u is { id: string; x: number; y: number } => u !== null);
+      if (allUpdates.length > 0) {
+        useCanvasStore.getState().batchUpdatePositions(allUpdates);
+      }
+    } else if (el) {
+      useCanvasStore.getState().batchUpdatePositions([{ id, x: finalX, y: finalY }]);
+    }
+
+    setGuideLines([]);
+  }, []);
+
+  const snapOnResizeMove = useCallback((id: string, newX: number, newY: number, newW: number, newH: number) => {
+    if (isAltRef.current) {
+      // FR1 grouping: Alt+resize suppresses snapping but still updates the element.
+      // Group-level proportional resize is complex (requires group bounding box recomputation)
+      // and is tracked as a separate enhancement; for now we update only the dragged element.
+      useCanvasStore.getState().updateElement(id, { x: newX, y: newY, width: newW, height: newH });
+      setGuideLines([]);
+      return;
+    }
+
+    const allElements = useCanvasStore.getState().elements;
+    const el = allElements.find(n => n.id === id);
+    if (!el) return;
+
+    const result = findSnapTargets(id, allElements, newX - el.x, newY - el.y, newW, newH, el.x, el.y);
+    useCanvasStore.getState().updateElement(id, {
+      x: el.x + result.snapDx,
+      y: el.y + result.snapDy,
+      width: newW,
+      height: newH,
+    });
+    setGuideLines(result.guideLines);
+  }, []);
+
+  const snapOnResizeEnd = useCallback((id: string, finalX: number, finalY: number, finalW: number, finalH: number) => {
+    useCanvasStore.getState().updateElement(id, { x: finalX, y: finalY, width: finalW, height: finalH });
+    setGuideLines([]);
+  }, []);
 
   // Handle Resize
   useEffect(() => {
@@ -232,7 +358,7 @@ export function InfiniteCanvas() {
       return;
     }
 
-    if (e.evt.button === 1 || (e.evt.button === 0 && isSpacePressed)) {
+    if ((e.evt.button === 1 || (e.evt.button === 0 && isSpacePressed)) && !marquee.active) {
       e.evt.preventDefault();
       isPanningRef.current = true;
       lastPanPositionRef.current = { x: e.evt.clientX, y: e.evt.clientY };
@@ -240,7 +366,6 @@ export function InfiniteCanvas() {
     }
 
     if (activeTool === 'select' && e.target === e.target.getStage()) {
-      setSelection([]);
       const stage = e.target.getStage();
       if (!stage) return;
       const pointer = stage.getPointerPosition();
@@ -286,29 +411,31 @@ export function InfiniteCanvas() {
       return;
     }
 
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
-    
-    const scale = stage.scaleX();
-    const currentX = (pointer.x - stage.x()) / scale;
-    const currentY = (pointer.y - stage.y()) / scale;
-
-    if (drawingConnection) {
-      if (drawingConnection.isDisconnecting) {
-        setDrawingConnection({ ...drawingConnection, startX: currentX, startY: currentY });
-      } else {
-        setDrawingConnection({ ...drawingConnection, toX: currentX, toY: currentY });
-      }
-      return;
-    }
-
     if (selectionBox) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const scale = stage.scaleX();
+      const currentX = (pointer.x - stage.x()) / scale;
+      const currentY = (pointer.y - stage.y()) / scale;
       const newX = Math.min(selectionBox.startX, currentX);
       const newY = Math.min(selectionBox.startY, currentY);
       const newWidth = Math.abs(currentX - selectionBox.startX);
       const newHeight = Math.abs(currentY - selectionBox.startY);
       setSelectionBox({ ...selectionBox, x: newX, y: newY, width: newWidth, height: newHeight });
       return;
+    }
+
+    if (drawingConnection) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const scale = stage.scaleX();
+      const currentX = (pointer.x - stage.x()) / scale;
+      const currentY = (pointer.y - stage.y()) / scale;
+      if (drawingConnection.isDisconnecting) {
+        setDrawingConnection({ ...drawingConnection, startX: currentX, startY: currentY });
+      } else {
+        setDrawingConnection({ ...drawingConnection, toX: currentX, toY: currentY });
+      }
     }
   };
 
@@ -373,6 +500,39 @@ export function InfiniteCanvas() {
       return;
     }
 
+    // Marquee selection: evaluate before connection logic to avoid race condition.
+    if (selectionBox) {
+      // AC4: AND threshold — both width AND height must exceed 5px to count as
+      // a deliberate marquee. A thin strip in one axis only (e.g. 1×100px) is
+      // treated as an accidental drag and collapses to a click → clear selection.
+      if (selectionBox.width > 5 && selectionBox.height > 5) {
+        // AABB collision — exclude locked nodes
+        const candidateIds = elements
+          .filter(el =>
+            el.x < selectionBox.x + selectionBox.width &&
+            el.x + el.width > selectionBox.x &&
+            el.y < selectionBox.y + selectionBox.height &&
+            el.y + el.height > selectionBox.y &&
+            !(el as any).isLocked
+          )
+          .map(el => el.id);
+
+        if (isShiftRef.current) {
+          // Additive: merge marquee hits into existing selection
+          const merged = Array.from(new Set([...selectedIds, ...candidateIds]));
+          setSelection(merged);
+        } else {
+          // Replace: only marquee hits
+          setSelection(candidateIds);
+        }
+      } else {
+        // Tiny drag (< 5×5) = click on empty area → clear selection
+        setSelection([]);
+      }
+      setSelectionBox(null);
+      return;
+    }
+
     if (drawingConnection) {
       const stage = e.target.getStage();
       if (stage) {
@@ -381,9 +541,9 @@ export function InfiniteCanvas() {
           const scale = stage.scaleX();
           const currentX = (pointer.x - stage.x()) / scale;
           const currentY = (pointer.y - stage.y()) / scale;
-          
+
           const target = findPortUnderMouse(elements, currentX, currentY, !drawingConnection.isDisconnecting, drawingConnection.fromPortType || 'any');
-          
+
           if (target && target.element.id !== drawingConnection.fromElementId) {
             const compatible = drawingConnection.fromPortType === 'any' || target.port.type === 'any' || drawingConnection.fromPortType === target.port.type;
             if (compatible) {
@@ -400,7 +560,7 @@ export function InfiniteCanvas() {
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect) {
                setQuickAddMenu({
-                 x: pointer.x, // Use Konva's local pointer relative to container
+                 x: pointer.x,
                  y: pointer.y,
                  canvasX: currentX,
                  canvasY: currentY,
@@ -413,22 +573,6 @@ export function InfiniteCanvas() {
         }
       }
       setDrawingConnection(null);
-      return;
-    }
-
-    if (selectionBox) {
-      if (selectionBox.width > 5 && selectionBox.height > 5) {
-        // Find all nodes inside the box
-        const selectedIds = elements.filter(el => {
-           // AABB collision detection
-           return el.x < selectionBox.x + selectionBox.width &&
-                  el.x + el.width > selectionBox.x &&
-                  el.y < selectionBox.y + selectionBox.height &&
-                  el.y + el.height > selectionBox.y;
-        }).map(el => el.id);
-        setSelection(selectedIds);
-      }
-      setSelectionBox(null);
       return;
     }
   };
@@ -747,21 +891,28 @@ export function InfiniteCanvas() {
             />
           )}
 
-          <CanvasElements />
+          <CanvasElements
+            guideLines={guideLines}
+            snapCallbacks={{
+              onDragMove: snapOnDragMove,
+              onDragEnd: snapOnDragEnd,
+              onResizeMove: snapOnResizeMove,
+              onResizeEnd: snapOnResizeEnd,
+            }}
+          />
           
-          {/* Selection box — hand-drawn ink dashed rect */}
-          {selectionBox && (
+          {/* Selection box — blue marquee */}
+          {selectionBox && selectionBox.width > 0 && selectionBox.height > 0 && (
              <Rect
                 x={selectionBox.x}
                 y={selectionBox.y}
                 width={selectionBox.width}
                 height={selectionBox.height}
-                fill="rgba(40, 30, 20, 0.04)"
-                stroke={INK_LINE}
-                strokeWidth={1.2}
-                dash={[6, 4]}
-                cornerRadius={4}
-                opacity={0.75}
+                fill="rgba(59,130,246,0.08)"
+                stroke="#3B82F6"
+                strokeWidth={1.2 / stageConfig.scale}
+                dash={[6 / stageConfig.scale, 5 / stageConfig.scale]}
+                cornerRadius={4 / stageConfig.scale}
              />
           )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Sparkles, Search } from 'lucide-react';
+import { X, Sparkles, Search, Save, Trash2 } from 'lucide-react';
 import {
   BUILTIN_TEMPLATES,
   TEMPLATE_CATEGORIES,
@@ -7,6 +7,8 @@ import {
   TemplateCategory,
 } from '../data/templates';
 import { instantiateTemplate } from '../utils/instantiateTemplate';
+import { useUserTemplatesStore } from '../store/useUserTemplatesStore';
+import { SaveTemplateModal } from './SaveTemplateModal';
 
 type FilterKey = 'all' | TemplateCategory;
 
@@ -18,6 +20,10 @@ interface TemplatesModalProps {
 export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [query, setQuery] = useState('');
+  const [isSaveOpen, setIsSaveOpen] = useState(false);
+
+  const userTemplates = useUserTemplatesStore(s => s.templates);
+  const deleteTemplate = useUserTemplatesStore(s => s.deleteTemplate);
 
   useEffect(() => {
     if (!open) return;
@@ -28,8 +34,21 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const handleDelete = (tpl: CanvasTemplate) => {
+    if (confirm(`删除模板「${tpl.name}」？此操作不可撤销。`)) {
+      deleteTemplate(tpl.id);
+    }
+  };
+
+  const allTemplates = useMemo(
+    () => [...BUILTIN_TEMPLATES, ...userTemplates],
+    [userTemplates],
+  );
+
   const filtered = useMemo(() => {
-    const byCat = filter === 'all' ? BUILTIN_TEMPLATES : BUILTIN_TEMPLATES.filter(t => t.category === filter);
+    const byCat = filter === 'all'
+      ? allTemplates
+      : allTemplates.filter(t => t.category === filter);
     const q = query.trim().toLowerCase();
     if (!q) return byCat;
     return byCat.filter(t =>
@@ -37,7 +56,7 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
       t.description.toLowerCase().includes(q) ||
       (t.tags ?? []).some(tag => tag.toLowerCase().includes(q)),
     );
-  }, [filter, query]);
+  }, [allTemplates, filter, query]);
 
   if (!open) return null;
 
@@ -47,27 +66,33 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center anim-fade-in"
-      style={{ background: 'color-mix(in oklch, var(--ink-0) 32%, transparent)', backdropFilter: 'blur(6px)' }}
-      onClick={onClose}
-    >
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center anim-fade-in"
+        style={{ background: 'color-mix(in oklch, var(--ink-0) 32%, transparent)', backdropFilter: 'blur(6px)', zIndex: 50 }}
+        onClick={onClose}
+      />
       <div
         className="chip-paper anim-pop flex flex-col overflow-hidden"
         style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           width: 880,
           maxWidth: '95vw',
           height: 620,
           maxHeight: '90vh',
           borderRadius: 'var(--r-xl)',
           boxShadow: 'var(--shadow-ink-3)',
+          zIndex: 51,
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
           className="hairline-b flex items-center justify-between"
-          style={{ padding: '12px 20px', background: 'var(--bg-2)' }}
+          style={{ padding: '12px 20px', background: 'var(--bg-2)', flexShrink: 0 }}
         >
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />
@@ -78,15 +103,27 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
               一键创建常用场景
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-ghost btn-icon"
-            style={{ width: 28, height: 28, borderRadius: '50%' }}
-            title="关闭 (Esc)"
-          >
-            <X className="w-4 h-4" strokeWidth={1.6} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsSaveOpen(true)}
+              className="btn btn-ghost"
+              style={{ padding: '4px 10px', fontSize: 12, gap: 4 }}
+              title="将当前画布保存为自定义模板"
+            >
+              <Save className="w-3.5 h-3.5" strokeWidth={1.6} />
+              保存画布
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-ghost btn-icon"
+              style={{ width: 28, height: 28, borderRadius: '50%' }}
+              title="关闭 (Esc)"
+            >
+              <X className="w-4 h-4" strokeWidth={1.6} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex min-h-0">
@@ -96,7 +133,7 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
             style={{ width: 168, padding: 10, gap: 2, background: 'var(--bg-2)', flexShrink: 0 }}
           >
             <SideTab active={filter === 'all'} onClick={() => setFilter('all')}>
-              全部 · {BUILTIN_TEMPLATES.length}
+              全部 · {BUILTIN_TEMPLATES.length + userTemplates.length}
             </SideTab>
             {TEMPLATE_CATEGORIES.map(cat => (
               <SideTab
@@ -104,7 +141,7 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
                 active={filter === cat}
                 onClick={() => setFilter(cat)}
               >
-                {cat} · {BUILTIN_TEMPLATES.filter(t => t.category === cat).length}
+                {cat} · {BUILTIN_TEMPLATES.filter(t => t.category === cat).length + userTemplates.filter(t => t.category === cat).length}
               </SideTab>
             ))}
 
@@ -156,16 +193,25 @@ export function TemplatesModal({ open, onClose }: TemplatesModalProps) {
                 </div>
               ) : (
                 <div className="grid grid-cols-2" style={{ gap: 12 }}>
-                  {filtered.map(tpl => (
-                    <TemplateCard key={tpl.id} template={tpl} onUse={() => use(tpl)} />
-                  ))}
+                  {filtered.map(tpl => {
+                    const isBuiltin = BUILTIN_TEMPLATES.some(b => b.id === tpl.id);
+                    return (
+                      <TemplateCard
+                        key={tpl.id}
+                        template={tpl}
+                        onUse={() => use(tpl)}
+                        onDelete={isBuiltin ? undefined : () => handleDelete(tpl)}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
-    </div>
+      <SaveTemplateModal open={isSaveOpen} onClose={() => setIsSaveOpen(false)} />
+    </>
   );
 }
 
@@ -202,9 +248,11 @@ function SideTab({
 function TemplateCard({
   template,
   onUse,
+  onDelete,
 }: {
   template: CanvasTemplate;
   onUse: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div
@@ -264,6 +312,17 @@ function TemplateCard({
               {template.description}
             </p>
           </div>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="btn btn-ghost btn-icon"
+              style={{ width: 22, height: 22, flexShrink: 0, opacity: 0.6 }}
+              title="删除模板"
+            >
+              <Trash2 className="w-3 h-3" strokeWidth={1.8} />
+            </button>
+          )}
         </div>
 
         {template.tags && template.tags.length > 0 && (

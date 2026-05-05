@@ -6,7 +6,16 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(npx tsc *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npx skills *)",
+      "Read(//c/Users/Administrator/.claude/**)",
+      "WebFetch(domain:skills.sh)",
+      "Bash(npm list *)",
+      "Bash(npx bmad *)",
+      "Bash(npm view *)",
+      "Bash(python3 _bmad/scripts/resolve_customization.py --skill \".claude/skills/bmad-generate-project-context\" --key workflow)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
     ]
   }
 }

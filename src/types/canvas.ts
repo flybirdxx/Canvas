@@ -1,4 +1,4 @@
-export type ElementType = 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'aigenerating' | 'file';
+export type ElementType = 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'aigenerating' | 'file' | 'script' | 'scene';
 
 export type DataType = 'any' | 'text' | 'image' | 'video' | 'audio';
 
@@ -189,6 +189,8 @@ export interface PendingGenerationTask {
     h: number;
     references?: string[];
     maskImage?: string;
+    /** F2 fix: execId of the run that submitted this task. Enables taskResume to update the correct run's node status. */
+    execId?: string;
   };
 }
 
@@ -262,4 +264,43 @@ export interface Connection {
   toPortId: string;
 }
 
-export type CanvasElement = ShapeElement | TextElement | ImageElement | StickyElement | MediaElement | AIGeneratingElement | FileElement;
+/**
+ * F26: 分镜锚点 —— 从 Markdown 剧本中解析出的单个场次结构。
+ * `sceneNum` 为场次编号（如 1），`title` 为场次标题（如"咖啡厅相遇"），
+ * `content` 为该场次段落文本。
+ */
+export interface ParsedScene {
+  sceneNum: number;
+  title: string;
+  content: string;
+}
+
+/**
+ * F26: 剧本节点 —— 承载 Markdown 格式剧本，包含解析后的分镜锚点列表。
+ * 剧本节点是数据源，不接入工作流引擎的连线体系（无 inputs/outputs）。
+ */
+export interface ScriptElement extends BaseElement {
+  type: 'script';
+  /** Markdown 源代码内容 */
+  markdown: string;
+  /** 解析后的分镜锚点列表 */
+  scenes: ParsedScene[];
+  /** AC1 fix: 创建时设为 true，ScriptNode 自动进入编辑模式 */
+  isNew?: boolean;
+}
+
+/**
+ * F27: 分镜节点 —— 由剧本节点解析后创建的单场次卡片节点。
+ * 可独立于剧本节点存在（用户手动创建），也可通过 convertScriptToScenes
+ * 由剧本节点批量生成。`scriptId` 关联父剧本节点（用于双视图数据联动）。
+ */
+export interface SceneElement extends BaseElement {
+  type: 'scene';
+  sceneNum: number;
+  title: string;
+  content: string;
+  /** 关联的剧本节点 ID（用于双视图数据联动）。可缺省（独立 scene 节点）。 */
+  scriptId?: string;
+}
+
+export type CanvasElement = ShapeElement | TextElement | ImageElement | StickyElement | MediaElement | AIGeneratingElement | FileElement | ScriptElement | SceneElement;

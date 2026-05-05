@@ -144,8 +144,14 @@ async function runGenerations(
         // 即便 Provider 忽略该字段也不要紧，parseImageBody 会兼容两种返回。
         response_format: 'b64_json',
       }),
+      // F3 fix: propagate AbortSignal so cancelled requests abort immediately.
+      signal: req.signal,
     });
   } catch (e: any) {
+    // F3 fix: distinguish AbortError so executionEngine can reset to idle instead of failed.
+    if (e?.name === 'AbortError') {
+      return { ok: false, kind: 'network', message: '请求已取消', aborted: true } as any;
+    }
     return {
       ok: false,
       kind: 'network',

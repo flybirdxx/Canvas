@@ -1,0 +1,131 @@
+# generated: 2026-05-05
+# last_updated: 2026-05-05
+# project: Canvas
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - 建议实现顺序：Epic 3 (画布交互, 无依赖) → Epic 1 (运行引擎) → Epic 2 (分镜) → Epic 5 (局部重绘) → Epic 4 (导出模板) → Epic 6 (桌面壳)
+# - Epic 3/5/6 可与其他 Epic 并行
+
+generated: 2026-05-05
+last_updated: 2026-05-05T22:55:00+08:00
+project: Canvas
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+
+  # ===========================================================================
+  # Epic 1: 链式运行引擎
+  # 拓扑序执行选中子图，五状态流转，运行面板实时监控，失败不阻断。
+  # FRs: FR16, FR17, FR18, FR24, FR25
+  # Stories: 5
+  # ===========================================================================
+  epic-1: done
+
+  1-1-tuo-pu-pai-xu-huan-jian-ce: done
+  1-2-wu-zhuang-tai-ji: done
+  1-3-shi-shi-yun-xing-mian-ban: done
+  1-4-qu-xiao-yu-ju-bu-zhong-shi: done
+  1-5-sheng-cheng-guan-xian-ji-cheng: done
+
+  epic-1-retrospective: done
+  # ===========================================================================
+  # Epic 2: 叙事分镜
+  # Markdown 剧本解析，画布/分镜双视图切换，卡片网格渲染，数据互通。
+  # FRs: FR26, FR27, FR28
+  # Stories: 4
+  # ===========================================================================
+  epic-2: done
+
+  2-1-ju-ben-jie-dian-markdown-jie-xi: done
+  2-2-hua-bu-fen-jing-shi-tu-qie-huan: done
+  2-3-storyboardview-fen-jing-qia-pian: done
+  2-4-shuang-shi-tu-shu-ju-hu-tong: done
+
+  epic-2-retrospective: done
+
+  # ===========================================================================
+  # Epic 3: 画布交互增强
+  # 对齐吸附 + 参考线，框选多节点，Ctrl+G/Ctrl+Shift+G 成组/解组。
+  # FRs: FR1, FR2
+  # Stories: 3
+  # ===========================================================================
+  epic-3: done
+
+  3-1-dui-qi-xi-fu-bian-yuan-zhong-xin: done
+  3-2-kuang-xuan-duo-jie-dian: done
+  3-3-ctrl-g-cheng-zu-jie-zu: done
+
+  epic-3-retrospective: optional
+
+  # ===========================================================================
+  # Epic 4: 多格式导出 + 模板
+  # SVG/PDF/HTML 导出，ZIP 打包，分镜 MP4 拼接，画布布局保存为模板。
+  # FRs: FR33, FR35, FR36, FR37
+  # Stories: 4
+  # ===========================================================================
+  epic-4: done
+
+  4-1-mo-ban-bao-cun: done
+  4-2-duo-ge-shi-dao-chu: done
+  4-3-fen-jing-mp4-dao-chu: done
+  4-4-zip-dao-chu: done
+
+  epic-4-retrospective: optional
+
+  # ===========================================================================
+  # Epic 5: 局部重绘
+  # image 节点局部重绘模式 + 蒙版框选，AI Inpainting 调用。
+  # FRs: FR12
+  # Stories: 2
+  # ===========================================================================
+  epic-5: backlog
+
+  5-1-ju-bu-zhong-hui-mo-shi-meng-ban: backlog
+  5-2-meng-ban-sheng-cheng-ai-inpainting: backlog
+
+  epic-5-retrospective: optional
+
+  # ===========================================================================
+  # Epic 6: 桌面壳
+  # Tauri 桌面打包，.canvas 文件关联，双击打开。
+  # FRs: FR44, FR45
+  # Stories: 2
+  # ===========================================================================
+  epic-6: backlog
+
+  6-1-tauri-chu-shi-hua-web-ying-yong: backlog
+  6-2-canvas-wen-jian-guan-lian: backlog
+
+  epic-6-retrospective: optional

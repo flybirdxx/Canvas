@@ -343,6 +343,56 @@ export function PropertiesPanel() {
             </section>
           </>
         )}
+
+        {/* Story 2.4: scene 节点编辑 — 外观与内容 */}
+        {el.type === 'scene' && (
+          <>
+            <hr className="rule-ink" />
+            <section className="flex flex-col gap-2.5">
+              <SectionHead icon={<Square className="w-3 h-3" strokeWidth={1.8} />}>
+                分镜内容
+              </SectionHead>
+
+              <Field label="场次标题">
+                <input
+                  type="text"
+                  value={(el as any).title || ''}
+                  onChange={(e) => updateElement(el.id, { title: e.target.value })}
+                  placeholder="例如：咖啡厅相遇"
+                  className="input-paper"
+                  style={{ fontSize: 12 }}
+                />
+              </Field>
+
+              <Field label="分镜内容">
+                <textarea
+                  value={(el as any).content || ''}
+                  onChange={(e) => updateElement(el.id, { content: e.target.value })}
+                  placeholder="描述这一场的画面、动作、台词..."
+                  className="input-paper"
+                  style={{ fontSize: 12, minHeight: 80, lineHeight: 1.55, resize: 'vertical' }}
+                />
+              </Field>
+
+              <Field label="场次编号">
+                <input
+                  type="number"
+                  min={1}
+                  value={(el as any).sceneNum || 1}
+                  onChange={(e) => updateElement(el.id, { sceneNum: Number(e.target.value) })}
+                  className="input-paper mono"
+                  style={{ fontSize: 12 }}
+                />
+              </Field>
+
+              {(el as any).scriptId && (
+                <div style={{ fontSize: 11, color: 'var(--ink-2)', padding: '4px 0' }}>
+                  来自剧本节点
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </aside>
   );

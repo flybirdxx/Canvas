@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
-import { Rect, Text, Group, Image as KonvaImage, Circle } from 'react-konva';
+import { Rect, Text, Group, Image as KonvaImage, Circle, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import useImage from 'use-image';
+import type { GuideLine } from '../../utils/alignmentUtils';
 import {
   Sparkles, AlignLeft, AlertTriangle, RefreshCw, Trash2,
   Settings as SettingsIcon,
@@ -9,8 +10,11 @@ import {
   FileImage, Upload,
 } from 'lucide-react';
 import { useCanvasStore } from '../../store/useCanvasStore';
+import { useExecutionStore, type ExecutionRun } from '../../store/useExecutionStore';
 import { retryGeneration } from '../../services/imageGeneration';
 import { AIGenerationError } from '../../types/canvas';
+import type { CanvasElement, ScriptElement, SceneElement } from '../../types/canvas';
+import { parseScriptMarkdown, convertScriptToScenes } from '../../utils/parseScript';
 import {
   formatBytes, formatDuration, previewKindForMime, buildFileElement,
 } from '../../services/fileIngest';
@@ -135,10 +139,22 @@ function shouldLockAspectRatio(el: any): boolean {
   return false;
 }
 
-function SelectionHandles({ el }: { el: any }) {
+// FR1 grouping: returns true if the element belongs to a group that is
+// currently selected (i.e., at least one sibling is in selectedIds).
+function isInSelectedGroup(elementId: string, selectedIds: string[], groups: any[]): boolean {
+  return groups.some(g =>
+    g.childIds.includes(elementId) &&
+    g.childIds.some(sid => selectedIds.includes(sid))
+  );
+}
+
+function SelectionHandles({ el, snapCallbacks, dragGuardRef }: { el: any; snapCallbacks?: SnapCallbacks; dragGuardRef?: React.MutableRefObject<boolean> }) {
   const { x, y, width, height, id } = el;
   const lockRatio = shouldLockAspectRatio(el);
   const dragStartRef = useRef<{ mx: number; my: number; x: number; y: number; w: number; h: number } | null>(null);
+  // Live resize values — updated on every onResizeMove so onResizeEnd always reads
+  // the last snapped position instead of potentially stale store state.
+  const liveResizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   const corners: { corner: Corner; cx: number; cy: number }[] = [
     { corner: 'tl', cx: x,         cy: y },
@@ -162,12 +178,15 @@ function SelectionHandles({ el }: { el: any }) {
           opacity={0.6}
           draggable
           onDragStart={(e) => {
+            if (dragGuardRef) dragGuardRef.current = true;
             e.cancelBubble = true;
             const stage = e.target.getStage();
-            const scale = stage!.scaleX();
-            const stageX = stage!.x();
-            const stageY = stage!.y();
-            const ptr = stage!.getPointerPosition()!;
+            if (!stage) return;
+            const ptr = stage.getPointerPosition();
+            if (!ptr) return;
+            const scale = stage.scaleX();
+            const stageX = stage.x();
+            const stageY = stage.y();
             dragStartRef.current = {
               mx: (ptr.x - stageX) / scale,
               my: (ptr.y - stageY) / scale,
@@ -183,10 +202,12 @@ function SelectionHandles({ el }: { el: any }) {
             e.cancelBubble = true;
             if (!dragStartRef.current) return;
             const stage = e.target.getStage();
-            const scale = stage!.scaleX();
-            const stageX = stage!.x();
-            const stageY = stage!.y();
-            const ptr = stage!.getPointerPosition()!;
+            if (!stage) return;
+            const ptr = stage.getPointerPosition();
+            if (!ptr) return;
+            const scale = stage.scaleX();
+            const stageX = stage.x();
+            const stageY = stage.y();
             const mx = (ptr.x - stageX) / scale;
             const my = (ptr.y - stageY) / scale;
             const dx = mx - dragStartRef.current.mx;
@@ -196,11 +217,6 @@ function SelectionHandles({ el }: { el: any }) {
             let newX = ox, newY = oy, newW = ow, newH = oh;
 
             if (lockRatio && ow > 0 && oh > 0) {
-              // 长宽比锁定：以拖拽起点的 w/h 作为基准比；两个轴选"相对位移更大"
-              // 的那一根作为 driver，另一根直接由比例反推。
-              // 对角顶点（和当前 corner 对角）必须保持固定——否则会看到边长对了
-              // 但节点整体在漂。所以 minW/minH 先 clamp 到 newW/newH，再根据
-              // corner 反推新的 newX/newY。
               const aspect = ow / oh;
               let rawW = ow;
               let rawH = oh;
@@ -209,7 +225,6 @@ function SelectionHandles({ el }: { el: any }) {
               if (corner === 'bl') { rawW = ow - dx; rawH = oh + dy; }
               if (corner === 'br') { rawW = ow + dx; rawH = oh + dy; }
 
-              // 哪一轴变化幅度大就听谁的；避免鼠标稍微抖一下 H 就盖过 W。
               const absDW = Math.abs(rawW - ow);
               const absDH = Math.abs(rawH - oh);
               if (absDW >= absDH) {
@@ -219,11 +234,9 @@ function SelectionHandles({ el }: { el: any }) {
                 newH = Math.max(MIN_H, rawH);
                 newW = newH * aspect;
               }
-              // 反向再兜一下，防止另一轴低于最小值。
               if (newW < MIN_W) { newW = MIN_W; newH = newW / aspect; }
               if (newH < MIN_H) { newH = MIN_H; newW = newH * aspect; }
 
-              // 根据 corner 把对角顶点钉死：只有被拖的那个角在动。
               switch (corner) {
                 case 'tl': newX = ox + ow - newW; newY = oy + oh - newH; break;
                 case 'tr': newY = oy + oh - newH; break;
@@ -240,13 +253,24 @@ function SelectionHandles({ el }: { el: any }) {
             e.target.x(cx);
             e.target.y(cy);
 
-            useCanvasStore.getState().updateElement(id, { x: newX, y: newY, width: newW, height: newH });
+            if (snapCallbacks) {
+              snapCallbacks.onResizeMove(el.id, newX, newY, newW, newH);
+              liveResizeRef.current = { x: newX, y: newY, w: newW, h: newH };
+            } else {
+              useCanvasStore.getState().updateElement(el.id, { x: newX, y: newY, width: newW, height: newH });
+            }
           }}
           onDragEnd={(e) => {
+            if (dragGuardRef) dragGuardRef.current = false;
             e.cancelBubble = true;
             e.target.x(cx);
             e.target.y(cy);
+            if (snapCallbacks && liveResizeRef.current) {
+              const { x, y, w, h } = liveResizeRef.current;
+              snapCallbacks.onResizeEnd(el.id, x, y, w, h);
+            }
             dragStartRef.current = null;
+            liveResizeRef.current = null;
           }}
         />
       ))}
@@ -258,12 +282,425 @@ function SelectionHandles({ el }: { el: any }) {
 /*  Main                                                                */
 /* -------------------------------------------------------------------- */
 
-export function CanvasElements() {
+/**
+ * FR1 对齐吸附状态：从 InfiniteCanvas 传入。
+ * guideLines 是 canvas-space 坐标的参考线列表。
+ */
+interface SnapCallbacks {
+  onDragMove: (id: string, dx: number, dy: number, newX: number, newY: number, width: number, height: number) => void;
+  onDragEnd: (id: string, newX: number, newY: number) => void;
+  onResizeMove: (id: string, newX: number, newY: number, newW: number, newH: number) => void;
+  onResizeEnd: (id: string, newX: number, newY: number, newW: number, newH: number) => void;
+}
+
+interface CanvasElementsProps {
+  guideLines: GuideLine[];
+  snapCallbacks: SnapCallbacks;
+}
+
+/**
+ * Extracted from CanvasElements' useEffect so it can be called both inside
+ * the effect (when not dragging) and deferred after drag ends.
+ */
+function syncSceneNodes(
+  elements: CanvasElement[],
+  deleteElementsFn: (ids: string[]) => void,
+) {
+  const scripts = elements.filter((el): el is ScriptElement => el.type === 'script');
+  for (const script of scripts) {
+    const scriptSceneNums = new Set(script.scenes.map(s => s.sceneNum));
+    const existingScenes = elements.filter(
+      (el): el is SceneElement => el.type === 'scene' && el.scriptId === script.id
+    );
+    const existingSceneNums = new Set(existingScenes.map(s => s.sceneNum));
+
+    // Add missing scene nodes
+    for (const parsed of script.scenes) {
+      if (!existingSceneNums.has(parsed.sceneNum)) {
+        const scriptNode = elements.find(el => el.id === script.id);
+        if (scriptNode) {
+          const VERTICAL_OFFSET = 40;
+          const offsetIndex = existingScenes.length;
+          convertScriptToScenes(
+            script.id,
+            [parsed],
+            scriptNode.x,
+            scriptNode.y + 320 + offsetIndex * VERTICAL_OFFSET
+          );
+        }
+      }
+    }
+
+    // Remove orphaned scene nodes (sceneNum no longer in script)
+    const orphaned = existingScenes.filter(s => !scriptSceneNums.has(s.sceneNum));
+    if (orphaned.length > 0) {
+      deleteElementsFn(orphaned.map(s => s.id));
+    }
+  }
+}
+
+export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProps) {
   const {
     elements, selectedIds, setSelection, updateElement, updateElementPosition,
-    deleteElements, activeTool, setDrawingConnection, drawingConnection,
+    deleteElements, activeTool, setDrawingConnection, drawingConnection, groups,
   } = useCanvasStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // Guard: prevent the scene-sync effect from running during active drag/resize.
+  // During drag, `elements` changes on every frame (position updates). The sync
+  // effect iterates all elements and can call convertScriptToScenes / deleteElements
+  // if it detects a mismatch — which would inject new elements mid-drag and corrupt
+  // Konva's drag tracking, causing stacked nodes to bind together.
+  const isDraggingOrResizingRef = useRef(false);
+  const dragOrResizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushSyncAfterDragRef = useRef<(() => void) | null>(null);
+
+  // Fix 2A: Track drag-start position per element so onDragMove reads the
+  // current (store) position on every frame instead of a stale closure value.
+  // Without this, each subsequent onDragMove compounds the delta because
+  // origX/origY are captured once at drag-start and never updated.
+  const dragStartPosRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  // AC4: Sync scene nodes when script scenes change.
+  // - New scenes in script → create matching scene nodes
+  // - Removed scenes from script → delete orphaned scene nodes
+  // - Preserves scene nodes with content manually edited by user (only sync adds/removes)
+  //
+  // CRITICAL: this effect MUST NOT run during drag/resize operations. During drag,
+  // `elements` changes on every frame (position updates via snapOnDragMove). If
+  // this effect fires and calls convertScriptToScenes / deleteElements during a
+  // drag, new scene nodes are injected into the Konva tree mid-drag, corrupting
+  // hit detection and causing the "stacked nodes forcibly bind" bug.
+  useEffect(() => {
+    if (isDraggingOrResizingRef.current) {
+      // Defer the sync to after the drag/resize ends. Store the latest
+      // "wanted sync" function so only the most recent one executes.
+      flushSyncAfterDragRef.current = () => {
+        syncSceneNodes(elements, deleteElements);
+      };
+      return;
+    }
+
+    syncSceneNodes(elements, deleteElements);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements]);
+
+  // Execution state: subscribe to store changes for run status.
+  const [execRun, setExecRun] = useState<ExecutionRun | undefined>(undefined);
+  useEffect(() => {
+    const unsub = useExecutionStore.subscribe((state) => {
+      setExecRun(state.runs.length > 0 ? state.runs[state.runs.length - 1] : undefined);
+    });
+    setExecRun(useExecutionStore.getState().getActiveRun());
+    return unsub;
+  }, []);
+
+  /** Returns border color for a node's current execution status, or transparent if none. */
+  const getExecutionBorder = (nodeId: string): string => {
+    if (!execRun) return 'transparent';
+    const ns = execRun.nodeStates[nodeId];
+    if (!ns) return 'transparent';
+    switch (ns.status) {
+      case 'queued':  return '#E6A23C';
+      case 'running':  return '#409EFF';
+      case 'success':  return '#67C23A';
+      case 'failed':   return '#F56C6C';
+      default:         return 'transparent';
+    }
+  };
+
+  /* -------------------------------------------------------------------- */
+  /*  ScriptNode — preview + inline editor                                 */
+  /* -------------------------------------------------------------------- */
+
+  function ScriptNode({
+    el, width, height, isSelected,
+  }: {
+    el: ScriptElement;
+    width: number;
+    height: number;
+    isSelected: boolean;
+    /** AC1 fix: 若为 true，创建时即进入编辑模式 */
+    autoEdit?: boolean;
+  }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(el.markdown || '');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const isEditingRef = useRef(false);
+    const didAutoEdit = useRef(false);
+
+    useEffect(() => {
+      isEditingRef.current = editing;
+    }, [editing]);
+
+    // AC1 fix: auto-enter edit mode when isNew is true (only on first render).
+    useEffect(() => {
+      if (el.isNew && !didAutoEdit.current) {
+        didAutoEdit.current = true;
+        setDraft(el.markdown || '');
+        setEditing(true);
+        // Clear the isNew flag so subsequent renders don't re-trigger.
+        updateElement(el.id, { isNew: undefined });
+      }
+    }, [el.id, el.isNew, el.markdown]);
+
+    // Sync draft when el.markdown changes externally (e.g., another view modified it).
+    // Skip if user is actively typing in the textarea.
+    useEffect(() => {
+      if (!isEditingRef.current && el.markdown !== draft) {
+        setDraft(el.markdown || '');
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [el.id, el.markdown]);
+
+    useEffect(() => {
+      if (editing && textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = textareaRef.current.value.length;
+      }
+    }, [editing]);
+
+    function handleSave() {
+      const scenes = parseScriptMarkdown(draft);
+      updateElement(el.id, { markdown: draft, scenes });
+      setEditing(false);
+    }
+
+    function handleBlur() {
+      handleSave();
+    }
+
+    const MAX_DRAFT_LENGTH = 200000;
+
+    function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+      e.stopPropagation();
+    }
+
+    const PREVIEW_SCENE_COUNT = 3;
+    const previewScenes = el.scenes.slice(0, PREVIEW_SCENE_COUNT);
+    const hasMore = el.scenes.length > PREVIEW_SCENE_COUNT;
+
+    if (editing) {
+      return (
+        <Group>
+          <Rect width={width} height={height} fill="transparent" />
+          <Rect
+            x={-1} y={-1}
+            width={width + 2} height={height + 2}
+            stroke={getExecutionBorder(el.id)}
+            strokeWidth={2}
+            fill="transparent"
+            listening={false}
+          />
+          <Html divProps={{ style: { pointerEvents: 'none' } }}>
+            <div
+              style={{
+                ...POLAROID_STYLE,
+                width,
+                height,
+                padding: 0,
+                position: 'relative',
+              }}
+            >
+              <textarea
+                ref={textareaRef}
+                className="paper-scroll"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  padding: '12px',
+                  boxSizing: 'border-box',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  background: 'var(--bg-2)',
+                  color: 'var(--ink-0)',
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  fontFamily: 'ui-monospace, Menlo, monospace',
+                  pointerEvents: 'auto',
+                }}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value.slice(0, MAX_DRAFT_LENGTH))}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+                onPointerDown={(e) => e.stopPropagation()}
+                placeholder="粘贴或输入 Markdown 剧本内容，使用 ### 场 N 标识分镜锚点…"
+              />
+            </div>
+          </Html>
+        </Group>
+      );
+    }
+
+    return (
+      <Group
+        onDblClick={() => {
+          setDraft(el.markdown || '');
+          setEditing(true);
+        }}
+      >
+        <Rect width={width} height={height} fill="transparent" />
+        <Rect
+          x={-1} y={-1}
+          width={width + 2} height={height + 2}
+          stroke={isSelected ? 'var(--accent)' : getExecutionBorder(el.id)}
+          strokeWidth={2}
+          fill="transparent"
+          listening={false}
+        />
+        <Html divProps={{ style: { pointerEvents: 'none' } }}>
+          <div
+            style={{
+              ...POLAROID_STYLE,
+              width,
+              height,
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              color: 'var(--accent)',
+              textTransform: 'uppercase',
+              marginBottom: 4,
+            }}>
+              剧本
+            </div>
+            {el.scenes.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', fontStyle: 'italic' }}>
+                点击添加剧本内容…
+              </div>
+            ) : (
+              <>
+                {previewScenes.map((s) => (
+                  <div key={s.sceneNum} style={{
+                    fontSize: 12.5,
+                    color: 'var(--ink-1)',
+                    lineHeight: 1.4,
+                    paddingLeft: 8,
+                    borderLeft: '2px solid var(--accent)',
+                  }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink-0)' }}>
+                      {s.title || `场 ${s.sceneNum}`}
+                    </span>
+                    {s.content && (
+                      <span style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 11 }}>
+                        {s.content.slice(0, 40)}
+                        {s.content.length > 40 ? '…' : ''}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {hasMore && (
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+                    +{el.scenes.length - PREVIEW_SCENE_COUNT} 更多场次
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Html>
+      </Group>
+    );
+  }
+
+  /* -------------------------------------------------------------------- */
+  /*  SceneNode — single storyboard card                                  */
+  /* -------------------------------------------------------------------- */
+
+  function SceneNode({
+    el, width, height, isSelected,
+  }: {
+    el: SceneElement;
+    width: number;
+    height: number;
+    isSelected: boolean;
+  }) {
+    return (
+      <Group>
+        <Rect width={width} height={height} fill="transparent" />
+        <Rect
+          x={-1} y={-1}
+          width={width + 2} height={height + 2}
+          stroke={isSelected ? 'var(--accent)' : getExecutionBorder(el.id)}
+          strokeWidth={2}
+          fill="transparent"
+          listening={false}
+        />
+        <Html divProps={{ style: { pointerEvents: 'none' } }}>
+          <div
+            style={{
+              ...POLAROID_STYLE,
+              width,
+              height,
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <div style={{
+                background: 'var(--accent)',
+                color: 'var(--accent-fg)',
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '99px',
+              }}>
+                场 {el.sceneNum}
+              </div>
+              {el.scriptId && (
+                <div style={{
+                  fontSize: 10,
+                  color: 'var(--ink-3)',
+                  fontStyle: 'italic',
+                }}>
+                  来自剧本
+                </div>
+              )}
+            </div>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--ink-0)',
+              lineHeight: 1.4,
+            }}>
+              {el.title || '(无标题)'}
+            </div>
+            {el.content && (
+              <div style={{
+                fontSize: 11.5,
+                color: 'var(--ink-2)',
+                lineHeight: 1.5,
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+              }}>
+                {el.content}
+              </div>
+            )}
+          </div>
+        </Html>
+      </Group>
+    );
+  }
 
   return (
     <>
@@ -297,14 +734,68 @@ export function CanvasElements() {
               }
             }
           },
+          onDragStart: (_e: any) => {
+            isDraggingOrResizingRef.current = true;
+            // Capture drag-start position so subsequent onDragMove frames can
+            // read current (store) position instead of stale closure values.
+            dragStartPosRef.current[id] = { x: el.x, y: el.y };
+          },
           onDragMove: (e: any) => {
             if (e.target.id() === id) {
-              updateElementPosition(id, e.target.x(), e.target.y());
+              const stage = e.target.getStage();
+              if (!stage) return;
+              const ptr = stage.getPointerPosition();
+              if (!ptr) return;
+              const scale = stage.scaleX();
+              const stageX = stage.x();
+              const stageY = stage.y();
+              const cx = (ptr.x - stageX) / scale;
+              const cy = (ptr.y - stageY) / scale;
+              // Read current position from store — avoids stale closure across frames.
+              const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
+              if (!currentEl) return;
+              const dx = cx - currentEl.x;
+              const dy = cy - currentEl.y;
+              // snapCallbacks.onDragMove handles snapping + updates + guideLines
+              snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
             }
           },
           onDragEnd: (e: any) => {
+            isDraggingOrResizingRef.current = false;
+            // Flush any deferred scene-sync that was blocked during drag.
+            if (flushSyncAfterDragRef.current) {
+              const fn = flushSyncAfterDragRef.current;
+              flushSyncAfterDragRef.current = null;
+              if (dragOrResizeDebounceRef.current !== null) {
+                clearTimeout(dragOrResizeDebounceRef.current);
+                dragOrResizeDebounceRef.current = null;
+              }
+              // Debounce the post-drag sync: if another drag starts within 100ms,
+              // cancel the flush to avoid a rapid-fire sync during quick adjustments.
+              dragOrResizeDebounceRef.current = setTimeout(() => {
+                fn();
+                dragOrResizeDebounceRef.current = null;
+              }, 100);
+            }
             if (e.target.id() === id) {
-              updateElement(id, { x: e.target.x(), y: e.target.y() });
+              const stage = e.target.getStage();
+              if (!stage) return;
+              const ptr = stage.getPointerPosition();
+              if (!ptr) return;
+              const scale = stage.scaleX();
+              const stageX = stage.x();
+              const stageY = stage.y();
+              const cx = (ptr.x - stageX) / scale;
+              const cy = (ptr.y - stageY) / scale;
+              // Read current position from store for the final snap commit.
+              const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
+              if (!currentEl) return;
+              const dx = cx - currentEl.x;
+              const dy = cy - currentEl.y;
+              // Commit with final snapped position
+              snapCallbacks.onDragEnd(id, currentEl.x + dx, currentEl.y + dy);
+              // Clean up ref
+              delete dragStartPosRef.current[id];
             }
           },
           onMouseEnter: () => {
@@ -320,6 +811,15 @@ export function CanvasElements() {
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                cornerRadius={12}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 <div
                   style={{
@@ -341,6 +841,15 @@ export function CanvasElements() {
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                cornerRadius={12}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 <div
                   style={{
@@ -360,6 +869,15 @@ export function CanvasElements() {
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                cornerRadius={12}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 <div className="flex flex-col" style={{ ...POLAROID_STYLE, width, height, fontFamily: textEl.fontFamily || 'var(--font-serif)' }}>
                   <div className="flex-1" style={{ padding: 14 }}>
@@ -387,13 +905,34 @@ export function CanvasElements() {
           );
         }
         else if (el.type === 'image') {
-          nodeContent = <URLImage el={el} width={width} height={height} />;
+          nodeContent = (
+            <Group>
+              <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
+              <URLImage el={el} width={width} height={height} />
+            </Group>
+          );
         }
         else if (el.type === 'sticky') {
           const sticky = el as any;
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 <div className="flex" style={{ width, height, background: sticky.fill || 'var(--sticky-yellow)', borderRadius: 'var(--r-sm)', overflow: 'hidden', position: 'relative', padding: 14 }}>
                   <textarea
@@ -422,6 +961,14 @@ export function CanvasElements() {
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 {error ? (
                   <GenErrorPanel
@@ -485,6 +1032,14 @@ export function CanvasElements() {
           nodeContent = (
             <Group>
               <Rect width={width} height={height} fill="transparent" />
+              <Rect
+                x={-1} y={-1}
+                width={width + 2} height={height + 2}
+                stroke={getExecutionBorder(id)}
+                strokeWidth={2}
+                fill="transparent"
+                listening={false}
+              />
               <Html divProps={{ style: { pointerEvents: 'none' } }}>
                 <div className="flex flex-col" style={{ ...POLAROID_STYLE, width, height }}>
                   <div
@@ -509,6 +1064,27 @@ export function CanvasElements() {
         else if (el.type === 'file') {
           nodeContent = <FileElementNode el={el} width={width} height={height} />;
         }
+        else if (el.type === 'script') {
+          nodeContent = <ScriptNode el={el as ScriptElement} width={width} height={height} isSelected={isSelected} autoEdit={!!(el as ScriptElement).isNew} />;
+        }
+        else if (el.type === 'scene') {
+          nodeContent = <SceneNode el={el} width={width} height={height} isSelected={isSelected} />;
+        }
+
+        // FR1 grouping: if node belongs to a selected group, render a dashed border overlay
+        const inSelectedGroup = isInSelectedGroup(id, selectedIds, groups);
+        const groupBorder = inSelectedGroup ? (
+          <Rect
+            x={-3} y={-3}
+            width={width + 6} height={height + 6}
+            stroke={isSelected ? 'var(--accent)' : INK_1}
+            strokeWidth={1.5}
+            dash={[6, 4]}
+            cornerRadius={12}
+            fill="transparent"
+            listening={false}
+          />
+        ) : null;
 
         const portRadius = 7;
         const renderPorts = () => {
@@ -615,6 +1191,7 @@ export function CanvasElements() {
         return (
           <Group key={id} {...outerGroupProps} rotation={rotOverride}>
             {nodeContent}
+            {groupBorder}
             {renderPorts()}
           </Group>
         );
@@ -624,8 +1201,87 @@ export function CanvasElements() {
       {activeTool === 'select' && selectedIds.map((selId) => {
         const el = elements.find(e => e.id === selId);
         if (!el) return null;
-        return <SelectionHandles key={`sel-${selId}`} el={el} />;
+        return <SelectionHandles key={`sel-${selId}`} el={el} snapCallbacks={snapCallbacks} dragGuardRef={isDraggingOrResizingRef} />;
       })}
+
+      {/* FR1: Guide lines rendered above all elements and selection handles — in canvas
+         coordinate space, grouped under a single overlay Group at canvas origin so Html
+         labels align correctly regardless of stage pan/zoom. */}
+      <Group x={0} y={0} listening={false}>
+        {guideLines.map((gl, i) => {
+          if (gl.orientation === 'vertical') {
+            const midY = (gl.from + gl.to) / 2;
+            return (
+              <Group key={`gl-${i}`} listening={false}>
+                {/* AC1: dashed guide line (1px, dashed) */}
+                <Line
+                  points={[gl.coord, gl.from, gl.coord, gl.to]}
+                  stroke="#8B5CF6"
+                  strokeWidth={1}
+                  dash={[5, 4]}
+                  listening={false}
+                />
+                {/* AC3: spacing label for equal-spacing guide lines */}
+                {gl.label && (
+                  <Html divProps={{ style: { position: 'absolute', pointerEvents: 'none' } }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: gl.coord - 20,
+                      top: midY + 4,
+                      background: '#8B5CF6',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1.4,
+                      userSelect: 'none',
+                    }}>
+                      {gl.label}
+                    </div>
+                  </Html>
+                )}
+              </Group>
+            );
+          } else {
+            const midX = (gl.from + gl.to) / 2;
+            return (
+              <Group key={`gl-${i}`} listening={false}>
+                {/* AC1: dashed guide line (1px, dashed) */}
+                <Line
+                  points={[gl.from, gl.coord, gl.to, gl.coord]}
+                  stroke="#8B5CF6"
+                  strokeWidth={1}
+                  dash={[5, 4]}
+                  listening={false}
+                />
+                {/* AC3: spacing label for equal-spacing guide lines */}
+                {gl.label && (
+                  <Html divProps={{ style: { position: 'absolute', pointerEvents: 'none' } }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: midX + 4,
+                      top: gl.coord - 14,
+                      background: '#8B5CF6',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1.4,
+                      userSelect: 'none',
+                    }}>
+                      {gl.label}
+                    </div>
+                  </Html>
+                )}
+              </Group>
+            );
+          }
+        })}
+      </Group>
     </>
   );
 }

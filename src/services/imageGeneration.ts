@@ -56,6 +56,22 @@ export interface GenRequest {
    * 只有声明 supportedQualityLevels 的模型才会实际使用。
    */
   qualityLevel?: string;
+  /**
+   * Story 1.5: execId context for the generation:success CustomEvent.
+   * When set, the event detail carries { placeholderId, execId } so the
+   * execution engine can update the correct run's node status.
+   */
+  execId?: string;
+  /**
+   * Story 1.5: optional callback invoked by replacePlaceholderWithImage on
+   * successful generation. Allows the execution engine to update node status.
+   */
+  onSuccess?: (placeholderId: string) => void;
+  /**
+   * F3 fix: AbortSignal propagated from the execution engine's AbortController.
+   * Allows providers to abort HTTP requests mid-flight when the user cancels.
+   */
+  signal?: AbortSignal;
 }
 
 export type GenErrorKind = GatewayErrorKind;
@@ -125,8 +141,18 @@ const materializing = new Set<string>();
  *
  * 导出供 `taskResume` 复用。对同一 placeholderId 并发调用是幂等的——
  * 第二次会被 `materializing` 集合挡住，不会出现重复节点。
+ *
+ * Story 1.5: `onSuccess` callback is invoked after the node is replaced,
+ * allowing the execution engine to update node status.
  */
-export function replacePlaceholderWithImage(placeholderId: string, imageUrl: string, prompt: string, model?: string) {
+export function replacePlaceholderWithImage(
+  placeholderId: string,
+  imageUrl: string,
+  prompt: string,
+  model?: string,
+  execId?: string,
+  onSuccess?: (placeholderId: string) => void,
+) {
   if (materializing.has(placeholderId)) return;
   materializing.add(placeholderId);
 
@@ -174,6 +200,15 @@ export function replacePlaceholderWithImage(placeholderId: string, imageUrl: str
   };
   store.replaceElement(placeholderId, newElement as CanvasElement, '生成完成');
 
+  // Story 1.5: notify the execution engine so it can update node status.
+  onSuccess?.(placeholderId);
+
+  // Also fire a CustomEvent on window so taskResume (which doesn't have the
+  // onSuccess callback) can also notify the execution engine.
+  window.dispatchEvent(new CustomEvent('generation:success', {
+    detail: { placeholderId, execId },
+  }));
+
   // Auto-archive every successful generation into the asset library so users
   // can re-find / re-use it without scrolling the canvas. Name defaults to
   // the first line of the prompt, capped for readability.
@@ -214,6 +249,7 @@ type OneSlotOutcome = 'success' | 'failure' | 'pending';
  *     已在回调里落盘，由 taskResume 在下次启动时接回）
  */
 async function runOneSlot(placeholderId: string, request: GenRequest): Promise<OneSlotOutcome> {
+  // F3 fix: pass signal through so providers can abort the fetch.
   const result = await generateImageByModelId({
     model: request.model,
     prompt: request.prompt,
@@ -224,6 +260,7 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
     n: 1,
     referenceImages: request.references,
     maskImage: request.maskImage,
+    signal: request.signal,
     onTaskSubmitted: ({ providerId, taskId }) => {
       attachPendingTask(placeholderId, {
         providerId,
@@ -244,6 +281,8 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
           h: request.h,
           references: request.references,
           maskImage: request.maskImage,
+          // F2 fix: persist execId so taskResume can update the correct run's node status.
+          execId: request.execId,
         },
       });
     },
@@ -259,7 +298,15 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
       });
       return 'failure';
     }
-    replacePlaceholderWithImage(placeholderId, url, request.prompt, request.model);
+    // Story 1.5: pass onSuccess through so execution engine can update status.
+    replacePlaceholderWithImage(
+      placeholderId,
+      url,
+      request.prompt,
+      request.model,
+      request.execId,
+      request.onSuccess,
+    );
     return 'success';
   }
 

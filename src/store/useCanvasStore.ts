@@ -98,6 +98,15 @@ export interface InpaintMaskState {
   rect: { x: number; y: number; w: number; h: number } | null;
 }
 
+/**
+ * FR1 grouping — a named group of canvas elements that move as one unit.
+ */
+export interface GroupRecord {
+  id: string;
+  childIds: string[];
+  label?: string;
+}
+
 interface CanvasState {
   elements: CanvasElement[];
   connections: Connection[];
@@ -110,6 +119,10 @@ interface CanvasState {
   selectedIds: string[];
   stageConfig: { scale: number; x: number; y: number };
   activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio';
+  /** AD2: 分镜双视图模式 — 切换画布/分镜视图，persist 存储刷新后恢复 */
+  viewMode: 'canvas' | 'storyboard';
+  /** FR1 grouping: active element groups */
+  groups: GroupRecord[];
   lastSavedAt: number | null;
   /**
    * F17 history-coalescing hints. When two consecutive `updateElement`
@@ -124,7 +137,7 @@ interface CanvasState {
 
   // Actions
   addElement: (element: CanvasElement) => void;
-  updateElement: (id: string, attrs: Partial<CanvasElement>) => void;
+  updateElement: (id: string, attrs: Partial<CanvasElement>, label?: string) => void;
   updateElementPosition: (id: string, x: number, y: number) => void;
   /**
    * Batch-commit positions for several elements in a single history entry —
@@ -155,6 +168,10 @@ interface CanvasState {
   setDrawingConnection: (drawing: DrawingConnection | null) => void;
   /** F15: set / clear the localized inpaint target + rect. Transient. */
   setInpaintMask: (state: InpaintMaskState | null) => void;
+  /** AD2: 切换画布/分镜视图模式 */
+  groupSelected: () => void;
+  ungroupSelected: () => void;
+  setViewMode: (mode: 'canvas' | 'storyboard') => void;
   undo: () => void;
   redo: () => void;
   jumpToHistory: (index: number) => void;
@@ -190,6 +207,8 @@ const typeLabelMap: Record<string, string> = {
   audio: '音频',
   aigenerating: 'AI 生成',
   file: '文件',
+  script: '剧本',
+  scene: '分镜',
 };
 
 function snapshot(state: Pick<CanvasState, 'elements' | 'connections' | 'currentLabel' | 'currentTimestamp'>): HistorySnapshot {
@@ -215,6 +234,8 @@ export const useCanvasStore = create<CanvasState>()(
       selectedIds: [],
       stageConfig: { scale: 1, x: 0, y: 0 },
       activeTool: 'select',
+      viewMode: 'canvas',
+      groups: [],
       lastSavedAt: null,
 
       addElement: (element) => set((state) => {
@@ -272,9 +293,9 @@ export const useCanvasStore = create<CanvasState>()(
         };
       }),
 
-      updateElement: (id, attrs) => set((state) => {
+      updateElement: (id, attrs, labelOverride) => set((state) => {
         const target = state.elements.find(el => el.id === id);
-        const label = target ? `修改${typeLabelMap[target.type] ?? target.type}` : '修改元素';
+        const label = labelOverride ?? (target ? `修改${typeLabelMap[target.type] ?? target.type}` : '修改元素');
         const nextElements: CanvasElement[] = state.elements.map((el) =>
           el.id === id ? ({ ...el, ...attrs } as CanvasElement) : el
         );
@@ -351,11 +372,16 @@ export const useCanvasStore = create<CanvasState>()(
         });
         const nextElements = state.elements.filter((el) => !ids.includes(el.id));
         const nextConnections = state.connections.filter((conn) => !ids.includes(conn.fromId) && !ids.includes(conn.toId));
+        // FR1 grouping: remove deleted nodes from their groups, auto-dissolve groups with < 2 remaining nodes
+        const nextGroups = state.groups
+          .map(g => ({ ...g, childIds: g.childIds.filter(id => !ids.includes(id)) }))
+          .filter(g => g.childIds.length >= 2);
         return {
           past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
           future: [],
           elements: nextElements,
           connections: nextConnections,
+          groups: nextGroups,
           selectedIds: state.selectedIds.filter((id) => !ids.includes(id)),
           currentLabel: `删除 ${ids.length} 个元素`,
           currentTimestamp: Date.now(),
@@ -573,10 +599,67 @@ export const useCanvasStore = create<CanvasState>()(
         _coalesceKey: undefined,
         _coalesceAt: undefined,
       })),
+
+      groupSelected: () => set((state) => {
+        if (state.selectedIds.length < 2) return state;
+
+        // AC5: if any selected node already belongs to a group, remove it first
+        // Deduplicate selectedIds to prevent duplicate childIds within a group
+        const cleanIds = [...new Set(state.selectedIds)];
+        const groupsCopy = state.groups.map(g => ({ ...g, childIds: [...g.childIds] }));
+        for (const g of groupsCopy) {
+          // Remove all overlapping elements from this group — one element can belong
+          // to multiple groups in the old data; this ensures it's removed from all.
+          const overlap = g.childIds.filter(id => cleanIds.includes(id));
+          if (overlap.length > 0) {
+            g.childIds = g.childIds.filter(id => !cleanIds.includes(id));
+          }
+        }
+        // auto-dissolve groups that now have < 2 children
+        const survivingGroups = groupsCopy.filter(g => g.childIds.length >= 2);
+
+        const newGroup: GroupRecord = {
+          id: uuidv4(),
+          childIds: cleanIds,
+        };
+
+        return {
+          past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+          future: [],
+          groups: [...survivingGroups, newGroup],
+          currentLabel: `成组 ${cleanIds.length} 个元素`,
+          currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
+        };
+      }),
+
+      ungroupSelected: () => set((state) => {
+        // Find groups whose childIds overlap with selectedIds
+        const matchedGroups = state.groups.filter(g =>
+          g.childIds.some(id => state.selectedIds.includes(id))
+        );
+        if (matchedGroups.length === 0) return state;
+
+        return {
+          past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+          future: [],
+          groups: state.groups.filter(g => !matchedGroups.some(m => m.id === g.id)),
+          // Preserve selection after ungroup so users can immediately operate on the
+          // dissolved members without needing to re-select them.
+          selectedIds: state.selectedIds,
+          currentLabel: '解组',
+          currentTimestamp: Date.now(),
+          _coalesceKey: undefined,
+          _coalesceAt: undefined,
+        };
+      }),
+
+      setViewMode: (mode) => set({ viewMode: mode }),
     }),
     {
       name: 'ai-canvas-document',
-      version: 7,
+      version: 9,
       // 拖拽帧写入会触发高频 JSON.stringify + setItem；用 300ms 防抖把
       // 连续写合并为一次，消除拖动卡顿。语义见 createThrottledLocalStorage。
       storage: createJSONStorage(() => createThrottledLocalStorage(300)),
@@ -585,6 +668,10 @@ export const useCanvasStore = create<CanvasState>()(
         connections: state.connections,
         stageConfig: state.stageConfig,
         lastSavedAt: state.lastSavedAt,
+        // AD2: viewMode persist — 刷新后恢复上次视图模式
+        viewMode: state.viewMode,
+        // FR1 grouping: groups persist across sessions
+        groups: state.groups,
       }),
       migrate: (persistedState: any, version: number) => {
         // v1 -> v2: image/video 默认尺寸从 320x240 提升到 400x300，
@@ -665,6 +752,19 @@ export const useCanvasStore = create<CanvasState>()(
               height: Math.round(el.height * scale),
             };
           });
+        }
+        // v7 -> v8: AD2 viewMode 字段加入 persist。旧版本 localStorage 中无此字段，
+        // 若不补默认值，viewMode === undefined 导致两视图 opacity 皆为 0，画布完全不可见。
+        if (version < 8 && persistedState) {
+          if (typeof persistedState.viewMode !== 'string') {
+            persistedState.viewMode = 'canvas';
+          }
+        }
+        // v8 -> v9: FR1 grouping — groups array added to persist. Old versions have no groups field.
+        if (version < 9 && persistedState) {
+          if (!Array.isArray(persistedState.groups)) {
+            persistedState.groups = [];
+          }
         }
         return persistedState;
       },

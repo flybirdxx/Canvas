@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Download,
   ChevronDown,
+  ChevronRight,
   Scissors,
   Frame,
   SquareDashed,
@@ -9,11 +10,19 @@ import {
   FileText,
   FileJson,
   Globe,
+  Film,
+  Archive,
+  Upload,
 } from 'lucide-react';
 import { exportSelection, exportVisible } from '../utils/exportPng';
 import { exportSelectionAsSvg } from '../utils/exportSvg';
-import { exportViewportAsPdf, exportSelectionAsPdf } from '../utils/exportPdf';
+import { exportViewportAsPdf, exportSelectionAsPdf, exportAsCustomPdf } from '../utils/exportPdf';
 import { exportAsStandaloneHtml } from '../utils/exportHtml';
+import { useCanvasStore } from '../store/useCanvasStore';
+import type { SceneElement } from '../types/canvas';
+import { ExportMp4Dialog } from './ExportMp4Dialog';
+import { ExportZipDialog } from './ExportZipDialog';
+import { ImportZipDialog } from './ImportZipDialog';
 
 /* ---------- helpers ---------- */
 
@@ -47,7 +56,11 @@ function SectionHdr({ label }: { label: string }) {
  */
 export function ExportMenu() {
   const [open, setOpen] = useState(false);
+  const [mp4DialogOpen, setMp4DialogOpen] = useState(false);
+  const [zipDialogOpen, setZipDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const { viewMode, elements } = useCanvasStore();
 
   useEffect(() => {
     if (!open) return;
@@ -124,7 +137,10 @@ export function ExportMenu() {
           <MenuRow
             icon={<FileImage className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
             label="导出为 SVG"
-            onClick={() => handle(() => exportSelectionAsSvg())}
+            onClick={() => handle(async () => {
+              const ok = await exportSelectionAsSvg();
+              if (!ok) {/* error already alerted by the util */ }
+            })}
           />
 
           {SEP}
@@ -136,11 +152,7 @@ export function ExportMenu() {
             label="PDF（视口尺寸）"
             onClick={() => handle(() => exportViewportAsPdf())}
           />
-          <MenuRow
-            icon={<FileJson className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
-            label="PDF（A4）"
-            onClick={() => handle(() => exportSelectionAsPdf())}
-          />
+          <PdfSizeSubmenu />
 
           {SEP}
 
@@ -149,8 +161,159 @@ export function ExportMenu() {
           <MenuRow
             icon={<Globe className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
             label="导出为网页 (HTML)"
-            onClick={() => handle(() => exportAsStandaloneHtml())}
+            onClick={() => handle(async () => {
+              const ok = await exportAsStandaloneHtml();
+              if (!ok) {/* error already alerted */}
+            })}
           />
+
+          {SEP}
+
+          {/* ——— 画布存档 ——— */}
+          <SectionHdr label="画布存档" />
+          <MenuRow
+            icon={<Archive className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
+            label="导出 ZIP"
+            onClick={() => {
+              handle(() => {
+                setZipDialogOpen(true);
+              });
+            }}
+          />
+          <MenuRow
+            icon={<Upload className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />}
+            label="导入 ZIP"
+            onClick={() => {
+              handle(() => {
+                setImportDialogOpen(true);
+              });
+            }}
+          />
+
+          {viewMode === 'storyboard' && (
+            <>
+              {SEP}
+              {/* ——— 分镜视频 ——— */}
+              <SectionHdr label="分镜视频" />
+              <MenuRow
+                icon={<Film className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
+                label="导出 MP4"
+                onClick={() => {
+                  const sceneCount = (elements.filter((e): e is SceneElement => e.type === 'scene')).length;
+                  setOpen(false);
+                  setTimeout(() => setMp4DialogOpen(true), 50);
+                }}
+              />
+            </>
+          )}
+
+        </div>
+      )}
+
+      {mp4DialogOpen && (
+        <ExportMp4Dialog
+          sceneCount={elements.filter((e): e is SceneElement => e.type === 'scene').length}
+          onClose={() => setMp4DialogOpen(false)}
+        />
+      )}
+
+      {zipDialogOpen && (
+        <ExportZipDialog onClose={() => setZipDialogOpen(false)} />
+      )}
+
+      {importDialogOpen && (
+        <ImportZipDialog onClose={() => setImportDialogOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function PdfSizeSubmenu() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="w-full flex items-center gap-2.5 text-left transition-colors"
+        style={{
+          padding: '7px 9px',
+          borderRadius: 'var(--r-sm)',
+          background: 'transparent',
+          border: '1px solid transparent',
+          cursor: 'pointer',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <div className="w-5 h-5 flex items-center justify-center shrink-0">
+          <FileJson className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />
+        </div>
+        <span className="flex-1" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-0)' }}>
+          PDF（选中节点）
+        </span>
+        <ChevronRight className="w-3 h-3 opacity-60" strokeWidth={1.6} />
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '100%',
+            top: 0,
+            minWidth: 160,
+            padding: 5,
+            background: 'var(--bg-0)',
+            borderRadius: 'var(--r-sm)',
+            boxShadow: 'var(--shadow-ink-3)',
+            border: '1px solid var(--line-1)',
+            zIndex: 61,
+          }}
+        >
+          <button
+            type="button"
+            className="w-full text-left"
+            style={{ padding: '6px 9px', borderRadius: 'var(--r-sm)', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', fontSize: 12, color: 'var(--ink-0)' }}
+            onClick={() => { setOpen(false); exportSelectionAsPdf(); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            A4 纵向
+          </button>
+          <button
+            type="button"
+            className="w-full text-left"
+            style={{ padding: '6px 9px', borderRadius: 'var(--r-sm)', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', fontSize: 12, color: 'var(--ink-0)' }}
+            onClick={() => { setOpen(false); exportAsCustomPdf('a3'); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            A3
+          </button>
+          <button
+            type="button"
+            className="w-full text-left"
+            style={{ padding: '6px 9px', borderRadius: 'var(--r-sm)', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', fontSize: 12, color: 'var(--ink-0)' }}
+            onClick={() => { setOpen(false); exportAsCustomPdf('letter'); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            Letter
+          </button>
+          <button
+            type="button"
+            className="w-full text-left"
+            style={{ padding: '6px 9px', borderRadius: 'var(--r-sm)', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', fontSize: 12, color: 'var(--ink-0)' }}
+            onClick={() => { setOpen(false); exportAsCustomPdf('viewport'); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            自定义（节点尺寸）
+          </button>
         </div>
       )}
     </div>

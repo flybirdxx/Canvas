@@ -62,7 +62,7 @@ async function resumeSingle(placeholderId: string, pending: PendingGenerationTas
     if (result.ok === true) {
       const url = result.urls[0];
       if (url) {
-        replacePlaceholderWithImage(placeholderId, url, pending.request.prompt, (pending.request as any).model || '');
+        replacePlaceholderWithImage(placeholderId, url, pending.request.prompt, (pending.request as any).model || '', undefined, undefined);
         return;
       }
       setPlaceholderError(placeholderId, {
