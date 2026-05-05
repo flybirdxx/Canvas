@@ -1,4 +1,4 @@
-import { Undo2, Redo2, Layers, ZoomIn, ZoomOut } from 'lucide-react';
+import { Undo2, Redo2, Layers, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { useCanvasStore } from '../store/useCanvasStore';
 
 export function StatusBar() {
@@ -16,8 +16,9 @@ export function StatusBar() {
       <CtrlBtn onClick={redo} disabled={future.length===0} title="Redo Ctrl+Y"><Redo2 strokeWidth={1.8} /></CtrlBtn>
       <CtrlBtn title="Layers"><Layers strokeWidth={1.8} /></CtrlBtn>
       <CtrlBtn onClick={() => setStageConfig({ scale: Math.max(0.1, stageConfig.scale / 1.2) })} title="Zoom out"><ZoomOut strokeWidth={1.8} /></CtrlBtn>
-      <span style={{ fontSize:12, color:'var(--ink-2)', fontWeight:500, minWidth:34, textAlign:'center', fontVariantNumeric:'tabular-nums', fontFamily:'var(--font-mono)', userSelect:'none' }}>{zoom}%</span>
       <CtrlBtn onClick={() => setStageConfig({ scale: Math.min(5, stageConfig.scale * 1.2) })} title="Zoom in"><ZoomIn strokeWidth={1.8} /></CtrlBtn>
+      <span style={{ fontSize:12, color:'var(--ink-2)', fontWeight:500, minWidth:34, textAlign:'center', fontVariantNumeric:'tabular-nums', fontFamily:'var(--font-mono)', userSelect:'none' }}>{zoom}%</span>
+      <CtrlBtn onClick={() => setStageConfig({ scale: 1, x: 0, y: 0 })} title="Reset view (Home)"><RotateCcw strokeWidth={1.8} /></CtrlBtn>
     </div>
   );
 }

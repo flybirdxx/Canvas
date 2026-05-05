@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
 import { PropertiesPanel } from './components/properties/PropertiesPanel';
@@ -16,9 +16,28 @@ import { ToolDock } from './components/chrome/ToolDock';
 import { FloatingActions } from './components/FloatingActions';
 import { exportSelection } from './utils/exportPng';
 import { useCanvasStore } from './store/useCanvasStore';
+import { runExecution } from './services/executionEngine';
+import { RunPanel } from './components/RunPanel';
+import { ToastContainer } from './components/Toast';
 import { resumePendingImageTasks } from './services/taskResume';
 import { buildFileElement } from './services/fileIngest';
 import { storeBlob, blobKey } from './services/fileStorage';
+
+// AD2: StoryboardView 懒加载 — Konva 不在分镜模式下初始化
+const StoryboardView = lazy(() => import('./components/StoryboardView').then(m => ({ default: m.StoryboardView })));
+
+/** 兜底 SSR / Suspense 友好 wrapper */
+function AppStoryboardViewLazy({ onCreateScript }: { onCreateScript: () => void }) {
+  return (
+    <Suspense fallback={
+      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--ink-2)', fontFamily:'var(--font-serif)' }}>
+        加载分镜视图中…
+      </div>
+    }>
+      <StoryboardView onCreateScript={onCreateScript} />
+    </Suspense>
+  );
+}
 
 /**
  * App shell — Warm Paper Studio.
@@ -41,11 +60,77 @@ export default function App() {
   const undo = useCanvasStore(s => s.undo);
   const redo = useCanvasStore(s => s.redo);
   const deleteElements = useCanvasStore(s => s.deleteElements);
+  const groupSelected = useCanvasStore(s => s.groupSelected);
+  const ungroupSelected = useCanvasStore(s => s.ungroupSelected);
   const selectedIds = useCanvasStore(s => s.selectedIds);
   const elements = useCanvasStore(s => s.elements);
+  const viewMode = useCanvasStore(s => s.viewMode);
+  const setViewMode = useCanvasStore(s => s.setViewMode);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+
+  const handleCreateNode = useCallback((type: string) => {
+    const centerX =
+      (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
+    const centerY =
+      (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
+
+    // 默认几何遵循 **和 NodeInputBar 的默认 aspect 对齐** 的原则：
+    //   · image → 1:1（NodeInputBar `aspect` 默认值也是 '1:1'），避免生图回填
+    //     时占位符从 4:3 跳到 1:1 造成视觉跳变
+    //   · video → 16:9（视频场景的默认 aspect）
+    //   · text / sticky / audio 走人因舒适度：正文宽度 ~ 420ch 可读，便签维持
+    //     200 见方足够写几行字而不过份占屏
+    // 尺寸在 scale=1 下比旧版放大约 30%，让节点在 1920+ 屏幕上有足够存在感，
+    // 同时让输入框的 min-width 退化为兜底值（只有手动缩小节点时才触发）。
+    let defaultWidth = 100;
+    let defaultHeight = 100;
+    if (type === 'sticky') { defaultWidth = 220; defaultHeight = 220; }
+    else if (type === 'text') { defaultWidth = 420; defaultHeight = 280; }
+    else if (type === 'image') { defaultWidth = 560; defaultHeight = 560; }
+    else if (type === 'video') { defaultWidth = 640; defaultHeight = 360; }
+    else if (type === 'audio') { defaultWidth = 360; defaultHeight = 96; }
+    else if (type === 'script') { defaultWidth = 480; defaultHeight = 280; }
+    else if (type === 'scene') { defaultWidth = 320; defaultHeight = 200; }
+
+    const id = uuidv4();
+    const isMedia = ['image', 'video', 'audio'].includes(type);
+
+    addElement({
+      id,
+      type: type as any,
+      x: centerX - defaultWidth / 2,
+      y: centerY - defaultHeight / 2,
+      width: defaultWidth,
+      height: defaultHeight,
+      text:
+        type === 'sticky' ? '点击编辑便签内容…' :
+        type === 'text' ? '' :
+        undefined,
+      fontSize: type === 'text' ? 14 : undefined,
+      fontFamily: type === 'text' ? 'var(--font-serif)' : undefined,
+      // Node default fills — tuned for the Warm Paper palette, still
+      // overridable via PropertiesPanel. Sticky picks up the wax-yellow
+      // token; image/video stay neutral (they render their src instead).
+      fill:
+        type === 'rectangle' ? '#E1D7CB' :
+        type === 'circle' ? '#DDD1C2' :
+        type === 'sticky' ? '#F3E3A0' :
+        type === 'text' ? undefined :
+        undefined,
+      src: isMedia ? '' : undefined,
+      cornerRadius: type === 'rectangle' ? 12 : undefined,
+      markdown: type === 'script' ? '' : undefined,
+      scenes: type === 'script' ? [] : undefined,
+      isNew: type === 'script' ? true : undefined,
+      sceneNum: type === 'scene' ? 1 : undefined,
+      title: type === 'scene' ? '' : undefined,
+      content: type === 'scene' ? '' : undefined,
+    });
+    setSelection([id]);
+    setActiveTool('select');
+  }, [stageConfig, addElement, setSelection, setActiveTool]);
 
   // Inline error panels request the settings modal via window event.
   useEffect(() => {
@@ -111,6 +196,12 @@ export default function App() {
         redo();
       } else if (
         (e.ctrlKey || e.metaKey) && e.shiftKey &&
+        e.key.toLowerCase() === 'v'
+      ) {
+        e.preventDefault();
+        setViewMode(viewMode === 'canvas' ? 'storyboard' : 'canvas');
+      } else if (
+        (e.ctrlKey || e.metaKey) && e.shiftKey &&
         e.key.toLowerCase() === 'e'
       ) {
         e.preventDefault();
@@ -131,6 +222,15 @@ export default function App() {
         e.preventDefault();
         const sel = elements.filter(el => selectedIds.includes(el.id));
         sel.forEach(el => { const nid = uuidv4(); addElement({...el, id: nid, x: el.x + 24, y: el.y + 24} as any); });
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ctrl+Shift+G: ungroup selected
+          ungroupSelected();
+        } else {
+          // Ctrl+G: group selected (silent no-op if < 2 nodes selected)
+          groupSelected();
+        }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.length > 0) { e.preventDefault(); deleteElements(selectedIds); }
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -141,65 +241,16 @@ export default function App() {
         else if (k === 'r') { e.preventDefault(); handleCreateNode('rectangle'); }
         else if (k === 'i') { e.preventDefault(); handleCreateNode('image'); }
         else if (k === 's') { e.preventDefault(); handleCreateNode('sticky'); }
+        // Home: reset stage to 100% zoom at origin
+        else if (e.key === 'Home') {
+          e.preventDefault();
+          useCanvasStore.getState().setStageConfig({ scale: 1, x: 0, y: 0 });
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, deleteElements, selectedIds, elements, addElement, setActiveTool, setSelection]);
-
-  const handleCreateNode = (type: string) => {
-    const centerX =
-      (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
-    const centerY =
-      (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
-
-    // 默认几何遵循 **和 NodeInputBar 的默认 aspect 对齐** 的原则：
-    //   · image → 1:1（NodeInputBar `aspect` 默认值也是 '1:1'），避免生图回填
-    //     时占位符从 4:3 跳到 1:1 造成视觉跳变
-    //   · video → 16:9（视频场景的默认 aspect）
-    //   · text / sticky / audio 走人因舒适度：正文宽度 ~ 420ch 可读，便签维持
-    //     200 见方足够写几行字而不过份占屏
-    // 尺寸在 scale=1 下比旧版放大约 30%，让节点在 1920+ 屏幕上有足够存在感，
-    // 同时让输入框的 min-width 退化为兜底值（只有手动缩小节点时才触发）。
-    let defaultWidth = 100;
-    let defaultHeight = 100;
-    if (type === 'sticky') { defaultWidth = 220; defaultHeight = 220; }
-    else if (type === 'text') { defaultWidth = 420; defaultHeight = 280; }
-    else if (type === 'image') { defaultWidth = 560; defaultHeight = 560; }
-    else if (type === 'video') { defaultWidth = 640; defaultHeight = 360; }
-    else if (type === 'audio') { defaultWidth = 360; defaultHeight = 96; }
-
-    const id = uuidv4();
-    const isMedia = ['image', 'video', 'audio'].includes(type);
-
-    addElement({
-      id,
-      type: type as any,
-      x: centerX - defaultWidth / 2,
-      y: centerY - defaultHeight / 2,
-      width: defaultWidth,
-      height: defaultHeight,
-      text:
-        type === 'sticky' ? '点击编辑便签内容…' :
-        type === 'text' ? '' :
-        undefined,
-      fontSize: type === 'text' ? 14 : undefined,
-      fontFamily: type === 'text' ? 'var(--font-serif)' : undefined,
-      // Node default fills — tuned for the Warm Paper palette, still
-      // overridable via PropertiesPanel. Sticky picks up the wax-yellow
-      // token; image/video stay neutral (they render their src instead).
-      fill:
-        type === 'rectangle' ? '#E1D7CB' :
-        type === 'circle' ? '#DDD1C2' :
-        type === 'sticky' ? '#F3E3A0' :
-        type === 'text' ? undefined :
-        undefined,
-      src: isMedia ? '' : undefined,
-      cornerRadius: type === 'rectangle' ? 12 : undefined,
-    });
-    setSelection([id]);
-    setActiveTool('select');
-  };
+  }, [undo, redo, deleteElements, groupSelected, ungroupSelected, selectedIds, elements, addElement, setActiveTool, setSelection, viewMode, setViewMode]);
 
   /**
    * 来自 ToolDock "File / 文件" 通道的上传回调。FlowDock 已经帮我们取到
@@ -265,15 +316,44 @@ export default function App() {
             'radial-gradient(var(--grid-dot) 1px, transparent 1px)',
           backgroundSize: `${20 * stageConfig.scale}px ${20 * stageConfig.scale}px`,
           backgroundPosition: `${stageConfig.x}px ${stageConfig.y}px`,
+          opacity: viewMode === 'canvas' ? 1 : 0,
+          pointerEvents: viewMode === 'canvas' ? 'auto' : 'none',
+          transition: 'opacity 250ms ease-out',
+          willChange: 'opacity',
         }}
       >
         <InfiniteCanvas />
       </section>
 
+      {/* StoryboardView — pure DOM 分镜网格（AD2，与 InfiniteCanvas 同级） */}
+      <div
+        className="absolute inset-0"
+        style={{
+          opacity: viewMode === 'storyboard' ? 1 : 0,
+          pointerEvents: viewMode === 'storyboard' ? 'auto' : 'none',
+          transition: 'opacity 250ms ease-out',
+          zIndex: 5,
+          willChange: 'opacity',
+        }}
+      >
+        {viewMode === 'storyboard' && (
+          // Lazy-load — import lazily so Konva doesn't initialise in storyboard mode
+          <AppStoryboardViewLazy onCreateScript={() => handleCreateNode('script')} />
+        )}
+      </div>
+
       {/* Chrome (z=30) — floating paper chips */}
       <TopBar
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
+        onCreateScript={() => handleCreateNode('script')}
+        onRun={() => {
+          const { selectedIds } = useCanvasStore.getState();
+          if (selectedIds.length === 0) return;
+          runExecution(selectedIds);
+        }}
+        onToggleView={() => setViewMode(viewMode === 'canvas' ? 'storyboard' : 'canvas')}
+        viewMode={viewMode}
       />
       <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} activeTool={activeTool} onSetActiveTool={setActiveTool} />
       <FloatingActions onOpenTemplates={() => setIsTemplatesOpen(true)} onOpenChat={() => setIsTemplatesOpen(true)} />
@@ -283,6 +363,8 @@ export default function App() {
       <AlignmentToolbar />
       <GenerationQueuePanel />
       <GenerationHistoryPanel />
+      <RunPanel />
+      <ToastContainer />
       <StatusBar />
 
       {/* Tool hint when not select — tiny serif chip at the top-center
