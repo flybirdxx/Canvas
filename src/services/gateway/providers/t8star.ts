@@ -207,8 +207,12 @@ async function runEdits(
         // Content-Type 交给浏览器填 multipart 边界，不要手写。
       },
       body: form,
+      signal: req.signal,
     });
   } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      return { ok: false, kind: 'network', message: '请求已取消', aborted: true } as any;
+    }
     return {
       ok: false,
       kind: 'network',

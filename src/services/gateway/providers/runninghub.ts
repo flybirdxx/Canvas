@@ -248,6 +248,7 @@ export const RunningHubProvider: GatewayProvider = {
         channelId,
         resolution: req.resolution,
         qualityLevel: req.qualityLevel,
+        signal: req.signal,
       },
       req.onTaskSubmitted,
       POLL_MAX_WAIT_MS,
@@ -326,6 +327,7 @@ async function runSingleTask(
     channelId: string;
     resolution?: string;
     qualityLevel?: string;
+    signal?: AbortSignal;
   },
   onTaskSubmitted: ImageGenRequest['onTaskSubmitted'],
   maxWaitMs: number,
@@ -354,6 +356,7 @@ async function runSingleTask(
         Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: task.signal,
     });
   } catch (e: any) {
     return {
