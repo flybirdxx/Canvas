@@ -156,7 +156,7 @@ export function topologicalSort(
     }
 
     if (level.length > 0) levels.push(level);
-    // @ts-ignore
+
     queue.length = 0;
     queue.push(...nextQueue);
   }
