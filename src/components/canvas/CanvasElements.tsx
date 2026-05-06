@@ -291,6 +291,7 @@ interface SnapCallbacks {
   onDragEnd: (id: string, newX: number, newY: number) => void;
   onResizeMove: (id: string, newX: number, newY: number, newW: number, newH: number) => void;
   onResizeEnd: (id: string, newX: number, newY: number, newW: number, newH: number) => void;
+  computeDragSnap: (id: string, proposedX: number, proposedY: number, originX: number, originY: number, width: number, height: number) => { x: number; y: number };
 }
 
 interface CanvasElementsProps {
@@ -716,9 +717,14 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           height,
           rotation: rotation || 0,
           draggable: activeTool === 'select' && !el.isLocked && !drawingConnection,
-          dragBoundFunc: function (this: any, pos: any) {
-            if (useCanvasStore.getState().drawingConnection) {
-              return this.absolutePosition();
+          dragBoundFunc: (pos: { x: number; y: number }) => {
+            if (useCanvasStore.getState().drawingConnection) return { x, y };
+            // FR1 吸附：Konva 层 snap，不更新 store → 消除 React props 覆盖拖拽态的闪烁
+            const origin = dragStartPosRef.current[id];
+            if (snapCallbacks?.computeDragSnap && origin) {
+              return snapCallbacks.computeDragSnap(
+                id, pos.x, pos.y, origin.x, origin.y, width, height,
+              );
             }
             return pos;
           },
@@ -736,28 +742,46 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           },
           onDragStart: (_e: any) => {
             isDraggingOrResizingRef.current = true;
-            // Capture drag-start position so subsequent onDragMove frames can
-            // read current (store) position instead of stale closure values.
             dragStartPosRef.current[id] = { x: el.x, y: el.y };
+            // FR1 编组节点：同时捕获所有兄弟节点的起始位置。
+            const group = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
+            if (group && group.childIds.length <= 50) {
+              for (const sid of group.childIds) {
+                if (sid === id) continue;
+                const sibling = useCanvasStore.getState().elements.find(e => e.id === sid);
+                if (sibling) dragStartPosRef.current[sid] = { x: sibling.x, y: sibling.y };
+              }
+            }
           },
           onDragMove: (e: any) => {
             if (e.target.id() === id) {
-              const stage = e.target.getStage();
-              if (!stage) return;
-              const ptr = stage.getPointerPosition();
-              if (!ptr) return;
-              const scale = stage.scaleX();
-              const stageX = stage.x();
-              const stageY = stage.y();
-              const cx = (ptr.x - stageX) / scale;
-              const cy = (ptr.y - stageY) / scale;
-              // Read current position from store — avoids stale closure across frames.
+              // 使用 Konva 节点的当前视觉位置计算 delta —— 与 dragBoundFunc 一致。
+              const visualX = e.target.x();
+              const visualY = e.target.y();
               const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
               if (!currentEl) return;
-              const dx = cx - currentEl.x;
-              const dy = cy - currentEl.y;
+              const dx = visualX - currentEl.x;
+              const dy = visualY - currentEl.y;
               // snapCallbacks.onDragMove handles snapping + updates + guideLines
               snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
+
+              const stage = e.target.getStage();
+              if (stage) {
+              // FR1 编组节点：兄弟节点通过 Konva API 直接移动，不经过 store。
+              const group = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
+              // 防御：编组超过 50 个成员时不移动兄弟节点（防止误操作把全画布分组后
+              // 拖任意节点都带着全部元素跑）。
+              if (group && group.childIds.length <= 50) {
+                for (const sid of group.childIds) {
+                  if (sid === id) continue;
+                  const siblingNode = stage.findOne('#' + sid);
+                  if (siblingNode) {
+                    const sibOrigin = dragStartPosRef.current[sid];
+                    if (sibOrigin) siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
+                  }
+                }
+              }
+              }
             }
           },
           onDragEnd: (e: any) => {
@@ -778,24 +802,18 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               }, 100);
             }
             if (e.target.id() === id) {
-              const stage = e.target.getStage();
-              if (!stage) return;
-              const ptr = stage.getPointerPosition();
-              if (!ptr) return;
-              const scale = stage.scaleX();
-              const stageX = stage.x();
-              const stageY = stage.y();
-              const cx = (ptr.x - stageX) / scale;
-              const cy = (ptr.y - stageY) / scale;
-              // Read current position from store for the final snap commit.
-              const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
-              if (!currentEl) return;
-              const dx = cx - currentEl.x;
-              const dy = cy - currentEl.y;
-              // Commit with final snapped position
-              snapCallbacks.onDragEnd(id, currentEl.x + dx, currentEl.y + dy);
+              // 从 Konva 节点直接读取最终位置（含 dragBoundFunc 的 snap 偏移），
+              // 避免从 store 重新计算导致的 snap 偏移丢失。
+              const finalX = e.target.x();
+              const finalY = e.target.y();
+              snapCallbacks.onDragEnd(id, finalX, finalY);
               // Clean up ref
               delete dragStartPosRef.current[id];
+              // FR1: 清理编组兄弟节点在 dragStartPosRef 中的条目。
+              const cleanupGroup = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
+              if (cleanupGroup) {
+                for (const sid of cleanupGroup.childIds) delete dragStartPosRef.current[sid];
+              }
             }
           },
           onMouseEnter: () => {

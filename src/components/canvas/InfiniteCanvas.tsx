@@ -93,6 +93,9 @@ export function InfiniteCanvas() {
   const stageRef = useRef<Konva.Stage | null>(null);
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
+  // 拖拽位移跟踪：NodeInputBar 等 DOM 覆盖层在拖拽期间叠加此位移跟随节点移动。
+  const dragDeltasRef = useRef<Record<string, { dx: number; dy: number }>>({});
+
   // Register the Konva Stage in the module-level registry so export utilities
   // can grab it without prop drilling. Clean up on unmount.
   useEffect(() => {
@@ -181,65 +184,35 @@ export function InfiniteCanvas() {
   }, []);
 
   const snapOnDragMove = useCallback((id: string, dx: number, dy: number, originX: number, originY: number, width: number, height: number) => {
-    const store = useCanvasStore.getState();
-    const allElements = store.elements;
-    const groups = store.groups;
-
-    const newX = originX + dx;
-    const newY = originY + dy;
-
-    // Alt: suppress snapping but move freely
-    if (isAltRef.current) {
-      const group = groups.find(g => g.childIds.includes(id));
-      if (group) {
-        // Synchronously update all group members' positions via a single set()
-        // so the React re-render from setGuideLines sees correct positions.
-        const updates = new Map<string, { x: number; y: number }>();
-        for (const sid of group.childIds) {
-          if (sid === id) { updates.set(sid, { x: newX, y: newY }); continue; }
-          const sibling = allElements.find(el => el.id === sid);
-          if (sibling) updates.set(sid, { x: sibling.x + dx, y: sibling.y + dy });
-        }
-        useCanvasStore.setState({
-          elements: allElements.map(el => {
-            const u = updates.get(el.id);
-            return u ? ({ ...el, x: u.x, y: u.y }) : el;
-          }),
-        });
-      } else {
-        store.updateElementPosition(id, newX, newY);
-      }
-      setGuideLines([]);
-      return;
-    }
-
+    // 拖拽期间不再更新 store 位置 —— 吸附由 dragBoundFunc 在 Konva 层完成。
+    // 这里只负责计算和渲染参考线（guide lines）。
+    // 这是消除拖拽闪烁的关键：store 不更新 → React 不给 Konva Group 传新 x/y
+    // → Konva 维持自己的拖拽态不受干扰。
+    const allElements = useCanvasStore.getState().elements;
     const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
-    const finalDx = dx + result.snapDx;
-    const finalDy = dy + result.snapDy;
-
-    // Update the store synchronously BEFORE calling setGuideLines.
-    // This is critical: setGuideLines triggers a React re-render; if the store
-    // still has stale positions, Konva Groups receive old x/y props and the node
-    // visually jumps back for one frame → the flickering bug.
-    const group = groups.find(g => g.childIds.includes(id));
-    if (group) {
-      const updates = new Map<string, { x: number; y: number }>();
-      for (const sid of group.childIds) {
-        if (sid === id) { updates.set(sid, { x: newX + result.snapDx, y: newY + result.snapDy }); continue; }
-        const sibling = allElements.find(el => el.id === sid);
-        if (sibling) updates.set(sid, { x: sibling.x + finalDx, y: sibling.y + finalDy });
-      }
-      useCanvasStore.setState({
-        elements: allElements.map(el => {
-          const u = updates.get(el.id);
-          return u ? ({ ...el, x: u.x, y: u.y }) : el;
-        }),
-      });
-    } else {
-      store.updateElementPosition(id, newX + result.snapDx, newY + result.snapDy);
-    }
-
     setGuideLines(result.guideLines);
+  }, []);
+
+  /**
+   * FR1 dragBoundFunc 吸附函数 —— 在 Konva 拖拽层做吸附，不走 store→React→Konva props。
+   * 这是消除拖拽闪烁的第二道防线：即使 snapOnDragMove 里 setGuideLines 触发了 React 重渲染，
+   * 因为 store 的 x/y 没变，Konva Group 的 props 也不变，Konva 拖拽态完全不受干扰。
+   */
+  const computeDragSnap = useCallback((
+    id: string, proposedX: number, proposedY: number,
+    originX: number, originY: number, width: number, height: number,
+  ): { x: number; y: number } => {
+    if (isAltRef.current) {
+      dragDeltasRef.current[id] = { dx: proposedX - originX, dy: proposedY - originY };
+      return { x: proposedX, y: proposedY };
+    }
+    const allElements = useCanvasStore.getState().elements;
+    const dx = proposedX - originX;
+    const dy = proposedY - originY;
+    const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
+    dragDeltasRef.current[id] = { dx: dx + result.snapDx, dy: dy + result.snapDy };
+    setGuideLines(result.guideLines);
+    return { x: proposedX + result.snapDx, y: proposedY + result.snapDy };
   }, []);
 
   const snapOnDragEnd = useCallback((id: string, finalX: number, finalY: number) => {
@@ -262,6 +235,9 @@ export function InfiniteCanvas() {
     } else if (el) {
       useCanvasStore.getState().batchUpdatePositions([{ id, x: finalX, y: finalY }]);
     }
+
+    // 清理拖拽位移跟踪。
+    delete dragDeltasRef.current[id];
 
     setGuideLines([]);
   }, []);
@@ -898,6 +874,7 @@ export function InfiniteCanvas() {
               onDragEnd: snapOnDragEnd,
               onResizeMove: snapOnResizeMove,
               onResizeEnd: snapOnResizeEnd,
+              computeDragSnap,
             }}
           />
           
@@ -957,8 +934,12 @@ export function InfiniteCanvas() {
               // 正常情况（el.width >= barMin）offset = 0，行为与原来一致。
               const canvasX = el.x - (canvasWidth - el.width) / 2;
               const canvasY = el.y + el.height + INPUT_BAR_GAP_CANVAS;
-              const screenX = stageConfig.x + canvasX * stageConfig.scale;
-              const screenY = stageConfig.y + canvasY * stageConfig.scale;
+              // 拖拽位移叠加：NodeInputBar 在拖拽期间跟随节点移动。
+              const delta = dragDeltasRef.current[el.id];
+              const ddx = delta ? delta.dx : 0;
+              const ddy = delta ? delta.dy : 0;
+              const screenX = stageConfig.x + (canvasX + ddx) * stageConfig.scale;
+              const screenY = stageConfig.y + (canvasY + ddy) * stageConfig.scale;
               return (
                 <NodeInputBar
                   key={`input-${el.id}`}
