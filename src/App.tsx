@@ -162,7 +162,7 @@ export default function App() {
     if (!queue || queue.length === 0) return;
     delete (window as any).__canvasBlobMigration;
 
-    queue.forEach(async ({ id, dataUrl }) => {
+    const migrationTasks = queue.map(async ({ id, dataUrl }) => {
       try {
         const key = blobKey(id);
         await storeBlob(key, dataUrl);
@@ -174,8 +174,16 @@ export default function App() {
             src: '',
           } as Partial<typeof el>);
         }
+        return { id, ok: true };
       } catch (err) {
         console.warn(`[migration] blob store failed for ${id}, keeping data`, err);
+        return { id, ok: false, error: err };
+      }
+    });
+    Promise.allSettled(migrationTasks).then((results) => {
+      const failed = results.filter(r => r.status === 'fulfilled' && !(r as any).value?.ok);
+      if (failed.length > 0) {
+        console.warn(`[migration] ${failed.length}/${queue.length} blob migrations failed, kept as data URLs`);
       }
     });
   }, []);

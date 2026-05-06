@@ -239,53 +239,55 @@ export const useCanvasStore = create<CanvasState>()(
       lastSavedAt: null,
 
       addElement: (element) => set((state) => {
-        if (!element.inputs) {
-          element.inputs = [];
-          if (element.type === 'image') {
+        // 不 mutate 入参 —— 浅拷贝后操作，避免调用方持有的引用被意外污染。
+        const el = { ...element };
+        if (!el.inputs) {
+          el.inputs = [];
+          if (el.type === 'image') {
             // Two input ports: a text prompt input (for upstream text nodes)
             // and an image input (for reference images via connection, F14
             // extension). Order matters — text first so it stays at the top
             // of the rendered port column.
-            element.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
-            element.inputs.push({ id: uuidv4(), type: 'image', label: 'Ref' });
+            el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+            el.inputs.push({ id: uuidv4(), type: 'image', label: 'Ref' });
           }
-          if (element.type === 'video') element.inputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-          if (element.type === 'audio') element.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
-          if (element.type === 'rectangle' || element.type === 'circle' || element.type === 'sticky') {
-            element.inputs.push({ id: uuidv4(), type: 'any', label: 'In' });
+          if (el.type === 'video') el.inputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+          if (el.type === 'audio') el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+          if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
+            el.inputs.push({ id: uuidv4(), type: 'any', label: 'In' });
           }
           // 'file' 不接 input —— 它本身是"素材源"，只输出不消费。
         }
 
-        if (!element.outputs) {
-          element.outputs = [];
-          if (element.type === 'text') element.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
-          if (element.type === 'image') element.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-          if (element.type === 'video') element.outputs.push({ id: uuidv4(), type: 'video', label: 'Video' });
-          if (element.type === 'audio') element.outputs.push({ id: uuidv4(), type: 'audio', label: 'Audio' });
-          if (element.type === 'rectangle' || element.type === 'circle' || element.type === 'sticky') {
-            element.outputs.push({ id: uuidv4(), type: 'any', label: 'Out' });
+        if (!el.outputs) {
+          el.outputs = [];
+          if (el.type === 'text') el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
+          if (el.type === 'image') el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+          if (el.type === 'video') el.outputs.push({ id: uuidv4(), type: 'video', label: 'Video' });
+          if (el.type === 'audio') el.outputs.push({ id: uuidv4(), type: 'audio', label: 'Audio' });
+          if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
+            el.outputs.push({ id: uuidv4(), type: 'any', label: 'Out' });
           }
           // file(image)：按 MIME 暴露 image output，让上传的图能直接连到生成节点
           // 的 image 输入槽（img2img / 参考图）。非图类型（PDF / 音频 / 压缩包等）
           // 当前没有合适的 AI 管道消费路径，暂不开放 output —— Phase 2 再考虑为
           // text-like MIME 加 'text' 输出。
-          if (element.type === 'file') {
-            const mt = String((element as any).mimeType || '').toLowerCase();
+          if (el.type === 'file') {
+            const mt = String((el as any).mimeType || '').toLowerCase();
             if (mt.startsWith('image/')) {
-              element.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+              el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
             }
           }
         }
 
         // [telemetry] 观察：file 节点创建频次（上传 / 拖入 / Replace 重建都会过这里）
-        if (element.type === 'file') bumpTelemetry('fileNodeCreated');
+        if (el.type === 'file') bumpTelemetry('fileNodeCreated');
 
-        const label = `添加${typeLabelMap[element.type] ?? element.type}`;
+        const label = `添加${typeLabelMap[el.type] ?? el.type}`;
         return {
           past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
           future: [],
-          elements: [...state.elements, element],
+          elements: [...state.elements, el],
           currentLabel: label,
           currentTimestamp: Date.now(),
           _coalesceKey: undefined,

@@ -12,6 +12,9 @@ function openDb(): Promise<IDBDatabase> {
         db.createObjectStore(BLOB_STORE);
       }
     };
+    req.onblocked = () => {
+      reject(new Error('IndexedDB upgrade blocked — another tab may hold an open connection'));
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });

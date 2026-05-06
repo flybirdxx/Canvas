@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '../store/useCanvasStore';
+import { useAssetLibraryStore } from '../store/useAssetLibraryStore';
 import { useGenerationQueueStore } from '../store/useGenerationQueueStore';
+import { useGenerationHistoryStore } from '../store/useGenerationHistoryStore';
 import { AIGeneratingElement, CanvasElement, MediaElement, NodeVersion } from '../types/canvas';
 import { generateVideoByModelId } from './gateway';
 import type { GatewayErrorKind, VideoGenResult } from './gateway/types';
@@ -72,10 +74,24 @@ function clearPlaceholderError(id: string) {
   store.updateElement(id, { error: undefined } as Partial<AIGeneratingElement>);
 }
 
-function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, prompt: string) {
+/**
+ * 幂等守卫：与 imageGeneration.replacePlaceholderWithImage 一致的防重复
+ * materialize 机制。防止同一 placeholder 被两条路径（runVideoGeneration
+ * 的首轮 + 未来的 taskResume 定时重扫）同时拿到 SUCCESS 而各自 addElement
+ * 出两张视频。
+ */
+const materializingVideos = new Set<string>();
+
+function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, prompt: string): string | null {
+  if (materializingVideos.has(placeholderId)) return null;
+  materializingVideos.add(placeholderId);
+
   const store = getStore();
   const el = store.elements.find(e => e.id === placeholderId);
-  if (!el) return;
+  if (!el) {
+    materializingVideos.delete(placeholderId);
+    return null;
+  }
   const { x, y, width, height } = el;
 
   // F2 parity with image path — inherit version history on in-place regenerate.
@@ -108,6 +124,11 @@ function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, pr
     ...(versions ? { versions, activeVersionIndex } : {}),
   };
   store.replaceElement(placeholderId, newElement as CanvasElement, '视频生成完成');
+
+  // 保留 claim 几秒再释放，与图像路径的 5s 窗口对齐。
+  setTimeout(() => materializingVideos.delete(placeholderId), 5000);
+
+  return newElement.id;
 }
 
 /**
@@ -166,7 +187,30 @@ export async function runVideoGeneration(
     return;
   }
 
-  replacePlaceholderWithVideo(placeholderId, url, request.prompt);
+  const newElementId = replacePlaceholderWithVideo(placeholderId, url, request.prompt);
+  if (!newElementId) return; // 并发去重：另一个调用路径已 materialize 此 placeholder
+
+  // 与 imageGeneration.replacePlaceholderWithImage 对齐：素材库归档 + 生成历史记录。
+  const name = request.prompt.trim().split(/\r?\n/)[0].slice(0, 40) || '生成视频';
+  useAssetLibraryStore.getState().addAsset({
+    kind: 'video',
+    src: url,
+    name,
+    prompt: request.prompt,
+    width: request.w,
+    height: request.h,
+    source: 'generated',
+  });
+  useGenerationHistoryStore.getState().addEntry({
+    id: uuidv4(),
+    elementId: newElementId,
+    prompt: request.prompt,
+    model: request.model || '',
+    thumbnailUrl: url,
+    resultUrls: [url],
+    modality: 'video',
+  });
+
   useGenerationQueueStore.getState().completeTask(taskId, 'success');
 }
 
