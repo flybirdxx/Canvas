@@ -27,6 +27,7 @@ export function SaveControls() {
       className="btn btn-ghost btn-icon"
       style={{ width: 30, height: 30, padding: 0 }}
       title="清空画布"
+      aria-label="清空画布"
     >
       <Trash className="w-4 h-4" strokeWidth={1.6} />
     </button>

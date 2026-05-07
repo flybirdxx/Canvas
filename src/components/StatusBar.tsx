@@ -25,7 +25,7 @@ export function StatusBar() {
 
 function CtrlBtn({ children, onClick, disabled, title }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; title?: string }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} title={title}
+    <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={title}
       style={{ width:32, height:32, display:'flex', alignItems:'center', justifyContent:'center', border:'none', background:'transparent', color: disabled?'var(--ink-3)':'var(--ink-2)', cursor: disabled?'not-allowed':'pointer', borderRadius:'var(--r-sm)', transition:'all 120ms ease' }}
       onMouseEnter={e => { if(!disabled){ e.currentTarget.style.background='rgba(0,0,0,0.04)'; e.currentTarget.style.color='var(--ink-0)'; }}}
       onMouseLeave={e => { if(!disabled){ e.currentTarget.style.background='transparent'; e.currentTarget.style.color= disabled?'var(--ink-3)':'var(--ink-2)'; }}}
