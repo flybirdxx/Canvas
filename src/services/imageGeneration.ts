@@ -31,11 +31,11 @@ export interface GenRequest {
    */
   aspect?: string;
   /** Number of images requested in this batch. Retry always replays with n=1. */
-  n: number;
+  n?: number;
   /** Rendered width in canvas units, for recreating image nodes. */
-  w: number;
+  w?: number;
   /** Rendered height in canvas units, for recreating image nodes. */
-  h: number;
+  h?: number;
   /** Optional image-to-image references (data URLs or hosted URLs). */
   references?: string[];
   /**
@@ -277,8 +277,8 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
           resolution: request.resolution,
           qualityLevel: request.qualityLevel,
           n: 1,
-          w: request.w,
-          h: request.h,
+          w: request.w!,
+          h: request.h!,
           references: request.references,
           maskImage: request.maskImage,
           // F2 fix: persist execId so taskResume can update the correct run's node status.
@@ -402,8 +402,8 @@ export async function retryGeneration(
     prompt: aig.error.request.prompt,
     size: aig.error.request.size,
     n: 1,
-    w: aig.error.request.w,
-    h: aig.error.request.h,
+    w: aig.error.request.w!,
+    h: aig.error.request.h!,
     references: aig.error.request.references,
     maskImage: aig.error.request.maskImage,
   };

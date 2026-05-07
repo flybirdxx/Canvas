@@ -86,8 +86,14 @@ export interface ModelPricing {
   currency: string;
   /** 一口价（任何档位都是这个值）。声明后 `matrix` 会被忽略。 */
   flat?: number;
-  /** 按 (qualityLevel, resolution) 查单价。 */
-  matrix?: Record<string, Record<string, number>>;
+  /**
+   * 计价矩阵。
+   * - 二维矩阵（图像模型）：顶层 key = qualityLevel，子层 key = resolution。
+   *   例: { low: { '1k': 0.1, '2k': 0.2 }, medium: { '1k': 0.2, '2k': 0.4 } }
+   * - 一维矩阵（视频模型）：顶层 key = resolution，子层直接是数字。
+   *   例: { '720p': 1.2, '1080p': 1.48, '2k': 1.62 }
+   */
+  matrix?: Record<string, Record<string, number> | number>;
 }
 
 export interface ImageGenRequest {
@@ -199,6 +205,12 @@ export interface VideoGenRequest {
    * single seed frame.
    */
   seedImage?: string;
+  /**
+   * 异步 provider 在提交成功、开始轮询前会调用此回调告知上层 taskId。
+   * 上层利用该信号把 `{providerId, taskId}` 持久化到 placeholder.pendingTask 上，
+   * 由 `taskResume` 异步 / 跨刷新继续轮询。
+   */
+  onTaskSubmitted?(info: { providerId: string; taskId: string }): void;
 }
 
 export interface VideoGenSuccess {
@@ -214,7 +226,14 @@ export interface VideoGenFailure {
   detail?: string;
 }
 
-export type VideoGenResult = VideoGenSuccess | VideoGenFailure;
+/** 本次视频 generate 调用没拿到最终结果，但任务在 provider 端仍活着。caller 应把 taskId 持久化。 */
+export interface VideoGenPending {
+  ok: 'pending';
+  providerId: string;
+  taskId: string;
+}
+
+export type VideoGenResult = VideoGenSuccess | VideoGenFailure | VideoGenPending;
 
 /**
  * Config values pulled from the settings store when the provider is invoked.

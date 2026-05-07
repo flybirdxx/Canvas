@@ -129,16 +129,19 @@ export interface AIGenerationError {
   kind: GenErrorKind;
   message: string;
   detail?: string;
-  /** Full re-executable request payload. apiKey is NOT persisted here. */
+  /** Full re-executable request payload. apiKey is NOT persisted here.
+   * 视频任务的 request 缺少 n/w/h（这些是图像 canvas 节点专用字段），
+   * 所以用 `?:` 标记为可选，TypeScript 静态检查宽松，但运行时不影响的
+   * 是 image 和 video 的 error handler 会分别填充各自需要的字段。 */
   request: {
     /** Which modality this placeholder belongs to — drives retry routing. */
     modality?: 'image' | 'video';
     model: string;
     prompt: string;
     size: string;
-    n: number;
-    w: number;
-    h: number;
+    n?: number;
+    w?: number;
+    h?: number;
     references?: string[];
     /** F15 image-inpainting mask (PNG data URL). Replayed verbatim on retry. */
     maskImage?: string;
@@ -184,13 +187,17 @@ export interface PendingGenerationTask {
     resolution?: string;
     /** UI 质量档位（RH 官方稳定版的 'low'/'medium'/'high'）。 */
     qualityLevel?: string;
-    n: number;
-    w: number;
-    h: number;
+    n?: number;
+    w?: number;
+    h?: number;
     references?: string[];
     maskImage?: string;
     /** F2 fix: execId of the run that submitted this task. Enables taskResume to update the correct run's node status. */
     execId?: string;
+    /** 视频时长（秒），视频任务 resume 时原样重放。 */
+    durationSec?: number;
+    /** 视频种子图（data URL 或公网 URL），视频任务 resume 时原样重放。 */
+    seedImage?: string;
   };
 }
 

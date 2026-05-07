@@ -3,7 +3,7 @@ import { useCanvasStore } from '../store/useCanvasStore';
 import { useAssetLibraryStore } from '../store/useAssetLibraryStore';
 import { useGenerationQueueStore } from '../store/useGenerationQueueStore';
 import { useGenerationHistoryStore } from '../store/useGenerationHistoryStore';
-import { AIGeneratingElement, CanvasElement, MediaElement, NodeVersion } from '../types/canvas';
+import { AIGeneratingElement, CanvasElement, MediaElement, NodeVersion, PendingGenerationTask } from '../types/canvas';
 import { generateVideoByModelId } from './gateway';
 import type { GatewayErrorKind, VideoGenResult } from './gateway/types';
 
@@ -72,6 +72,15 @@ function clearPlaceholderError(id: string) {
   const el = store.elements.find(e => e.id === id);
   if (!el || el.type !== 'aigenerating') return;
   store.updateElement(id, { error: undefined } as Partial<AIGeneratingElement>);
+}
+
+function attachPendingVideoTask(id: string, pending: PendingGenerationTask) {
+  const store = getStore();
+  const el = store.elements.find(e => e.id === id);
+  if (!el || el.type !== 'aigenerating') return;
+  store.updateElement(id, {
+    pendingTask: pending,
+  } as Partial<AIGeneratingElement>);
 }
 
 /**
@@ -159,6 +168,20 @@ export async function runVideoGeneration(
     size: request.size,
     durationSec: request.durationSec,
     seedImage: request.seedImage,
+    onTaskSubmitted: ({ providerId, taskId }) => {
+      attachPendingVideoTask(placeholderId, {
+        providerId,
+        taskId,
+        submittedAt: Date.now(),
+        request: {
+          model: request.model,
+          prompt: request.prompt,
+          size: request.size,
+          durationSec: request.durationSec,
+          seedImage: request.seedImage,
+        },
+      });
+    },
   });
 
   if (result.ok === false) {
@@ -171,6 +194,12 @@ export async function runVideoGeneration(
     useGenerationQueueStore
       .getState()
       .completeTask(taskId, 'failed', result.message);
+    return;
+  }
+
+  if (result.ok === 'pending') {
+    // 异步任务已提交但未完成，taskId 已由 generateVideoByModelId 的 onTaskSubmitted 回调持久化。
+    // 不写 error，不 completeTask —— 让 placeholder 保持 generating 状态，后续由 taskResume 继续轮询。
     return;
   }
 

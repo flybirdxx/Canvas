@@ -7,51 +7,51 @@ import type {
   ImageGenResult,
   ImageGenSuccess,
   ProviderRuntimeConfig,
+  VideoGenRequest,
+  VideoGenResult,
 } from '../types';
 
 /**
- * RunningHub (runninghub.cn) — 全能图片 G-2.0 系列。
+ * RunningHub (runninghub.cn) — 全能图片 G-2.0 系列图像模型
+ * + SD2.0 (Seedance-V2) 视频模型（sparkvideo-2.0 / sparkvideo-2.0-fast）。
  *
  * 和同步风格的 t8star 最大的不同：**异步任务模型**。所有渠道共用同一套
  * `submit → poll /openapi/v2/query` 的异步流程，但 **body schema 按渠道分叉**
- * （`CHANNELS` 常量）。路径段全是 `rhart-image-g-2*`，`rhart` 是 RH 产品线
- * 的名字，不是 wire-level 的模型代号。
+ * （`CHANNELS` 常量）。
  *
- * 当前支持两条渠道（`models[]` 里两条 descriptor 各对应一套路径 + body）：
- *
+ * 图像渠道（路径前缀均含 `rhart-image-*`）：
  *   · rhart-image-g-2  —— 低价渠道
- *       t2i: POST /openapi/v2/rhart-image-g-2/text-to-image
- *       i2i: POST /openapi/v2/rhart-image-g-2/image-to-image
- *       body: { prompt, aspectRatio, imageUrls? }
- *       aspectRatio 限定 10 档枚举
+ *   · rhart-image-g-2-official —— 官方稳定版
  *
- *   · rhart-image-g-2-official  —— 官方稳定版
- *       t2i: POST /openapi/v2/rhart-image-g-2-official/text-to-image
- *       i2i: POST /openapi/v2/rhart-image-g-2-official/image-to-image
- *       body: { prompt, aspectRatio, resolution, quality, imageUrls? }
- *       比低价多两个**必填**字段：resolution(1k|2k|4k) + quality(low|medium|high)
- *       aspectRatio 枚举同低价。
+ * 视频渠道（路径前缀均含 `rhart-video/sparkvideo-*`）：
+ *   · rhart-video/sparkvideo-2.0/text-to-video      —— SD2.0 文生视频
+ *   · rhart-video/sparkvideo-2.0/image-to-video     —— SD2.0 图生视频（首帧+可选尾帧）
+ *   · rhart-video/sparkvideo-2.0/multimodal-video    —— SD2.0 全能参考视频
+ *   · rhart-video/sparkvideo-2.0-fast/text-to-video —— SD2.0-Fast 文生视频
+ *   · rhart-video/sparkvideo-2.0-fast/image-to-video—— SD2.0-Fast 图生视频
+ *   · rhart-video/sparkvideo-2.0-fast/multimodal-video—— SD2.0-Fast 全能参考视频
  *
- * 轮询响应 schema 两条渠道一致：
+ * 轮询响应 schema 所有渠道一致：
  *   POST /openapi/v2/query  { taskId }
  *   → { status: "QUEUED|RUNNING|SUCCESS|FAILED", results: [{url,...}], errorMessage }
  *
- * 上层语义：`generateImage` **不保证**同步拿到最终图。三种可能：
- *   - ok:true                → 图已就绪
- *   - ok:false               → provider 明确失败
- *   - ok:'pending' + taskId  → 提交成功但本轮轮询窗口耗尽仍在跑；caller
- *                              负责把 taskId 持久化到 placeholder，稍后由
- *                              `pollImageTask` / `taskResume` 接回
+ * 上层语义：`generateImage` / `generateVideo` **不保证**同步拿到最终结果。三种可能：
+ *   - ok:true                → 已就绪
+ *   - ok:false              → provider 明确失败
+ *   - ok:'pending' + taskId  → 提交成功但本轮轮询窗口耗尽仍在跑；
+ *                               caller 负责把 taskId 持久化到 placeholder，
+ *                               稍后由 `pollImageTask` / `taskResume` 接回
  *
  * 其它约束：
- *   · 图生端点 imageUrls[] 只接受**公网 URL**，不接受 base64；
+ *   · 所有渠道的 IMAGE 类型字段只接受**公网 URL**，不接受 base64；
  *     data URL / 裸 base64 在提交前先过 imgbb 转成 https 链接；
- *   · 都没有 n 参数，一次一张。由上层（imageGeneration.ts）扇出 n 次并发调用；
- *   · 官方渠道 imageUrls 最多 4 张（MAX_REFERENCES 已匹配）。
+ *   · 图像渠道都没有 n 参数，一次一张。由上层（imageGeneration.ts）扇出
+ *     n 次并发调用；
+ *   · 视频渠道要求 imageUrls / videoUrls / audioUrls 必须先上传
+ *     到 RunningHub 获取 download_url，再提交任务。
  */
 
-// 两条渠道 t2i + i2i 接受的 aspectRatio 并集。文档里低价 / 官方稳定版的
-// 枚举完全一致，都是这 10 档。
+// 图像渠道 t2i + i2i 接受的 aspectRatio 并集（10 档）。
 const SUPPORTED_ASPECTS = [
   '1:1', '3:2', '2:3', '5:4', '4:5',
   '4:3', '3:4', '16:9', '9:16', '21:9',
@@ -65,28 +65,20 @@ const SUPPORTED_ASPECTS = [
  *     把 taskId 存下来，接到持久化恢复通道
  *   · resume 再查时用更短的 2min 窗口（`RESUME_POLL_MAX_WAIT_MS`），
  *     避免每次启动都长挂
+ *   · 视频任务（`VIDEO_POLL_MAX_WAIT_MS`）更长：10min，因为视频生成耗时更久。
  */
 const POLL_FIRST_DELAY_MS = 2000;
 const POLL_INTERVALS_MS = [3000, 5000, 8000, 12000, 15000] as const;
 const POLL_MAX_WAIT_MS = 5 * 60_000;
 const RESUME_POLL_MAX_WAIT_MS = 2 * 60_000;
+const VIDEO_POLL_MAX_WAIT_MS = 10 * 60_000;
 
 /**
- * 每条渠道的请求构造策略——URL 路径段 + 对应的 JSON body。
- *
- *   · 低价渠道 `rhart-image-g-2`：body 只有 prompt + aspectRatio
- *   · 官方稳定版 `rhart-image-g-2-official`：body 多了 resolution + quality，
- *     都是**必填**字段，缺任何一个会直接 400
- *
- * 把路径 + body 构造绑在一起，分叉集中在这张表里；`runSingleTask` 只管按 id
- * 取渠道发请求，不 care 差异细节。
+ * 每条图像渠道的请求构造策略——URL 路径段 + 对应的 JSON body。
  */
 interface RHChannel {
-  /** text-to-image 端点相对路径（不含 /openapi/v2/）。 */
   textPath: string;
-  /** image-to-image 端点相对路径。 */
   editPath: string;
-  /** 按渠道 body schema 构造提交体。 */
   buildBody(args: {
     prompt: string;
     aspect: string;
@@ -112,8 +104,6 @@ const CHANNELS: Record<string, RHChannel> = {
     editPath: 'rhart-image-g-2-official/image-to-image',
     buildBody: ({ prompt, aspect, imageUrls, resolution, qualityLevel }) => {
       const aspectRatio = snapAspect(aspect);
-      // 文档里 resolution / quality 都是必填。UI 没传就给个稳妥默认，别让
-      // 请求因为缺字段被 400 兜底——用户会以为是 provider 挂了。
       const res = toOfficialResolution(resolution);
       const q = toOfficialQualityLevel(qualityLevel);
       const base = { prompt, aspectRatio, resolution: res, quality: q };
@@ -124,10 +114,6 @@ const CHANNELS: Record<string, RHChannel> = {
   },
 };
 
-/**
- * UI 里的 '1K' / '2K' / '4K' / 'auto' 映射到官方文档接受的小写 '1k|2k|4k'。
- * 文档没有 'auto' 档——传 auto 或未知值一律落回 '1k'，避免 400。
- */
 function toOfficialResolution(resolution: string | undefined): string {
   if (!resolution) return '1k';
   const v = resolution.toLowerCase();
@@ -135,11 +121,6 @@ function toOfficialResolution(resolution: string | undefined): string {
   return '1k';
 }
 
-/**
- * UI quality level 容错：只认 low/medium/high，空值 / 未识别一律 medium。
- * 选 medium 作为默认是因为文档示例就用的 medium；low 出图会明显劣化，不想
- * 让"没选"的用户被劣化体验坑到。
- */
 function toOfficialQualityLevel(level: string | undefined): string {
   if (!level) return 'medium';
   const v = level.toLowerCase();
@@ -150,7 +131,7 @@ function toOfficialQualityLevel(level: string | undefined): string {
 export const RunningHubProvider: GatewayProvider = {
   id: 'runninghub',
   name: 'RunningHub',
-  capabilities: ['image'],
+  capabilities: ['image', 'video'],
   auth: 'bearer',
   authHint: '异步任务模型，提交后轮询查询；图生参考图会自动经 imgbb 托管',
   models: [
@@ -160,17 +141,12 @@ export const RunningHubProvider: GatewayProvider = {
       capability: 'image',
       label: 'rhart-image-g-2',
       caption: '全能图片 G-2.0 · 低价渠道（不稳定）',
-      supportsSize: false, // 只吃 aspectRatio
-      // 注意：RH 协议本身一次一张；n>1 由上层（imageGeneration.ts）为每个
-      // placeholder 各扇出一条 generateImage(n=1) 调用来实现，provider 内部
-      // 不再做并发 fanout。这样 taskId 和 placeholder 天然是 1:1 对应。
+      supportsSize: false,
       supportsN: true,
-      // 文档里 t2i + i2i 接受的 aspectRatio 并集（10 档）。
       supportedAspects: [
         '1:1', '3:2', '2:3', '5:4', '4:5',
         '4:3', '3:4', '16:9', '9:16', '21:9',
       ],
-      // 低价渠道 RH 页面标注 "仅需 ¥0.1"，所有档位一口价。
       pricing: { currency: '¥', flat: 0.1 },
     },
     {
@@ -179,27 +155,135 @@ export const RunningHubProvider: GatewayProvider = {
       capability: 'image',
       label: 'rhart-image-g-2-official',
       caption: '全能图片 G-2.0 · 官方稳定版',
-      // 不是 WxH 自由尺寸，但要求 UI 显示 resolution 档位（见 supportedResolutions）。
       supportsSize: false,
       supportsN: true,
-      // 官方文档 aspect 枚举和低价完全一致，都是这 10 档。
       supportedAspects: [
         '1:1', '3:2', '2:3', '5:4', '4:5',
         '4:3', '3:4', '16:9', '9:16', '21:9',
       ],
-      // resolution 是**必填**，UI 必须给出选择器。注意值用 UI 的大写 '1K/2K/4K'，
-      // provider 内部 toOfficialResolution() 会转成小写 wire 形式。
       supportedResolutions: ['1K', '2K', '4K'],
-      // quality 也是**必填**，多一个档位选择器。
       supportedQualityLevels: ['low', 'medium', 'high'],
-      // RH 官网「价格与权益」页面公示的 9 档单价（¥/次）。
-      // 矩阵 key 走小写——查表前会 toLowerCase，UI 传 '1K'/'Medium' 都能命中。
       pricing: {
         currency: '¥',
         matrix: {
           low:    { '1k': 0.29, '2k': 0.42, '4k': 0.96 },
           medium: { '1k': 0.37, '2k': 0.89, '4k': 1.32 },
           high:   { '1k': 1.54, '2k': 2.82, '4k': 4.52 },
+        },
+      },
+    },
+
+    // ── SD2.0 视频模型（sparkvideo-2.0）────────────────────────────────
+    {
+      id: 'sparkvideo-2.0-text',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0 · 文生视频',
+      caption: 'SD2.0 · Seedance-V2 · 文生视频（标准版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.6,
+          '720p': 1.2,
+          'native1080p': 3.0,
+          '1080p': 1.48,
+          '2k': 1.62,
+          '4k': 1.83,
+        },
+      },
+    },
+    {
+      id: 'sparkvideo-2.0-image',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0 · 图生视频',
+      caption: 'SD2.0 · Seedance-V2 · 图生视频（标准版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.6,
+          '720p': 1.2,
+          'native1080p': 3.0,
+          '1080p': 1.48,
+          '2k': 1.62,
+          '4k': 1.83,
+        },
+      },
+    },
+    {
+      id: 'sparkvideo-2.0-multimodal',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0 · 全能参考视频',
+      caption: 'SD2.0 · Seedance-V2 · 全能参考视频（标准版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.6,
+          '720p': 1.2,
+          'native1080p': 3.0,
+          '1080p': 1.48,
+          '2k': 1.62,
+          '4k': 1.83,
+        },
+      },
+    },
+
+    // ── SD2.0-Fast 视频模型（sparkvideo-2.0-fast）──────────────────────
+    {
+      id: 'sparkvideo-2.0-fast-text',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0-Fast · 文生视频',
+      caption: 'SD2.0-Fast · Seedance-V2 · 文生视频（快速版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.5,
+          '720p': 1.0,
+          '1080p': 1.28,
+          '2k': 1.42,
+          '4k': 1.63,
+        },
+      },
+    },
+    {
+      id: 'sparkvideo-2.0-fast-image',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0-Fast · 图生视频',
+      caption: 'SD2.0-Fast · Seedance-V2 · 图生视频（快速版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.5,
+          '720p': 1.0,
+          '1080p': 1.28,
+          '2k': 1.42,
+          '4k': 1.63,
+        },
+      },
+    },
+    {
+      id: 'spark2.0-fast-multimodal',
+      providerId: 'runninghub',
+      capability: 'video',
+      label: 'SD2.0-Fast · 全能参考视频',
+      caption: 'SD2.0-Fast · Seedance-V2 · 全能参考视频（快速版）',
+      supportedAspects: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+      pricing: {
+        currency: '¥',
+        matrix: {
+          '480p': 0.5,
+          '720p': 1.0,
+          '1080p': 1.28,
+          '2k': 1.42,
+          '4k': 1.63,
         },
       },
     },
@@ -216,7 +300,6 @@ export const RunningHubProvider: GatewayProvider = {
     const hasMask = typeof req.maskImage === 'string' && req.maskImage.length > 0;
     const hasRefs = (req.referenceImages?.length ?? 0) > 0;
 
-    // 本家文档暂不公开 inpaint 蒙版字段，功能不支持就直接告知，别让 400 兜底到用户脸上。
     if (hasMask) {
       return {
         ok: false,
@@ -232,13 +315,8 @@ export const RunningHubProvider: GatewayProvider = {
       imageUrls = prepared.urls;
     }
 
-    // 渠道白名单——手滑写错模型名被静默打到错误 URL 会返回 404 而不是
-    // 我们可处理的结构化错误；兜底回低价版以免彻底废掉。
     const channelId = CHANNELS[req.model] ? req.model : 'rhart-image-g-2';
 
-    // 一次调用对应一个 taskId、一个 placeholder。提交成功后立即触发
-    // onTaskSubmitted 让上层落盘 pendingTask——哪怕后续轮询超时，taskId
-    // 也已经持久化，不会丢。
     const outcome = await runSingleTask(
       config,
       {
@@ -255,8 +333,6 @@ export const RunningHubProvider: GatewayProvider = {
     );
 
     if (outcome.ok === true) {
-      // 成功的 URL 再过一遍 imgbb（如果启用），和 t8star 行为一致。
-      // 外部渠道返回的 COS 链接不一定长期可访问，先转存再落盘最稳。
       return postProcessThroughImgHost(outcome);
     }
     return outcome;
@@ -269,12 +345,42 @@ export const RunningHubProvider: GatewayProvider = {
     if (!config.baseUrl) {
       return { ok: false, kind: 'unknown', message: 'RunningHub Base URL 未配置' };
     }
-    // resume 场景用更短的超时——每次启动都重来一次，避免一次挂太久。
     const outcome = await pollTaskUntilDone(config, taskId, RESUME_POLL_MAX_WAIT_MS);
     if (outcome.ok === true) return postProcessThroughImgHost(outcome);
     return outcome;
   },
+
+  async generateVideo(req: VideoGenRequest, config: ProviderRuntimeConfig): Promise<VideoGenResult> {
+    if (!config.apiKey) {
+      return { ok: false, kind: 'missingKey', message: '请先在设置中配置 RunningHub 的 API 密钥' };
+    }
+    if (!config.baseUrl) {
+      return { ok: false, kind: 'unknown', message: 'RunningHub Base URL 未配置' };
+    }
+
+    let seedImageUrl: string | undefined;
+    if (req.seedImage) {
+      const prepared = await prepareSingleUrl(req.seedImage);
+      if (prepared.ok === false) return prepared;
+      seedImageUrl = prepared.url;
+    }
+
+    if (req.model === 'sparkvideo-2.0-image' || req.model === 'sparkvideo-2.0-fast-image') {
+      return runSparkImageToVideo(config, req, seedImageUrl, VIDEO_POLL_MAX_WAIT_MS);
+    }
+    if (req.model === 'sparkvideo-2.0-text' || req.model === 'sparkvideo-2.0-fast-text') {
+      return runSparkTextToVideo(config, req, VIDEO_POLL_MAX_WAIT_MS);
+    }
+    if (req.model === 'sparkvideo-2.0-multimodal' || req.model === 'sparkvideo-2.0-fast-multimodal') {
+      return runSparkMultimodalVideo(config, req, seedImageUrl, VIDEO_POLL_MAX_WAIT_MS);
+    }
+    return { ok: false, kind: 'unknown', message: `未知视频模型：${req.model}` };
+  },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 图像渠道辅助函数
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** 把任意"可能不是 URL"的参考图列表，转换成一批公网 URL。 */
 async function prepareReferenceUrls(
@@ -282,8 +388,6 @@ async function prepareReferenceUrls(
 ): Promise<{ ok: true; urls: string[] } | ImageGenFailure> {
   const { imgHost } = useSettingsStore.getState();
   if (!imgHost?.apiKey) {
-    // 如果根本没 imgbb key，data URL 无法转换。用户必须要么关掉 data URL 来源，
-    // 要么配置 key。这里提前失败比让 RunningHub 返回 URL invalid 更友好。
     const anyDataUrl = sources.some(s => /^data:/i.test(s));
     if (anyDataUrl) {
       return {
@@ -311,6 +415,29 @@ async function prepareReferenceUrls(
   return { ok: true, urls };
 }
 
+/** 把任意"可能不是 URL"的单个输入，转换成公网 URL。 */
+async function prepareSingleUrl(src: string): Promise<{ ok: true; url: string } | ImageGenFailure> {
+  const { imgHost } = useSettingsStore.getState();
+  const anyDataUrl = /^data:/i.test(src);
+  if (!imgHost?.apiKey && anyDataUrl) {
+    return {
+      ok: false,
+      kind: 'missingKey',
+      message: '需要 imgbb key 将本地文件转换为公网 URL',
+    };
+  }
+  const result = await ensurePublicUrl(src, imgHost?.apiKey ?? '');
+  if (result.ok === false) {
+    return {
+      ok: false,
+      kind: 'network',
+      message: `素材托管失败：${result.message}`,
+      detail: result.fallbackUrl ? `source=${result.fallbackUrl.slice(0, 120)}` : undefined,
+    };
+  }
+  return { ok: true, url: result.url };
+}
+
 /**
  * 落地单个任务：提交 → 轮询 → 解析 results[].url。
  *
@@ -332,8 +459,6 @@ async function runSingleTask(
   onTaskSubmitted: ImageGenRequest['onTaskSubmitted'],
   maxWaitMs: number,
 ): Promise<ImageGenResult> {
-  // channelId 已在 generateImage 里白名单过，这里 CHANNELS[id] 必然有值；
-  // 兜底一份只是为了防御未来直接调本函数的 caller 漏过校验。
   const channel = CHANNELS[task.channelId] ?? CHANNELS['rhart-image-g-2'];
   const isImg2Img = !!task.imageUrls && task.imageUrls.length > 0;
   const path = isImg2Img ? channel.editPath : channel.textPath;
@@ -358,7 +483,7 @@ async function runSingleTask(
       body: JSON.stringify(body),
       signal: task.signal,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       ok: false,
       kind: 'network',
@@ -372,24 +497,23 @@ async function runSingleTask(
     return { ok: false, kind: 'server', message: parsed.message, detail: parsed.detail };
   }
 
-  let submitData: any;
+  let submitData: unknown;
   try {
     submitData = await submitResp.json();
   } catch {
     return { ok: false, kind: 'empty', message: '提交任务响应解析失败' };
   }
 
-  // 有些网关会在 submit 阶段就带 SUCCESS + results（罕见但文档不排除）。
-  if (submitData?.status === 'SUCCESS') {
-    const urls = extractUrls(submitData?.results);
+  const sd = submitData as { status?: string; taskId?: string; results?: unknown[] };
+  if (sd?.status === 'SUCCESS') {
+    const urls = extractUrls(sd?.results);
     if (urls.length > 0) return { ok: true, urls };
   }
-  // 有些则会在 submit 阶段就报 FAILED（例如内容审核）。
-  if (submitData?.status === 'FAILED') {
+  if (sd?.status === 'FAILED') {
     return mkFailureFromTask(submitData);
   }
 
-  const taskId: string | undefined = submitData?.taskId;
+  const taskId: string | undefined = sd?.taskId;
   if (!taskId) {
     return {
       ok: false,
@@ -399,8 +523,6 @@ async function runSingleTask(
     };
   }
 
-  // 拿到 taskId 的第一时间就通知上层落盘，哪怕下一行的 poll 崩了 taskId
-  // 也已经安全入库，resume 通道可以接得上。
   try {
     onTaskSubmitted?.({ providerId: 'runninghub', taskId });
   } catch {
@@ -409,6 +531,10 @@ async function runSingleTask(
 
   return pollTaskUntilDone(config, taskId, maxWaitMs);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 通用轮询 / 查询
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * 单次 API 查询 —— 不等待不轮询，taskResume / generateImage 共用。
@@ -426,7 +552,7 @@ async function queryOnce(config: ProviderRuntimeConfig, taskId: string): Promise
       },
       body: JSON.stringify({ taskId }),
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       ok: false,
       kind: 'network',
@@ -438,15 +564,16 @@ async function queryOnce(config: ProviderRuntimeConfig, taskId: string): Promise
     const parsed = await parseErrorBody(resp);
     return { ok: false, kind: 'server', message: parsed.message, detail: parsed.detail };
   }
-  let data: any;
+  let data: unknown;
   try {
     data = await resp.json();
   } catch {
     return { ok: false, kind: 'empty', message: '查询响应解析失败' };
   }
-  const status: string | undefined = data?.status;
+  const d = data as { status?: string; results?: unknown[] };
+  const status: string | undefined = d?.status;
   if (status === 'SUCCESS') {
-    const urls = extractUrls(data?.results);
+    const urls = extractUrls(d?.results);
     if (urls.length === 0) {
       return { ok: false, kind: 'empty', message: '任务成功但未返回 URL', detail: safeStringify(data) };
     }
@@ -455,18 +582,12 @@ async function queryOnce(config: ProviderRuntimeConfig, taskId: string): Promise
   if (status === 'FAILED') {
     return mkFailureFromTask(data);
   }
-  // QUEUED / RUNNING / 未知 → 仍在跑。
   return { ok: 'pending', providerId: 'runninghub', taskId };
 }
 
 /**
  * 按指数退避轮询到 maxWait。任何时候拿到终结态（成功/失败）都立即返回；
- * 时间窗耗尽仍是 pending 则原样返回 pending，让 caller 把 taskId 落到
- * 持久化通道。
- *
- * 与之前相比：
- *   - 超时**不再**转成 failure（那会让用户以为任务失败，还让钱白花）
- *   - 单次 query 的网络瞬断也只是"当次作废、下一轮再来"，不返回 failure
+ * 时间窗耗尽仍是 pending 则原样返回 pending，让 caller 把 taskId 落到持久化通道。
  */
 async function pollTaskUntilDone(
   config: ProviderRuntimeConfig,
@@ -481,58 +602,381 @@ async function pollTaskUntilDone(
     const res = await queryOnce(config, taskId);
     if (res.ok === true) return res;
     if (res.ok === false) {
-      // 明确失败（含服务 5xx / 解析错 / FAILED）直接回报——重试没意义。
-      // 例外：网络瞬断走 fall-through，继续下一轮；否则 DNS 抖动一次就爆
-      // 用户体验不好。
       if (res.kind !== 'network') return res;
     }
-    // pending 或瞬时 network，退避一轮再来。
     const step = POLL_INTERVALS_MS[Math.min(attempt, POLL_INTERVALS_MS.length - 1)];
     attempt++;
     await sleep(step);
   }
 
-  // 时间窗耗尽，任务仍在跑——返回 pending 让上层持久化 / 续轮询。
   return { ok: 'pending', providerId: 'runninghub', taskId };
 }
 
-function mkFailureFromTask(data: any): ImageGenFailure {
+function mkFailureFromTask(data: unknown): ImageGenFailure {
+  const d = data as {
+    errorMessage?: string;
+    failedReason?: { message?: string; error?: string };
+  };
   const msg =
-    data?.errorMessage ||
-    data?.failedReason?.message ||
-    data?.failedReason?.error ||
+    d?.errorMessage ||
+    d?.failedReason?.message ||
+    d?.failedReason?.error ||
     '任务失败';
   return {
     ok: false,
     kind: 'server',
     message: String(msg),
-    detail: safeStringify(data?.failedReason ?? data),
+    detail: safeStringify(d?.failedReason ?? data),
   };
 }
 
-function extractUrls(results: any): string[] {
+// ─────────────────────────────────────────────────────────────────────────────
+// 视频生成相关
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 将本地媒体文件上传到 RunningHub，返回 download_url。
+ * 用于 sparkvideo-2.0 等视频渠道——这些端点不接受 data URL，
+ * 必须直接用 RunningHub 的 media/upload 端点。
+ */
+async function uploadLocalFileToRunningHub(
+  fileData: string,
+  filename: string,
+  apiKey: string,
+  baseUrl: string,
+): Promise<{ ok: true; downloadUrl: string } | ImageGenFailure> {
+  let mimeType = 'application/octet-stream';
+  let data = fileData;
+  if (/^data:image\//i.test(fileData)) {
+    const match = fileData.match(/^data:([^;]+);/);
+    if (match) mimeType = match[1];
+    data = fileData.replace(/^data:[^;]+;base64,/, '');
+  } else if (/^data:video\//i.test(fileData)) {
+    const match = fileData.match(/^data:([^;]+);/);
+    if (match) mimeType = match[1];
+    data = fileData.replace(/^data:[^;]+;base64,/, '');
+  }
+  if (/^https?:\/\//i.test(fileData)) {
+    return { ok: true, downloadUrl: fileData };
+  }
+  let decoded: string;
+  try {
+    decoded = atob(data);
+  } catch {
+    return { ok: false, kind: 'empty', message: `无法解码 base64 文件：${filename}` };
+  }
+  const bytes = new Uint8Array(decoded.length);
+  for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+
+  const boundary = `----rh-${Date.now().toString(16)}`;
+  const parts: Uint8Array[] = [];
+  const encoder = new TextEncoder();
+  parts.push(
+    encoder.encode(`--${boundary}\r\n`),
+    encoder.encode(`Content-Disposition: form-data; name="file"; filename="${filename}"\r\n`),
+    encoder.encode(`Content-Type: ${mimeType}\r\n\r\n`),
+    bytes,
+    encoder.encode(`\r\n--${boundary}--\r\n`),
+  );
+  const totalLen = parts.reduce((s, p) => s + p.length, 0);
+  const combined = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const p of parts) { combined.set(p, offset); offset += p.length; }
+
+  let resp: Response;
+  try {
+    resp = await fetch(`${baseUrl}/openapi/v2/media/upload/binary`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: combined,
+    });
+  } catch (e: unknown) {
+    return {
+      ok: false,
+      kind: 'network',
+      message: 'RunningHub 文件上传请求失败',
+      detail: buildRhNetworkErrorDetail(`${baseUrl}/openapi/v2/media/upload/binary`, e),
+    };
+  }
+  if (!resp.ok) {
+    const parsed = await parseErrorBody(resp);
+    return { ok: false, kind: 'server', message: `RunningHub 文件上传失败：${parsed.message}`, detail: parsed.detail };
+  }
+  let json: unknown;
+  try { json = await resp.json(); } catch {
+    return { ok: false, kind: 'empty', message: 'RunningHub 上传响应解析失败' };
+  }
+  const j = json as { code?: number; msg?: string; errorMessage?: string; message?: string; data?: { download_url?: string } };
+  if (j?.code !== 0) {
+    const msg = j?.msg ?? j?.errorMessage ?? j?.message ?? '上传失败';
+    return { ok: false, kind: 'server', message: `RunningHub 文件上传失败：${msg}` };
+  }
+  const downloadUrl = j?.data?.download_url?.trim();
+  if (!downloadUrl) return { ok: false, kind: 'empty', message: 'RunningHub 上传未返回 download_url' };
+  return { ok: true, downloadUrl };
+}
+
+/**
+ * 把 req.size 映射到 API 接受的 resolution 字符串。
+ * 优先直接返回 size 值（因为很多 UI 传入的是 "16:9" 这样的 ratio 字符串），
+ * 否则按宽高比估算最近档位。
+ */
+function resolveVideoResolution(size: string): string {
+  const supported = ['480p', '720p', 'native1080p', '1080p', '2k', '4k'];
+  if (!size) return '720p';
+  const lower = size.toLowerCase();
+  if (supported.includes(lower)) return lower;
+  const parts = size.split(/[x×]/);
+  if (parts.length === 2) {
+    const h = parseInt(parts[1], 10);
+    if (!isNaN(h)) {
+      if (h <= 480) return '480p';
+      if (h <= 720) return '720p';
+      if (h <= 1080) return '1080p';
+      if (h <= 1440) return '2k';
+      return '4k';
+    }
+  }
+  const ratioMatch = lower.match(/(\d+)[:x×](\d+)/);
+  if (ratioMatch) {
+    const w = parseInt(ratioMatch[1], 10);
+    const h = parseInt(ratioMatch[2], 10);
+    if (w && h) {
+      const aspect = w / h;
+      if (
+        Math.abs(aspect - 16 / 9) < 0.1 ||
+        Math.abs(aspect - 9 / 16) < 0.1 ||
+        Math.abs(aspect - 1) < 0.15 ||
+        Math.abs(aspect - 4 / 3) < 0.15
+      ) {
+        return '720p';
+      }
+    }
+  }
+  return '720p';
+}
+
+/**
+ * SD2.0 图生视频：firstFrameUrl（+ 可选 lastFrameUrl）→ 视频。
+ * Schema：POST /openapi/v2/rhart-video/sparkvideo-2.0/image-to-video
+ *         POST /openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video
+ */
+async function runSparkImageToVideo(
+  config: ProviderRuntimeConfig,
+  req: VideoGenRequest,
+  seedImageUrl: string | undefined,
+  maxWaitMs: number,
+): Promise<VideoGenResult> {
+  if (!seedImageUrl) {
+    return { ok: false, kind: 'unknown', message: '图生视频需要首帧图片（seedImage）' };
+  }
+
+  const isFast = req.model === 'sparkvideo-2.0-fast-image';
+  const aspect = String(snapAspect(req.size, ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9']));
+  const duration = String(req.durationSec || 5);
+  const resolution = resolveVideoResolution(req.size);
+
+  const imgResult = await uploadLocalFileToRunningHub(
+    seedImageUrl,
+    `first-frame-${Date.now()}.png`,
+    config.apiKey,
+    config.baseUrl,
+  );
+  if (imgResult.ok === false) return imgResult;
+
+  const payload = {
+    resolution,
+    duration,
+    firstFrameUrl: imgResult.downloadUrl,
+    generateAudio: true,
+    ratio: aspect,
+    realPersonMode: true,
+    conversionSlots: ['all'],
+    returnLastFrame: false,
+  };
+
+  const endpoint = `${config.baseUrl}/openapi/v2/rhart-video/sparkvideo-2.0${isFast ? '-fast' : ''}/image-to-video`;
+  const taskId = await submitTask(endpoint, payload, config.apiKey);
+  return pollVideoUntilDone(config, taskId, maxWaitMs);
+}
+
+/**
+ * SD2.0 文生视频：纯文本 prompt → 视频。
+ * Schema：POST /openapi/v2/rhart-video/sparkvideo-2.0/text-to-video
+ *         POST /openapi/v2/rhart-video/sparkvideo-2.0-fast/text-to-video
+ */
+async function runSparkTextToVideo(
+  config: ProviderRuntimeConfig,
+  req: VideoGenRequest,
+  maxWaitMs: number,
+): Promise<VideoGenResult> {
+  const isFast = req.model === 'sparkvideo-2.0-fast-text';
+  const aspect = String(snapAspect(req.size, ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9']));
+  const duration = String(req.durationSec || 5);
+  const resolution = resolveVideoResolution(req.size);
+
+  const payload = {
+    prompt: req.prompt,
+    resolution,
+    duration,
+    generateAudio: true,
+    ratio: aspect,
+    webSearch: false,
+    returnLastFrame: false,
+  };
+
+  const endpoint = `${config.baseUrl}/openapi/v2/rhart-video/sparkvideo-2.0${isFast ? '-fast' : ''}/text-to-video`;
+  const taskId = await submitTask(endpoint, payload, config.apiKey);
+  return pollVideoUntilDone(config, taskId, maxWaitMs);
+}
+
+/**
+ * SD2.0 全能参考视频：prompt + imageUrls + videoUrls + audioUrls → 视频。
+ * Schema：POST /openapi/v2/rhart-video/sparkvideo-2.0/multimodal-video
+ *         POST /openapi/v2/rhart-video/sparkvideo-2.0-fast/multimodal-video
+ * multimodal-video 是通用混合模式：同时支持图生视频（单图）和多模态参考（多图+视频+音频）。
+ * seedImage（来自连线）作为首图放入 imageUrls。
+ */
+async function runSparkMultimodalVideo(
+  config: ProviderRuntimeConfig,
+  req: VideoGenRequest,
+  seedImageUrl: string | undefined,
+  maxWaitMs: number,
+): Promise<VideoGenResult> {
+  const isFast = req.model === 'sparkvideo-2.0-fast-multimodal';
+  const aspect = String(snapAspect(req.size, ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9']));
+  const duration = String(req.durationSec || 5);
+  const resolution = resolveVideoResolution(req.size);
+
+  const imageUrls: string[] = [];
+  if (seedImageUrl) {
+    const imgResult = await uploadLocalFileToRunningHub(
+      seedImageUrl,
+      `ref-${Date.now()}.png`,
+      config.apiKey,
+      config.baseUrl,
+    );
+    if (imgResult.ok === false) return imgResult;
+    imageUrls.push(imgResult.downloadUrl);
+  }
+
+  const payload = {
+    prompt: req.prompt,
+    resolution,
+    duration,
+    imageUrls: imageUrls.length > 0 ? imageUrls : [],
+    videoUrls: [] as string[],
+    audioUrls: [] as string[],
+    generateAudio: true,
+    ratio: aspect,
+    realPersonMode: true,
+    conversionSlots: ['all'],
+    returnLastFrame: false,
+  };
+
+  const endpoint = `${config.baseUrl}/openapi/v2/rhart-video/sparkvideo-2.0${isFast ? '-fast' : ''}/multimodal-video`;
+  const taskId = await submitTask(endpoint, payload, config.apiKey);
+  return pollVideoUntilDone(config, taskId, maxWaitMs);
+}
+
+/** 提交任务到 RunningHub，返回 taskId（不轮询）。 */
+async function submitTask(endpoint: string, body: Record<string, unknown>, apiKey: string): Promise<string> {
+  let resp: Response;
+  try {
+    resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e: unknown) {
+    throw new Error(`RunningHub 任务提交失败：${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!resp.ok) {
+    const parsed = await parseErrorBody(resp);
+    throw new Error(`RunningHub 任务提交失败（${resp.status}）：${parsed.message}`);
+  }
+  let json: unknown;
+  try { json = await resp.json(); } catch {
+    throw new Error('RunningHub 任务提交响应解析失败');
+  }
+  const j = json as {
+    errorCode?: string;
+    error_code?: string;
+    errorMessage?: string;
+    error_message?: string;
+    taskId?: string;
+    task_id?: string;
+  };
+  if (j?.errorCode || j?.errorMessage) {
+    throw new Error(`RunningHub 任务提交失败：${j.errorMessage ?? j.errorCode}`);
+  }
+  const taskId = j?.taskId ?? j?.task_id;
+  if (!taskId) throw new Error(`RunningHub 未返回 taskId：${safeStringify(json)}`);
+  return String(taskId);
+}
+
+/** 轮询视频任务直到完成（或超时）。超时返回 pending 以便后续 resume。 */
+async function pollVideoUntilDone(
+  config: ProviderRuntimeConfig,
+  taskId: string,
+  maxWaitMs: number,
+): Promise<VideoGenResult> {
+  await sleep(POLL_FIRST_DELAY_MS);
+  const deadline = Date.now() + maxWaitMs;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    const res = await queryOnce(config, taskId);
+    if (res.ok === true) {
+      const urls = extractUrls(res);
+      if (urls.length === 0) {
+        return { ok: false, kind: 'empty', message: '任务成功但未返回视频 URL', detail: safeStringify(res) };
+      }
+      return { ok: true, urls };
+    }
+    if (res.ok === false && res.kind !== 'network') return res;
+    const step = [3000, 5000, 8000, 12000, 15000][Math.min(attempt, 4)];
+    attempt++;
+    await sleep(step);
+  }
+  return { ok: 'pending', providerId: 'runninghub', taskId } as unknown as VideoGenResult;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 通用工具函数
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractUrls(results: unknown): string[] {
   if (!Array.isArray(results)) return [];
   const urls: string[] = [];
   for (const r of results) {
-    if (r && typeof r.url === 'string' && r.url.length > 0) urls.push(r.url);
+    const item = r as { url?: string };
+    if (item && typeof item.url === 'string' && item.url.length > 0) urls.push(item.url);
   }
   return urls;
 }
 
 /** 把任意输入 aspect snap 到 RunningHub 支持的最近档位。 */
-function snapAspect(input?: string): string {
-  if (!input) return '1:1';
-  if ((SUPPORTED_ASPECTS as readonly string[]).includes(input)) return input;
-  // 输入形如 '16:9'/'1280:720' 不在枚举内时，按数值比反推最近枚举项。
+function snapAspect(input?: string, allowed?: string[]): string {
+  const pool: string[] = allowed ?? [...SUPPORTED_ASPECTS];
+  const fallback = pool[0] ?? '1:1';
+  if (!input) return fallback;
+  if (pool.indexOf(input) >= 0) return input;
   const m = input.match(/^(\d+):(\d+)$/);
-  if (!m) return '1:1';
+  if (!m) return fallback;
   const w = Number(m[1]);
   const h = Number(m[2]);
-  if (!(w > 0) || !(h > 0)) return '1:1';
+  if (!(w > 0) || !(h > 0)) return fallback;
   const target = w / h;
-  let best = SUPPORTED_ASPECTS[0] as string;
+  let best = pool[0] ?? '1:1';
   let bestDelta = Infinity;
-  for (const a of SUPPORTED_ASPECTS) {
+  for (const a of pool) {
     const [aw, ah] = a.split(':').map(Number);
     const delta = Math.abs(aw / ah - target);
     if (delta < bestDelta) { bestDelta = delta; best = a; }
@@ -588,13 +1032,8 @@ function safeStringify(v: unknown): string | undefined {
   }
 }
 
-/**
- * 同 t8star 那份 buildNetworkErrorDetail——fetch 抛 TypeError 时几乎拿不到
- * 有效信息，需要给用户一份完整的候选排查清单，替代原来只有一行
- * "Failed to fetch" 的空窗期。参见 t8star.ts 注释。
- */
-function buildRhNetworkErrorDetail(url: string, e: any): string {
-  const rawMsg = e?.message ? String(e.message) : String(e ?? 'unknown');
+function buildRhNetworkErrorDetail(url: string, e: unknown): string {
+  const rawMsg = e instanceof Error ? e.message : String(e ?? 'unknown');
   const lines = [
     `URL: ${url}`,
     `错误: ${rawMsg}`,

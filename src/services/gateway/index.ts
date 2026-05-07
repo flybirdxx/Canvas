@@ -60,8 +60,9 @@ export function findModel(modelId: string): { model: ModelDescriptor; provider: 
  *
  * 语义：
  *   - `pricing.flat` 存在  → 直接用 flat 价（适合一口价渠道）
- *   - 否则查 matrix[level][res]，值缺失时返回 undefined，由 UI 降级显示
- *   - 模型没有 pricing       → undefined（UI 徽章显示 '—'）
+ *   - 视频模型矩阵（`matrix` 顶层 key 为分辨率）→ 按 resolution 直接查
+ *   - 图像模型矩阵（`matrix` 顶层 key 为 qualityLevel）→ 按 (qualityLevel, resolution) 查
+ *   - 模型没有 pricing → undefined（UI 徽章显示 '—'）
  *
  * 输入容错：resolution / qualityLevel 大小写无关，统一转小写后再查表。
  */
@@ -75,11 +76,23 @@ export function computeUnitPrice(
     return { amount: p.flat, currency: p.currency };
   }
   if (p.matrix) {
-    const level = (args.qualityLevel ?? 'medium').toLowerCase();
-    const res = (args.resolution ?? '1k').toLowerCase();
-    const row = p.matrix[level];
-    const val = row ? row[res] : undefined;
-    if (typeof val === 'number') return { amount: val, currency: p.currency };
+    const res = (args.resolution ?? '720p').toLowerCase();
+    const keys = Object.keys(p.matrix);
+    if (keys.length === 0) return undefined;
+    const firstKey = keys[0] ?? '';
+    // 判断矩阵是 flat（key 为分辨率）还是带 qualityLevel 的二维矩阵
+    const firstVal = (p.matrix as unknown as Record<string, unknown>)[firstKey];
+    if (typeof firstVal === 'number') {
+      // flat 矩阵：顶层 key 就是分辨率（如视频模型）
+      const val = (p.matrix as Record<string, number>)[res];
+      if (typeof val === 'number') return { amount: val, currency: p.currency };
+    } else {
+      // 二维矩阵：顶层 key 是 qualityLevel（如图像模型）
+      const level = (args.qualityLevel ?? 'medium').toLowerCase();
+      const row = (p.matrix as Record<string, Record<string, number>>)[level];
+      const val = row ? row[res] : undefined;
+      if (typeof val === 'number') return { amount: val, currency: p.currency };
+    }
   }
   return undefined;
 }

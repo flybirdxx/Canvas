@@ -96,6 +96,10 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               if (!currentEl) return;
               const dx = visualX - currentEl.x;
               const dy = visualY - currentEl.y;
+
+              // 更新 store（触发 connections 重新渲染，跟随节点移动）
+              useCanvasStore.getState().updateElementPosition(id, visualX, visualY);
+
               // snapCallbacks.onDragMove handles snapping + updates + guideLines
               snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
 
@@ -111,7 +115,11 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
                     const siblingNode = stage.findOne('#' + sid);
                     if (siblingNode) {
                       const sibOrigin = dragStartPosRef.current[sid];
-                      if (sibOrigin) siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
+                      if (sibOrigin) {
+                        siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
+                        // 同时更新 store 中兄弟节点位置，保持 connections 跟随
+                        useCanvasStore.getState().updateElementPosition(sid, sibOrigin.x + dx, sibOrigin.y + dy);
+                      }
                     }
                   }
                 }
