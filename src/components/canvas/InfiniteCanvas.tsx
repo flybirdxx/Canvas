@@ -1,11 +1,10 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Stage, Layer, Rect, Line, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '../../store/useCanvasStore';
 import { CanvasElements } from './CanvasElements';
-import { CanvasElement } from '../../types/canvas';
 import { NodeInputBar } from '../NodeInputBar';
 import { NodeVersionSwitcher } from '../NodeVersionSwitcher';
 import { InpaintOverlay } from '../InpaintOverlay';
@@ -13,25 +12,21 @@ import { NodeNoteIndicator } from '../NodeNoteIndicator';
 import { setStage } from '../../utils/stageRegistry';
 import { exportCanvasRect } from '../../utils/exportPng';
 import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
-import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react'; // For Quick Add Menu
+import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react';
 import { buildFileElement } from '../../services/fileIngest';
 import { runGeneration } from '../../services/imageGeneration';
-import { findSnapTargets, type GuideLine } from '../../utils/alignmentUtils';
 
-// Bar 的宽度和间距用画布单位表达，由 CSS transform:scale 在渲染时等比缩放。
-// 各模式底栏最小宽度——仅用于"用户把节点手动缩得很小时"的保护兜底。
-// 原则：bar 宽度应当 = 节点宽度，只在节点窄到"chip 行放不下"时才撑开。
-// 数值按"顶部 chip 行所有按钮用 shrink-0 摆一行还不溢出"算出来的下限：
-//   · image：提示词库/聚焦/标记/局部重绘/参考图 + gap + 内外边距 ≈ 400
-//   · video：多了 运镜/角色库 两个 chip ≈ 460
-//   · text：只有提示词库一个 chip + 下排基本控件 ≈ 260
-// 节点默认尺寸远大于这些 min，所以日常情况 bar = 节点宽度，二者
-// 是上下延伸的一整块。
+// Import our new hooks
+import { useKeyboardShortcuts } from '../../hooks/canvas/useKeyboardShortcuts';
+import { useCanvasPanZoom } from '../../hooks/canvas/useCanvasPanZoom';
+import { useCanvasSelection } from '../../hooks/canvas/useCanvasSelection';
+import { useCanvasConnections } from '../../hooks/canvas/useCanvasConnections';
+import { useSnapCallbacks } from '../../hooks/canvas/useSnapCallbacks';
+
 const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
   text: 260,
   image: 400,
   video: 460,
-  // 失败占位符复用 image 的宽度——它承载的是同一个 image 模式的 bar。
   aigenerating: 400,
 };
 const INPUT_BAR_MIN_WIDTH_FALLBACK = 260;
@@ -40,7 +35,6 @@ const INPUT_BAR_VISIBLE_SCALE = 0.5;
 
 function getBezierPoints(startX: number, startY: number, endX: number, endY: number) {
   const dx = Math.abs(endX - startX);
-  // Add a minimum curve factor to make it look good even when nodes are close horizontally
   const curveFactor = Math.max(dx * 0.5, 50); 
   const cp1X = startX + curveFactor;
   const cp1Y = startY;
@@ -49,34 +43,17 @@ function getBezierPoints(startX: number, startY: number, endX: number, endY: num
   return [startX, startY, cp1X, cp1Y, cp2X, cp2Y, endX, endY];
 }
 
-/**
- * Paper-palette port colors — mirrors the --port-* tokens in tokens.css
- * (Konva can't read CSS vars, so sRGB approximations of the oklch source).
- * Kept in sync with the copy in CanvasElements.tsx.
- */
 function getPortColor(type: string) {
   switch (type) {
-    case 'text':  return '#3F8FA6';   // teal
-    case 'image': return '#C67654';   // terracotta
-    case 'video': return '#8866B5';   // plum
-    case 'audio': return '#6FA26A';   // green
-    default:      return '#8A7F74';   // neutral ink
+    case 'text':  return '#3F8FA6';
+    case 'image': return '#C67654';
+    case 'video': return '#8866B5';
+    case 'audio': return '#6FA26A';
+    default:      return '#8A7F74';
   }
 }
 
-/** Ink-1 mirror for selection marquees. */
 const INK_LINE = '#5A4E42';
-
-interface QuickAddMenuState {
-  x: number;
-  y: number;
-  canvasX: number;
-  canvasY: number;
-  fromElementId?: string;
-  fromPortId?: string;
-  fromPortType?: string;
-  isDisconnecting?: boolean;
-}
 
 export function InfiniteCanvas() {
   const { 
@@ -93,185 +70,17 @@ export function InfiniteCanvas() {
   const stageRef = useRef<Konva.Stage | null>(null);
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
-  // 拖拽位移跟踪：NodeInputBar 等 DOM 覆盖层在拖拽期间叠加此位移跟随节点移动。
-  const dragDeltasRef = useRef<Record<string, { dx: number; dy: number }>>({});
-
-  // Register the Konva Stage in the module-level registry so export utilities
-  // can grab it without prop drilling. Clean up on unmount.
   useEffect(() => {
-    return () => {
-      setStage(null);
-    };
+    return () => { setStage(null); };
   }, []);
 
-  // Quick Add Menu state
-  const [quickAddMenu, setQuickAddMenu] = useState<QuickAddMenuState | null>(null);
-
-  const [selectionBox, setSelectionBox] = useState<{
-    startX: number;
-    startY: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  // FR1: Alignment snapping — guide lines rendered in canvas space
-  const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
-
-  const [isSpacePressed, setIsSpacePressed] = useState(false);
-
-  // Marquee-export tool mode. `active` means we're in the mode (awaiting draw or
-  // confirmation); `drawing` is true while the user is dragging out the rect;
-  // once the user releases, we stay active with a confirmation toolbar shown.
-  const [marquee, setMarquee] = useState<{
-    active: boolean;
-    drawing: boolean;
-    rect: { x: number; y: number; w: number; h: number } | null;
-  }>({ active: false, drawing: false, rect: null });
-  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Enter marquee mode on external request (menu / hotkey).
-  useEffect(() => {
-    const enter = () => setMarquee({ active: true, drawing: false, rect: null });
-    window.addEventListener('canvas:start-marquee-export', enter);
-    return () => window.removeEventListener('canvas:start-marquee-export', enter);
-  }, []);
-
-  // Esc cancels marquee mode globally.
-  useEffect(() => {
-    if (!marquee.active) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMarquee({ active: false, drawing: false, rect: null });
-        marqueeStartRef.current = null;
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [marquee.active]);
-
-  const isPanningRef = useRef(false);
-  const lastPanPositionRef = useRef({ x: 0, y: 0 });
+  const { isSpacePressed, isAltRef, isShiftRef } = useKeyboardShortcuts();
+  const { handleWheel, startPan, updatePan, endPan, isPanningRef } = useCanvasPanZoom();
+  const { selectionBox, marquee, setMarquee, startSelectionBox, updateSelectionBox, endSelectionBox, startMarquee, updateMarquee, endMarquee } = useCanvasSelection(isShiftRef);
+  const { quickAddMenu, setQuickAddMenu, findPortUnderMouse, handleQuickAdd, handleQuickAddUpload } = useCanvasConnections();
+  const { guideLines, snapCallbacks, dragDeltasRef } = useSnapCallbacks(isAltRef);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // FR1: Track Alt/Shift key state for snapping override and additive marquee selection
-  const isAltRef = useRef(false);
-  const isShiftRef = useRef(false);
 
-  // Unified keyboard listener: Space (pan mode) + Alt (snap override) + Shift (additive marquee).
-  // Previously three separate useEffects each registering their own keydown/keyup listeners,
-  // causing double-firing when HMR remounted without cleanup.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        setIsSpacePressed(true);
-      }
-      if (e.key === 'Alt') isAltRef.current = true;
-      if (e.key === 'Shift') isShiftRef.current = true;
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') setIsSpacePressed(false);
-      if (e.key === 'Alt') isAltRef.current = false;
-      if (e.key === 'Shift') isShiftRef.current = false;
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  const snapOnDragMove = useCallback((id: string, dx: number, dy: number, originX: number, originY: number, width: number, height: number) => {
-    // 拖拽期间不再更新 store 位置 —— 吸附由 dragBoundFunc 在 Konva 层完成。
-    // 这里只负责计算和渲染参考线（guide lines）。
-    // 这是消除拖拽闪烁的关键：store 不更新 → React 不给 Konva Group 传新 x/y
-    // → Konva 维持自己的拖拽态不受干扰。
-    const allElements = useCanvasStore.getState().elements;
-    const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
-    setGuideLines(result.guideLines);
-  }, []);
-
-  /**
-   * FR1 dragBoundFunc 吸附函数 —— 在 Konva 拖拽层做吸附，不走 store→React→Konva props。
-   * 这是消除拖拽闪烁的第二道防线：即使 snapOnDragMove 里 setGuideLines 触发了 React 重渲染，
-   * 因为 store 的 x/y 没变，Konva Group 的 props 也不变，Konva 拖拽态完全不受干扰。
-   */
-  const computeDragSnap = useCallback((
-    id: string, proposedX: number, proposedY: number,
-    originX: number, originY: number, width: number, height: number,
-  ): { x: number; y: number } => {
-    if (isAltRef.current) {
-      dragDeltasRef.current[id] = { dx: proposedX - originX, dy: proposedY - originY };
-      return { x: proposedX, y: proposedY };
-    }
-    const allElements = useCanvasStore.getState().elements;
-    const dx = proposedX - originX;
-    const dy = proposedY - originY;
-    const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
-    dragDeltasRef.current[id] = { dx: dx + result.snapDx, dy: dy + result.snapDy };
-    setGuideLines(result.guideLines);
-    return { x: proposedX + result.snapDx, y: proposedY + result.snapDy };
-  }, []);
-
-  const snapOnDragEnd = useCallback((id: string, finalX: number, finalY: number) => {
-    const allElements = useCanvasStore.getState().elements;
-    const groups = useCanvasStore.getState().groups;
-    const el = allElements.find(n => n.id === id);
-
-    // FR1 grouping: if element belongs to a group, commit all siblings in one undo step
-    const group = groups.find(g => g.childIds.includes(id));
-    if (group && el) {
-      const finalDx = finalX - el.x;
-      const finalDy = finalY - el.y;
-      const allUpdates = group.childIds.map(sid => {
-        const sibling = allElements.find(e => e.id === sid);
-        return sibling ? { id: sid, x: sibling.x + finalDx, y: sibling.y + finalDy } : null;
-      }).filter((u): u is { id: string; x: number; y: number } => u !== null);
-      if (allUpdates.length > 0) {
-        useCanvasStore.getState().batchUpdatePositions(allUpdates);
-      }
-    } else if (el) {
-      useCanvasStore.getState().batchUpdatePositions([{ id, x: finalX, y: finalY }]);
-    }
-
-    // 清理拖拽位移跟踪。
-    delete dragDeltasRef.current[id];
-
-    setGuideLines([]);
-  }, []);
-
-  const snapOnResizeMove = useCallback((id: string, newX: number, newY: number, newW: number, newH: number) => {
-    if (isAltRef.current) {
-      // FR1 grouping: Alt+resize suppresses snapping but still updates the element.
-      // Group-level proportional resize is complex (requires group bounding box recomputation)
-      // and is tracked as a separate enhancement; for now we update only the dragged element.
-      useCanvasStore.getState().updateElement(id, { x: newX, y: newY, width: newW, height: newH });
-      setGuideLines([]);
-      return;
-    }
-
-    const allElements = useCanvasStore.getState().elements;
-    const el = allElements.find(n => n.id === id);
-    if (!el) return;
-
-    const result = findSnapTargets(id, allElements, newX - el.x, newY - el.y, newW, newH, el.x, el.y);
-    useCanvasStore.getState().updateElement(id, {
-      x: el.x + result.snapDx,
-      y: el.y + result.snapDy,
-      width: newW,
-      height: newH,
-    });
-    setGuideLines(result.guideLines);
-  }, []);
-
-  const snapOnResizeEnd = useCallback((id: string, finalX: number, finalY: number, finalW: number, finalH: number) => {
-    useCanvasStore.getState().updateElement(id, { x: finalX, y: finalY, width: finalW, height: finalH });
-    setGuideLines([]);
-  }, []);
-
-  // Handle Resize
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
@@ -286,37 +95,8 @@ export function InfiniteCanvas() {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault();
-    const stage = e.target.getStage();
-    if (!stage) return;
-    
-    const scaleBy = 1.05;
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
-
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    };
-
-    const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    if (newScale < 0.1 || newScale > 5) return;
-
-    setStageConfig({
-      scale: newScale,
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    });
-  };
-
   const handlePointerDown = (e: KonvaEventObject<PointerEvent>) => {
-    // Hide Quick Add menu if clicking elsewhere
     setQuickAddMenu(null);
-
-    // Marquee export tool: start drawing a new rect (allowed only on primary
-    // button and only when we're not already showing a confirmation rect).
     if (marquee.active && e.evt.button === 0) {
       const stage = e.target.getStage();
       if (!stage) return;
@@ -325,22 +105,14 @@ export function InfiniteCanvas() {
       const scale = stage.scaleX();
       const cx = (pointer.x - stage.x()) / scale;
       const cy = (pointer.y - stage.y()) / scale;
-      marqueeStartRef.current = { x: cx, y: cy };
-      setMarquee({
-        active: true,
-        drawing: true,
-        rect: { x: cx, y: cy, w: 0, h: 0 },
-      });
+      startMarquee(cx, cy);
       return;
     }
-
     if ((e.evt.button === 1 || (e.evt.button === 0 && isSpacePressed)) && !marquee.active) {
       e.evt.preventDefault();
-      isPanningRef.current = true;
-      lastPanPositionRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+      startPan(e.evt.clientX, e.evt.clientY);
       return;
     }
-
     if (activeTool === 'select' && e.target === e.target.getStage()) {
       const stage = e.target.getStage();
       if (!stage) return;
@@ -349,7 +121,7 @@ export function InfiniteCanvas() {
       const scale = stage.scaleX();
       const x = (pointer.x - stage.x()) / scale;
       const y = (pointer.y - stage.y()) / scale;
-      setSelectionBox({ startX: x, startY: y, x, y, width: 0, height: 0 });
+      startSelectionBox(x, y);
       return;
     }
   };
@@ -358,32 +130,19 @@ export function InfiniteCanvas() {
     const stage = e.target.getStage();
     if (!stage) return;
 
-    if (marquee.active && marquee.drawing && marqueeStartRef.current) {
+    if (marquee.active && marquee.drawing) {
       const pointer = stage.getPointerPosition();
       if (!pointer) return;
       const scale = stage.scaleX();
       const cx = (pointer.x - stage.x()) / scale;
       const cy = (pointer.y - stage.y()) / scale;
-      const s = marqueeStartRef.current;
-      setMarquee({
-        active: true,
-        drawing: true,
-        rect: {
-          x: Math.min(s.x, cx),
-          y: Math.min(s.y, cy),
-          w: Math.abs(cx - s.x),
-          h: Math.abs(cy - s.y),
-        },
-      });
+      updateMarquee(cx, cy);
       return;
     }
 
     if (isPanningRef.current) {
       e.evt.preventDefault();
-      const dx = e.evt.clientX - lastPanPositionRef.current.x;
-      const dy = e.evt.clientY - lastPanPositionRef.current.y;
-      setStageConfig({ x: stage.x() + dx, y: stage.y() + dy });
-      lastPanPositionRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+      updatePan(stage, e.evt.clientX, e.evt.clientY);
       return;
     }
 
@@ -393,11 +152,7 @@ export function InfiniteCanvas() {
       const scale = stage.scaleX();
       const currentX = (pointer.x - stage.x()) / scale;
       const currentY = (pointer.y - stage.y()) / scale;
-      const newX = Math.min(selectionBox.startX, currentX);
-      const newY = Math.min(selectionBox.startY, currentY);
-      const newWidth = Math.abs(currentX - selectionBox.startX);
-      const newHeight = Math.abs(currentY - selectionBox.startY);
-      setSelectionBox({ ...selectionBox, x: newX, y: newY, width: newWidth, height: newHeight });
+      updateSelectionBox(currentX, currentY);
       return;
     }
 
@@ -415,99 +170,10 @@ export function InfiniteCanvas() {
     }
   };
 
-  function findPortUnderMouse(els: CanvasElement[], x: number, y: number, isDrawingFromOutput: boolean, fromPortType: string) {
-    const portThreshold = 20;
-    for (let i = els.length - 1; i >= 0; i--) {
-      const el = els[i];
-      const isInsideNode = x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height;
-
-      if (isDrawingFromOutput && el.inputs) {
-        const spacing = el.height / (el.inputs.length + 1);
-        for (let j = 0; j < el.inputs.length; j++) {
-          const portX = el.x;
-          const portY = el.y + spacing * (j + 1);
-          if (Math.hypot(portX - x, portY - y) < portThreshold) {
-            return { element: el, port: el.inputs[j], isInput: true };
-          }
-        }
-        
-        if (isInsideNode) {
-          const compatiblePort = el.inputs.find(p => p.type === 'any' || fromPortType === 'any' || p.type === fromPortType);
-          if (compatiblePort) {
-            return { element: el, port: compatiblePort, isInput: true };
-          }
-        }
-      } else if (!isDrawingFromOutput && el.outputs) {
-        const spacing = el.height / (el.outputs.length + 1);
-        for (let j = 0; j < el.outputs.length; j++) {
-          const portX = el.x + el.width;
-          const portY = el.y + spacing * (j + 1);
-          if (Math.hypot(portX - x, portY - y) < portThreshold) {
-            return { element: el, port: el.outputs[j], isInput: false };
-          }
-        }
-
-        if (isInsideNode) {
-          const compatiblePort = el.outputs.find(p => p.type === 'any' || fromPortType === 'any' || p.type === fromPortType);
-          if (compatiblePort) {
-            return { element: el, port: compatiblePort, isInput: false };
-          }
-        }
-      }
-    }
-    return null;
-  }
-
   const handlePointerUp = (e: KonvaEventObject<PointerEvent>) => {
-    if (marquee.active && marquee.drawing) {
-      marqueeStartRef.current = null;
-      // Too-small drags collapse back to 'waiting for new drag' instead of
-      // opening a degenerate confirmation toolbar.
-      if (!marquee.rect || marquee.rect.w < 4 || marquee.rect.h < 4) {
-        setMarquee({ active: true, drawing: false, rect: null });
-        return;
-      }
-      setMarquee(m => ({ ...m, drawing: false }));
-      return;
-    }
-
-    if (isPanningRef.current) {
-      isPanningRef.current = false;
-      return;
-    }
-
-    // Marquee selection: evaluate before connection logic to avoid race condition.
-    if (selectionBox) {
-      // AC4: AND threshold — both width AND height must exceed 5px to count as
-      // a deliberate marquee. A thin strip in one axis only (e.g. 1×100px) is
-      // treated as an accidental drag and collapses to a click → clear selection.
-      if (selectionBox.width > 5 && selectionBox.height > 5) {
-        // AABB collision — exclude locked nodes
-        const candidateIds = elements
-          .filter(el =>
-            el.x < selectionBox.x + selectionBox.width &&
-            el.x + el.width > selectionBox.x &&
-            el.y < selectionBox.y + selectionBox.height &&
-            el.y + el.height > selectionBox.y &&
-            !(el as any).isLocked
-          )
-          .map(el => el.id);
-
-        if (isShiftRef.current) {
-          // Additive: merge marquee hits into existing selection
-          const merged = Array.from(new Set([...selectedIds, ...candidateIds]));
-          setSelection(merged);
-        } else {
-          // Replace: only marquee hits
-          setSelection(candidateIds);
-        }
-      } else {
-        // Tiny drag (< 5×5) = click on empty area → clear selection
-        setSelection([]);
-      }
-      setSelectionBox(null);
-      return;
-    }
+    if (endMarquee()) return;
+    if (endPan()) return;
+    if (endSelectionBox()) return;
 
     if (drawingConnection) {
       const stage = e.target.getStage();
@@ -532,7 +198,6 @@ export function InfiniteCanvas() {
               });
             }
           } else if (!target) {
-            // Show Quick Add Menu
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect) {
                setQuickAddMenu({
@@ -558,15 +223,11 @@ export function InfiniteCanvas() {
     const stage = containerRef.current?.querySelector('canvas');
     if (!stage) return;
 
-    // Drop from the asset library panel — resolve asset by id and drop at cursor.
     const assetId = e.dataTransfer.getData('application/x-canvas-asset');
     if (assetId) {
       const asset = useAssetLibraryStore.getState().findAsset(assetId);
       if (!asset) return;
 
-      // Fallback 尺寸：只有 asset 没自带 width/height 时才用到（罕见）。
-      // 数值对齐 handleCreateNode / handleQuickAdd 的节点默认几何，避免
-      // 不同入口落盘的 image 节点尺寸体系分叉。
       const defaults =
         asset.kind === 'image' ? { w: 560, h: 560 } :
         asset.kind === 'video' ? { w: 640, h: 360 } :
@@ -618,17 +279,10 @@ export function InfiniteCanvas() {
       addElement({ id, type: isVideo ? 'video' : 'audio', x, y, width, height, src } as any);
       setSelection([id]);
       setActiveTool('select');
-      // Note: asset library refuses blob: URLs (session-local), so video/audio
-      // uploads aren't archived by the sync path. They can be re-added later via
-      // the panel's upload button, which converts to data URL.
       return;
     }
 
     if (isImage) {
-      // 统一走 file(image) 路径：用户在 Phase 1 路线上选择了"通用素材库，按
-      // MIME 动态提供能力"，拖入的图和通过 File picker 选的图都是同一种节点、
-      // 同一套交互、同一个端口形态。生成出的 AI 结果仍是 `image` 节点，两边
-      // 在 flowResolver 里都被识别为图像源（Phase 3 再考虑彻底合并）。
       const rect = containerRef.current!.getBoundingClientRect();
       const posX = e.clientX - rect.left;
       const posY = e.clientY - rect.top;
@@ -640,8 +294,6 @@ export function InfiniteCanvas() {
         setSelection([fileEl.id]);
         setActiveTool('select');
 
-        // 归档仍然走 image 资产（asset library 的 kind 语义是内容类型，不是
-        // 节点类型）。src 在 buildFileElement 里已经是 data URL，能跨刷新。
         useAssetLibraryStore.getState().addAsset({
           kind: 'image',
           src: fileEl.src,
@@ -656,9 +308,6 @@ export function InfiniteCanvas() {
       return;
     }
 
-    // Unknown MIME 回退：PDF / zip / txt / docx 等一律落成 `file` 附件节点。
-    // 这里不动 image/video/audio 的老分支（保留生图联动、自动归档等既有行为），
-    // 只在老分支都没命中时接管，避免把拖图体验改坏。
     {
       const rect = containerRef.current!.getBoundingClientRect();
       const posX = e.clientX - rect.left;
@@ -676,76 +325,6 @@ export function InfiniteCanvas() {
     }
   };
 
-  const handleQuickAdd = (type: 'text' | 'image' | 'video' | 'audio') => {
-    if (!quickAddMenu) return;
-
-    // 双击画布 Quick Add 的默认几何和 App.tsx::handleCreateNode 保持一致。
-    // 两个入口各留一份常量而不是抽共享的原因：App 侧还要处理 rect/circle/sticky
-    // 等 Quick Add 不暴露的类型，强行合并会把类型签名拉得很丑。
-    let defaultWidth = 560;
-    let defaultHeight = 560;
-    if (type === 'text') { defaultWidth = 420; defaultHeight = 280; }
-    else if (type === 'video') { defaultWidth = 640; defaultHeight = 360; }
-    else if (type === 'audio') { defaultWidth = 360; defaultHeight = 96; }
-
-    const id = uuidv4();
-    const newEl: any = { 
-      id, 
-      type, 
-      x: quickAddMenu.canvasX, 
-      y: quickAddMenu.canvasY - defaultHeight / 2, // Center vertically
-      width: defaultWidth, 
-      height: defaultHeight, 
-      text: type === 'text' ? '' : undefined,
-      fontSize: type === 'text' ? 14 : undefined,
-      fontFamily: type === 'text' ? 'sans-serif' : undefined,
-      fill: type === 'text' ? '#1f2937' : undefined, 
-      src: type !== 'text' ? '' : undefined,
-    };
-    
-    // Auto-generate input/output ports based on useCanvasStore logic by calling addElement
-    addElement(newEl);
-    setSelection([id]);
-    setActiveTool('select');
-
-    // Small timeout to allow store to update and assign port IDs
-    setTimeout(() => {
-      const state = useCanvasStore.getState();
-      const addedEl = state.elements.find(e => e.id === id);
-      if (addedEl && quickAddMenu.fromElementId && quickAddMenu.fromPortId) {
-        // Find compatible port
-        const targetPort = addedEl.inputs?.find(p => p.type === quickAddMenu.fromPortType || p.type === 'any' || quickAddMenu.fromPortType === 'any');
-        if (targetPort) {
-          state.addConnection({
-            id: uuidv4(),
-            fromId: quickAddMenu.fromElementId,
-            fromPortId: quickAddMenu.fromPortId,
-            toId: addedEl.id,
-            toPortId: targetPort.id,
-          });
-        }
-      }
-    }, 50);
-
-    setQuickAddMenu(null);
-  };
-
-  const handleQuickAddUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = '';
-    if (files.length === 0 || !quickAddMenu) return;
-    const canvasX = quickAddMenu.canvasX, canvasY = quickAddMenu.canvasY;
-    const createdIds: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      try { const fileEl = await buildFileElement(files[i], { x: canvasX, y: canvasY }, { dx: i * 24, dy: i * 24 }); addElement(fileEl as any); createdIds.push(fileEl.id); }
-      catch (err) { console.warn('[quickadd] file ingest failed', files[i].name, err); }
-    }
-    if (createdIds.length > 0) { setSelection(createdIds); setActiveTool('select'); }
-    setQuickAddMenu(null);
-  };
-
-  // Nodes eligible for batch generation: selected image/video nodes that
-  // have both a non-empty prompt and a configured model.
   const batchTargets = useMemo(() => {
     if (selectedIds.length < 2) return [];
     return elements.filter(
@@ -787,7 +366,7 @@ export function InfiniteCanvas() {
         onPointerUp={handlePointerUp}
         onDblClick={(e) => {
           if (e.target === e.target.getStage()) {
-            setSelectionBox(null);
+            startSelectionBox(0, 0); // null out selection box hack
             const pointer = e.target.getStage()?.getPointerPosition();
             if (!pointer) return;
             const scale = stageConfig.scale;
@@ -809,7 +388,6 @@ export function InfiniteCanvas() {
         }
       >
         <Layer>
-          {/* Render Connections */}
           {connections.map(conn => {
             const fromEl = elements.find(el => el.id === conn.fromId);
             const toEl = elements.find(el => el.id === conn.toId);
@@ -829,9 +407,6 @@ export function InfiniteCanvas() {
             const endX = toEl.x;
             const endY = toEl.y + inputSpacing * (toPortIdx + 1);
             
-            // Two-pass ink line: a soft, wider wash underneath + a crisp
-            // stroke on top. Approximates the "brush bleed" of ink on
-            // paper without needing an SVG turbulence filter in Konva.
             return (
               <Group key={conn.id}>
                 <Line
@@ -855,7 +430,6 @@ export function InfiniteCanvas() {
             );
           })}
 
-          {/* Active drawing connection — thinner ink stroke, tight dash */}
           {drawingConnection && (
             <Line
               points={getBezierPoints(drawingConnection.startX, drawingConnection.startY, drawingConnection.toX, drawingConnection.toY)}
@@ -869,16 +443,9 @@ export function InfiniteCanvas() {
 
           <CanvasElements
             guideLines={guideLines}
-            snapCallbacks={{
-              onDragMove: snapOnDragMove,
-              onDragEnd: snapOnDragEnd,
-              onResizeMove: snapOnResizeMove,
-              onResizeEnd: snapOnResizeEnd,
-              computeDragSnap,
-            }}
+            snapCallbacks={snapCallbacks}
           />
           
-          {/* Selection box — blue marquee */}
           {selectionBox && selectionBox.width > 0 && selectionBox.height > 0 && (
              <Rect
                 x={selectionBox.x}
@@ -893,7 +460,6 @@ export function InfiniteCanvas() {
              />
           )}
 
-          {/* Marquee export rectangle — terracotta ink dashed border */}
           {marquee.active && marquee.rect && marquee.rect.w > 0 && marquee.rect.h > 0 && (
             <Rect
               x={marquee.rect.x}
@@ -909,32 +475,19 @@ export function InfiniteCanvas() {
         </Layer>
       </Stage>
 
-      {/* Per-node input bars — only show for currently selected image/video/text nodes */}
       {stageConfig.scale >= INPUT_BAR_VISIBLE_SCALE && (
         <div className="absolute inset-0 pointer-events-none">
           {elements
             .filter(el =>
               selectedIds.includes(el.id) &&
-              // 注意这是一个白名单：只有带"生成/编辑管线"语义的节点类型才
-              // 会弹 NodeInputBar。`file` 附件节点故意不在此列——它是画布
-              // 上的资料卡，没有 prompt / 模型 / 档位可调，弹一个空输入
-              // 条反而误导用户以为能对附件做 AI 处理。
               (el.type === 'image' || el.type === 'video' || el.type === 'text' ||
-                // 失败的生成占位符也要显示 bar——用户需要改完参数重试。
-                // 正在生成中（无 error）不显示，避免 bar 在进度动画里闪来闪去。
                 (el.type === 'aigenerating' && !!(el as any).error))
             )
             .map(el => {
               const barMin = INPUT_BAR_MIN_WIDTH_BY_TYPE[el.type] ?? INPUT_BAR_MIN_WIDTH_FALLBACK;
               const canvasWidth = Math.max(el.width, barMin);
-              // Bar 在画布 X 方向上**居中**对齐节点，而不是左对齐节点左边。
-              // 这样当用户把节点缩得比 barMin 还窄、bar 被 min 撑开时，
-              // bar 会对称溢出两侧（而不是只往右边甩一大块），视觉上至少
-              // 感觉是"有意设计的浮动工具栏"而非"错位"。
-              // 正常情况（el.width >= barMin）offset = 0，行为与原来一致。
               const canvasX = el.x - (canvasWidth - el.width) / 2;
               const canvasY = el.y + el.height + INPUT_BAR_GAP_CANVAS;
-              // 拖拽位移叠加：NodeInputBar 在拖拽期间跟随节点移动。
               const delta = dragDeltasRef.current[el.id];
               const ddx = delta ? delta.dx : 0;
               const ddy = delta ? delta.dy : 0;
@@ -954,9 +507,6 @@ export function InfiniteCanvas() {
         </div>
       )}
 
-      {/* F15: Inpaint overlay — rendered only when an inpaint session is
-          active. Sits directly over the target image node in screen coords,
-          catching pointer events to draw the rewrite rectangle. */}
       {inpaintMask && (() => {
         const target = elements.find(el => el.id === inpaintMask.elementId);
         if (!target) return null;
@@ -977,10 +527,6 @@ export function InfiniteCanvas() {
         );
       })()}
 
-      {/* F24: Node note indicator — shown on node top-right. Visible
-          whenever the node has a stored note OR is currently selected
-          (so it also serves as the "add note" entry point). Scales with
-          the stage zoom to stay readable. */}
       <div className="absolute inset-0 pointer-events-none">
         {elements
           .filter(el => {
@@ -1005,10 +551,6 @@ export function InfiniteCanvas() {
           })}
       </div>
 
-      {/* F2: Version switcher — shown above selected image/video nodes that
-          have 2+ archived versions. Doesn't participate in the INPUT_BAR
-          visibility gate because it's useful even at small scales (single
-          row, non-interactive when zoomed out). */}
       <div className="absolute inset-0 pointer-events-none">
         {elements
           .filter(el =>
@@ -1018,7 +560,6 @@ export function InfiniteCanvas() {
             (el as any).versions.length >= 2
           )
           .map(el => {
-            // Top-center of the node, in screen coords.
             const canvasCx = el.x + el.width / 2;
             const canvasTop = el.y;
             const screenX = stageConfig.x + canvasCx * stageConfig.scale;
@@ -1036,7 +577,7 @@ export function InfiniteCanvas() {
       </div>
 
       <input ref={fileInputRef} type="file" accept="*/*" multiple style={{ display: 'none' }} onChange={handleQuickAddUpload} />
-      {/* Quick Add Menu Overlay */}
+      
       {quickAddMenu && (
         <div
           className="chip-paper anim-pop absolute z-50 flex flex-col gap-0.5"
@@ -1060,7 +601,6 @@ export function InfiniteCanvas() {
         </div>
       )}
 
-      {/* Batch generation toolbar — appears when 2+ eligible generation nodes are selected */}
       {batchTargets.length >= 2 && (
         <div
           className="chip-paper absolute z-35 flex items-center gap-1.5 anim-fade-in"
@@ -1080,9 +620,6 @@ export function InfiniteCanvas() {
             className="btn btn-primary"
             style={{ padding: '5px 14px', fontSize: 11, borderRadius: 'var(--r-pill)' }}
             onClick={async () => {
-              // Sequentially trigger generation for each target.
-              // Each target is in-place replaced with an AIGeneratingElement placeholder,
-              // then runGeneration handles the rest.
               for (const target of batchTargets) {
                 const phId = uuidv4();
                 const store = useCanvasStore.getState();
@@ -1116,10 +653,8 @@ export function InfiniteCanvas() {
         </div>
       )}
 
-      {/* Marquee-export UI overlays */}
       {marquee.active && (
         <>
-          {/* Top hint banner, visible while awaiting / drawing. */}
           {!marquee.rect || marquee.drawing ? (
             <div
               className="absolute z-30 pointer-events-none anim-fade-in"
@@ -1140,7 +675,6 @@ export function InfiniteCanvas() {
             </div>
           ) : null}
 
-          {/* Confirmation toolbar, placed above the drawn rect. */}
           {!marquee.drawing && marquee.rect && marquee.rect.w > 0 && marquee.rect.h > 0 && (() => {
             const screenX = stageConfig.x + marquee.rect.x * stageConfig.scale;
             const screenY = stageConfig.y + marquee.rect.y * stageConfig.scale;

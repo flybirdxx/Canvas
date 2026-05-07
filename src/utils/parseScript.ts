@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ParsedScene } from '../types/canvas';
-import { useCanvasStore } from '../store/useCanvasStore';
+
 
 /**
  * 正则：匹配 ### 场 <数字> 格式的分镜锚点标题。
@@ -45,41 +45,4 @@ export function parseScriptMarkdown(text: string): ParsedScene[] {
   return scenes;
 }
 
-/**
- * 根据剧本节点的锚点列表，在画布上批量创建 scene 节点。
- * 每个 scene 节点绑定 scriptId，指向父剧本节点。
- * 位置按 sceneNum 编号依次错开排列（相邻 40px 垂直偏移）。
- */
-export function convertScriptToScenes(
-  scriptId: string,
-  scenes: ParsedScene[],
-  scriptNodeX: number,
-  scriptNodeY: number,
-): string[] {
-  const addElement = useCanvasStore.getState().addElement;
-  const sceneIds: string[] = [];
 
-  scenes.forEach((parsed, index) => {
-    const id = uuidv4();
-    const VERTICAL_OFFSET = 40;
-    const baseWidth = 320;
-    const baseHeight = 200;
-
-    addElement({
-      id,
-      type: 'scene',
-      x: scriptNodeX + 60 + (index % 2) * 30,
-      y: scriptNodeY + 320 + index * VERTICAL_OFFSET,
-      width: baseWidth,
-      height: baseHeight,
-      sceneNum: parsed.sceneNum,
-      title: parsed.title,
-      content: parsed.content,
-      scriptId,
-    });
-
-    sceneIds.push(id);
-  });
-
-  return sceneIds;
-}
