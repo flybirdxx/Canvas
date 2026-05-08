@@ -17,52 +17,53 @@ import type { ExecutionErrorKind } from '@/store/useExecutionStore';
 import { dispatchToast } from '@/components/Toast';
 import { appendLog } from './executionLogs';
 import { isRunComplete } from '@/store/useExecutionStore';
+import { getController, setController, getExecId, setExecId, getSignal, isAborted, abortSession, phIdToNodeId } from './executionSession';
 
 /* -------------------------------------------------------------------- */
 /*  Module-level state (per run)                                              */
 /* -------------------------------------------------------------------- */
 
 /** AbortController for the currently active run. Aborted on cancel. */
-let _activeController: AbortController | null = null;
+// activeController imported from ./executionSession
 
 /** The execId of the currently active run. Used to correlate events. */
-let _activeExecId: string | null = null;
+// activeExecId imported from ./executionSession
 
 /** F12 fix: placeholderId → nodeId map for resolving generation:success events.
  *  Populated in executeNode before runGeneration, cleared after resolution.
  *  Enables correct node status update even when taskResume resumes an old session. */
-const _phIdToNodeId = new Map<string, string>();
+// phIdToNodeId imported from ./executionSession
 
 /** Handler for the generation:success CustomEvent dispatched by imageGeneration.
  * F4 fix: also guard against aborted controller — if the user cancelled the run
  * before the generation resolved, do not update the node status. */
 function _handleGenerationSuccess(e: Event): void {
   // F4: skip if the run was cancelled (controller is null after cancelExecution).
-  if (!_activeController || !_activeExecId) return;
+  if (!getController() || !getExecId()) return;
 
   const { placeholderId, execId } = (e as CustomEvent).detail as { placeholderId: string; execId?: string };
   // Only handle if this event belongs to the active run.
-  if (execId && execId !== _activeExecId) return;
+  if (execId && execId !== getExecId()) return;
   const store = useExecutionStore.getState();
 
   // F12 fix: use the placeholderId→nodeId map to resolve the correct node.
-  const nodeId = _phIdToNodeId.get(placeholderId);
+  const nodeId = phIdToNodeId.get(placeholderId);
 
   if (nodeId) {
     store.updateNodeStatus(nodeId, 'success');
-    appendLog(execId ?? _activeExecId ?? '', 'info', `${nodeId} 生成成功`, nodeId);
-    _phIdToNodeId.delete(placeholderId);
+    appendLog(execId ?? getExecId() ?? '', 'info', `${nodeId} 生成成功`, nodeId);
+    phIdToNodeId.delete(placeholderId);
     return;
   }
 
   // Fallback for taskResume (no execId): try to find a running node.
-  if (!execId && _activeExecId) {
-    const run = store.getRun(_activeExecId);
+  if (!execId && getExecId()) {
+    const run = store.getRun(getExecId());
     if (run) {
       const runningNode = Object.values(run.nodeStates).find((ns) => ns.status === 'running');
       if (runningNode) {
         store.updateNodeStatus(runningNode.nodeId, 'success');
-        appendLog(_activeExecId, 'info', `${runningNode.nodeId} 生成成功`, runningNode.nodeId);
+        appendLog(getExecId(), 'info', `${runningNode.nodeId} 生成成功`, runningNode.nodeId);
       }
     }
   }
@@ -76,11 +77,11 @@ function _handleGenerationSuccess(e: Event): void {
  * F4 fix: also calls cancelRun to synchronize store state.
  */
 export function cancelExecution(execId: string): void {
-  _activeController?.abort();
+  getController()?.abort();
   // F2 fix: nullify the reference so subsequent retry operations get a fresh
   // controller instead of a stale aborted one.
-  _activeController = null;
-  _activeExecId = null;
+  setController(null);
+  setExecId(null);
 
   // F4: synchronize execution store — reset non-terminal node states to idle.
   // This must be called BEFORE deleteElements so the store reflects the
@@ -188,10 +189,10 @@ export async function runExecution(selectedIds: string[]): Promise<void> {
   }
 
   // Create a fresh AbortController for this run.
-  _activeController = new AbortController();
+  setController(new AbortController());
 
   const execId = uuidv4();
-  _activeExecId = execId;
+  setExecId(execId);
 
   // F5 fix: register generation:success listener. Use try/finally to guarantee
   // removal on all exit paths (normal completion, cancel, exception, cycle rejection).
@@ -219,7 +220,7 @@ export async function runExecution(selectedIds: string[]): Promise<void> {
   // Step 3: execute level by level.
   for (let i = 0; i < levels.length; i++) {
     // Bail out if cancelled.
-    if (_activeController.signal.aborted) break;
+    if (isAborted()) break;
 
     const level = levels[i];
     const depthLabel = `层级 ${i + 1}/${levels.length} (${level.length} 节点)`;
@@ -247,8 +248,8 @@ export async function runExecution(selectedIds: string[]): Promise<void> {
   } finally {
     // F5 fix: always clean up listener and module state regardless of exit path.
     window.removeEventListener('generation:success', onSuccess);
-    _activeController = null;
-    _activeExecId = null;
+    setController(null);
+    setExecId(null);
   }
 }
 
@@ -269,13 +270,13 @@ export async function executeNode(
   const store = useExecutionStore.getState();
 
   // Check abort signal before starting.
-  if (_activeController?.signal.aborted) return;
+  if (isAborted()) return;
 
   store.updateNodeStatus(nodeId, 'running');
   appendLog(execId, 'info', `${nodeId} 开始执行`, nodeId);
 
   // Check abort again after status update.
-  if (_activeController?.signal.aborted) return;
+  if (isAborted()) return;
 
   const el = elements.find((e) => e.id === nodeId);
   if (!el) {
@@ -320,7 +321,7 @@ export async function executeNode(
     try {
       appendLog(execId, 'info', `${nodeId} 调用 AI 生成…`, nodeId);
       await runVideoGeneration(nodeId, videoRequest);
-      if (_activeController?.signal.aborted) return;
+      if (isAborted()) return;
       const updatedEl = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
       if (updatedEl?.type === 'aigenerating') {
         appendLog(execId, 'info', `${nodeId} 生成中（异步）`, nodeId);
@@ -355,12 +356,12 @@ export async function executeNode(
     references: (el as any).references,
     execId,
     // F3 fix: pass AbortSignal so provider can abort the fetch immediately.
-    signal: _activeController?.signal,
+    signal: getSignal(),
     // Story 1.5: onSuccess fires when replacePlaceholderWithImage replaces the placeholder.
     onSuccess: (_placeholderId: string) => {
       store.updateNodeStatus(nodeId, 'success');
       appendLog(execId, 'info', `${nodeId} 生成成功`, nodeId);
-      _phIdToNodeId.delete(nodeId);
+      phIdToNodeId.delete(nodeId);
     },
   };
 
@@ -368,14 +369,14 @@ export async function executeNode(
     appendLog(execId, 'info', `${nodeId} 调用 AI 生成…`, nodeId);
     // F12 fix: register placeholderId→nodeId mapping so generation:success events
     // can resolve the correct node even from taskResume.
-    _phIdToNodeId.set(nodeId, nodeId);
+    phIdToNodeId.set(nodeId, nodeId);
     await runGeneration([nodeId], request);
 
     // Clean up mapping on return (success or still-pending).
-    _phIdToNodeId.delete(nodeId);
+    phIdToNodeId.delete(nodeId);
 
     // Check abort again before updating success.
-    if (_activeController?.signal.aborted) return;
+    if (isAborted()) return;
 
     // Check if placeholder still exists (still pending).
     const updated = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
@@ -394,14 +395,14 @@ export async function executeNode(
     if (err instanceof Error && err.name === 'AbortError') {
       appendLog(execId, 'info', `${nodeId} 已取消`, nodeId);
       store.updateNodeStatus(nodeId, 'idle');
-      _phIdToNodeId.delete(nodeId);
+      phIdToNodeId.delete(nodeId);
       return;
     }
     // Also handle the t8star provider's aborted flag path (F3).
     if ((err as any)?.aborted === true) {
       appendLog(execId, 'info', `${nodeId} 已取消`, nodeId);
       store.updateNodeStatus(nodeId, 'idle');
-      _phIdToNodeId.delete(nodeId);
+      phIdToNodeId.delete(nodeId);
       return;
     }
     const msg = err instanceof Error ? err.message : '未知错误';
@@ -438,8 +439,8 @@ export async function retryNode(execId: string, nodeId: string): Promise<void> {
   const run = store.getRun(execId);
   if (!run) return;
 
-  _activeController = new AbortController();
-  _activeExecId = execId;
+  setController(new AbortController());
+  setExecId(execId);
 
   const onSuccess = (e: Event) => _handleGenerationSuccess(e);
   window.addEventListener('generation:success', onSuccess);
@@ -466,8 +467,8 @@ export async function retryNode(execId: string, nodeId: string): Promise<void> {
     }
   } finally {
     window.removeEventListener('generation:success', onSuccess);
-    _activeController = null;
-    _activeExecId = null;
+    setController(null);
+    setExecId(null);
   }
 }
 
@@ -489,8 +490,8 @@ export async function retryRun(execId: string): Promise<void> {
 
   if (failedIds.length === 0) return;
 
-  _activeController = new AbortController();
-  _activeExecId = execId;
+  setController(new AbortController());
+  setExecId(execId);
 
   const onSuccess = (e: Event) => _handleGenerationSuccess(e);
   window.addEventListener('generation:success', onSuccess);
@@ -503,7 +504,7 @@ export async function retryRun(execId: string): Promise<void> {
     if (!levels || levels.length === 0) return;
 
     for (let i = 0; i < levels.length; i++) {
-      if (_activeController.signal.aborted) break;
+      if (isAborted()) break;
 
       const level = levels[i];
       const pending = level.map((nodeId) =>
@@ -527,8 +528,8 @@ export async function retryRun(execId: string): Promise<void> {
     }
   } finally {
     window.removeEventListener('generation:success', onSuccess);
-    _activeController = null;
-    _activeExecId = null;
+    setController(null);
+    setExecId(null);
   }
 }
 
@@ -548,8 +549,8 @@ export async function restartRun(execId: string): Promise<void> {
 
   // Always create a fresh controller — even if one exists, a cancelled controller
   // must not be reused since its signal is permanently aborted.
-  _activeController = new AbortController();
-  _activeExecId = execId;
+  setController(new AbortController());
+  setExecId(execId);
 
   const onSuccess = (e: Event) => _handleGenerationSuccess(e);
   window.addEventListener('generation:success', onSuccess);
@@ -569,7 +570,7 @@ export async function restartRun(execId: string): Promise<void> {
     if (!levels || levels.length === 0) return;
 
     for (let i = 0; i < levels.length; i++) {
-      if (_activeController.signal.aborted) break;
+      if (isAborted()) break;
 
       const level = levels[i];
       const pending = level.map((nodeId) =>
@@ -593,7 +594,7 @@ export async function restartRun(execId: string): Promise<void> {
     }
   } finally {
     window.removeEventListener('generation:success', onSuccess);
-    _activeController = null;
-    _activeExecId = null;
+    setController(null);
+    setExecId(null);
   }
 }
