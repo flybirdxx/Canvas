@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Key, Link as LinkIcon, Settings, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Type as TextIcon, UploadCloud } from 'lucide-react';
-import { useSettingsStore } from '../store/useSettingsStore';
-import { listProviders } from '../services/gateway';
-import type { Capability } from '../services/gateway';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { listProviders } from '@/services/gateway';
+import type { Capability } from '@/services/gateway';
 
 /** imgbb 图床是一个特殊 "虚拟 Provider"，单独占一个侧栏 tab。 */
 const IMG_HOST_TAB = '__imgHost';

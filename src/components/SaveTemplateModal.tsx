@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { useUserTemplatesStore } from '../store/useUserTemplatesStore';
-import { canvasToTemplate } from '../utils/canvasToTemplate';
-import type { CanvasTemplate } from '../data/templates';
-import { TEMPLATE_CATEGORIES } from '../data/templates';
+import { useUserTemplatesStore } from '@/store/useUserTemplatesStore';
+import { canvasToTemplate } from '@/utils/canvasToTemplate';
+import type { CanvasTemplate } from '@/data/templates';
+import { TEMPLATE_CATEGORIES } from '@/data/templates';
 
 interface SaveTemplateModalProps {
   open: boolean;

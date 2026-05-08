@@ -5,14 +5,14 @@ import {
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround,
   LayoutGrid,
 } from 'lucide-react';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import {
   alignLeft, alignRight, alignCenterHorizontal,
   alignTop, alignBottom, alignCenterVertical,
   distributeHorizontal, distributeVertical,
   arrangeGrid,
   PositionUpdate,
-} from '../utils/alignment';
+} from '@/utils/alignment';
 
 /**
  * Floating toolbar rendered at the top-center of the viewport whenever the

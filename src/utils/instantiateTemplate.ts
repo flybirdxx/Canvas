@@ -3,9 +3,9 @@ import type {
   CanvasTemplate,
   TemplateElement,
   TemplateConnection,
-} from '../data/templates';
-import type { CanvasElement, Connection } from '../types/canvas';
-import { useCanvasStore } from '../store/useCanvasStore';
+} from '@/data/templates';
+import type { CanvasElement, Connection } from '@/types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 /**
  * Convert the center of the current browser viewport into canvas-unit coords,

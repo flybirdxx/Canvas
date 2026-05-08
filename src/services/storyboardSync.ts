@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { CanvasElement, ScriptElement, SceneElement, ParsedScene } from '../types/canvas';
+import type { CanvasElement, ScriptElement, SceneElement, ParsedScene } from '@/types/canvas';
 
 export interface SyncDiff {
   scenesToAdd: SceneElement[];

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Circle } from 'react-konva';
-import { useCanvasStore } from '../../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { INK_1 } from './shared';
 
 const HANDLE_SIZE = 10;

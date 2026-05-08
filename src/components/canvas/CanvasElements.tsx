@@ -1,24 +1,16 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Group, Rect, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import type { GuideLine } from '../../utils/alignmentUtils';
-import { useCanvasStore } from '../../store/useCanvasStore';
-import type { CanvasElement, ScriptElement, SceneElement } from '../../types/canvas';
+import type { GuideLine } from '@/utils/alignmentUtils';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, ScriptElement, SceneElement } from '@/types/canvas';
 import {
   ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
   AIGeneratingNode, FileNode, ScriptNode, SceneNode,
   PortOverlay, SelectionHandles, SnapCallbacks
 } from './nodes';
 import { INK_1 } from './nodes/shared';
-import { useStoryboardSync } from '../../hooks/canvas/useStoryboardSync';
-
-function isInSelectedGroup(elementId: string, selectedIds: string[], groups: any[]): boolean {
-  return groups.some(g =>
-    g.childIds.includes(elementId) &&
-    g.childIds.some((sid: string) => selectedIds.includes(sid))
-  );
-}
-
+import { useStoryboardSync } from '@/hooks/canvas/useStoryboardSync';
 
 
 export interface CanvasElementsProps {
@@ -36,6 +28,12 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
   const dragStartPosRef = useRef<Record<string, { x: number; y: number }>>({});
 
   const { flushSync } = useStoryboardSync(isDraggingOrResizingRef);
+
+  // 预计算选中编组成员 ID 集合，避免渲染循环中 O(N*G) 的嵌套查找
+  const selectedGroupMemberIds = useMemo(() => {
+    const selectedGroups = groups.filter(g => g.childIds.some(id => selectedIds.includes(id)));
+    return new Set(selectedGroups.flatMap(g => g.childIds));
+  }, [groups, selectedIds]);
 
   return (
     <>
@@ -97,10 +95,8 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               const dx = visualX - currentEl.x;
               const dy = visualY - currentEl.y;
 
-              // 更新 store（触发 connections 重新渲染，跟随节点移动）
-              useCanvasStore.getState().updateElementPosition(id, visualX, visualY);
-
               // snapCallbacks.onDragMove handles snapping + updates + guideLines
+              //   store 位置仅通过 onDragEnd 的 batchUpdatePositions 一次性同步
               snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
 
               const stage = e.target.getStage();
@@ -117,8 +113,6 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
                       const sibOrigin = dragStartPosRef.current[sid];
                       if (sibOrigin) {
                         siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
-                        // 同时更新 store 中兄弟节点位置，保持 connections 跟随
-                        useCanvasStore.getState().updateElementPosition(sid, sibOrigin.x + dx, sibOrigin.y + dy);
                       }
                     }
                   }
@@ -148,6 +142,11 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
             if (el.type !== 'video' && el.type !== 'audio') setHoveredId(id);
           },
           onMouseLeave: () => { setHoveredId(null); },
+          onDblClick: (e: any) => {
+            if (el.type === 'text') {
+              window.dispatchEvent(new CustomEvent('text:edit', { detail: { id: el.id } }));
+            }
+          },
         };
 
         let nodeContent: React.JSX.Element | null = null;
@@ -172,7 +171,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
         }
 
         // FR1 grouping: if node belongs to a selected group, render a dashed border overlay
-        const inSelectedGroup = isInSelectedGroup(id, selectedIds, groups);
+        const inSelectedGroup = selectedGroupMemberIds.has(id);
         const groupBorder = inSelectedGroup ? (
           <Rect
             x={-3} y={-3}

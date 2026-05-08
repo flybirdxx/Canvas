@@ -13,7 +13,7 @@ export interface GenHistoryEntry {
   thumbnailUrl: string;
   /** Result URLs. */
   resultUrls: string[];
-  modality: 'image' | 'video';
+  modality: 'image' | 'video' | 'text';
   /** epoch ms. */
   createdAt: number;
 }

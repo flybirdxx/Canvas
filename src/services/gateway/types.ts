@@ -236,6 +236,39 @@ export interface VideoGenPending {
 export type VideoGenResult = VideoGenSuccess | VideoGenFailure | VideoGenPending;
 
 /**
+ * Text generation request. Follows OpenAI Chat Completion message format.
+ * The caller composes the conversation context from upstream connections
+ * and the node's local prompt into the `messages` array.
+ */
+export interface TextGenRequest {
+  /** Wire-level model id (e.g. "google/gemini-3.1-pro-preview"). */
+  model: string;
+  /** OpenAI-format messages array. */
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  /** Maximum tokens to generate (default provider-specific). */
+  maxTokens?: number;
+  /** Temperature for sampling (0-2, default ~0.7). */
+  temperature?: number;
+  /** AbortSignal for request cancellation. */
+  signal?: AbortSignal;
+}
+
+export interface TextGenSuccess {
+  ok: true;
+  /** The generated text content. */
+  text: string;
+}
+
+export interface TextGenFailure {
+  ok: false;
+  kind: GatewayErrorKind;
+  message: string;
+  detail?: string;
+}
+
+export type TextGenResult = TextGenSuccess | TextGenFailure;
+
+/**
  * Config values pulled from the settings store when the provider is invoked.
  * Providers must NOT cache this — always read fresh per call.
  */
@@ -284,4 +317,14 @@ export interface GatewayProvider {
    * 超时 / 浏览器刷新遗留的未完成任务。同步 provider 不需要实现。
    */
   pollImageTask?(taskId: string, config: ProviderRuntimeConfig): Promise<ImageGenResult>;
+
+  /**
+   * Runs a text generation (LLM chat completion). Same error-return contract
+   * as generateImage — must NOT throw, all failures resolve to TextGenFailure.
+   *
+   * Optional — providers without text support omit it; the registry's
+   * `generateTextByModelId` returns a structured `'unknown'` failure in
+   * that case so the UI can render a clean error panel.
+   */
+  generateText?(req: TextGenRequest, config: ProviderRuntimeConfig): Promise<TextGenResult>;
 }

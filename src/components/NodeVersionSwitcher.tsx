@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, History } from 'lucide-react';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { CanvasElement, NodeVersion } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, NodeVersion } from '@/types/canvas';
 
 /**
  * Small floating bar rendered at the top-center of selected image/video
@@ -23,8 +23,14 @@ export interface NodeVersionSwitcherProps {
 export function NodeVersionSwitcher({ element, x, y, scale }: NodeVersionSwitcherProps) {
   const updateElement = useCanvasStore(s => s.updateElement);
 
-  const versions = ((element as any).versions as NodeVersion[] | undefined) ?? [];
-  const activeIndex = ((element as any).activeVersionIndex as number | undefined) ?? versions.length - 1;
+  const versions: NodeVersion[] =
+    element.type === 'image' || element.type === 'video'
+      ? element.versions ?? []
+      : [];
+  const activeIndex: number =
+    element.type === 'image' || element.type === 'video'
+      ? element.activeVersionIndex ?? versions.length - 1
+      : versions.length - 1;
 
   if (versions.length < 2) return null;
 

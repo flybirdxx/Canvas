@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { CanvasElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { CanvasElement } from '@/types/canvas';
 
 export interface InpaintOverlayProps {
   element: CanvasElement;

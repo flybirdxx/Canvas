@@ -1,4 +1,4 @@
-import type { ElementType, GenerationConfig } from '../types/canvas';
+import type { ElementType, GenerationConfig } from '@/types/canvas';
 
 /**
  * A single element inside a template. Coordinates are expressed relative to

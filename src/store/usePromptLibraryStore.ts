@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { BUILTIN_PRESETS, PromptPreset } from '../data/promptLibrary';
+import { BUILTIN_PRESETS, PromptPreset } from '@/data/promptLibrary';
 
 const RECENT_LIMIT = 12;
 

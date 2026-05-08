@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { History, ChevronRight, Eraser } from 'lucide-react';
-import { useCanvasStore, HistorySnapshot } from '../store/useCanvasStore';
+import { useCanvasStore, HistorySnapshot } from '@/store/useCanvasStore';
 
 function formatTime(ts: number) {
   const d = new Date(ts);

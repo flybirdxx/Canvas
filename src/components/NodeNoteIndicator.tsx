@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StickyNote, X } from 'lucide-react';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { CanvasElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { CanvasElement } from '@/types/canvas';
 
 export interface NodeNoteIndicatorProps {
   element: CanvasElement;
@@ -70,14 +70,14 @@ export function NodeNoteIndicator({ element, x, y, scale }: NodeNoteIndicatorPro
     const trimmed = draft.trim();
     const current = (element.note ?? '').trim();
     if (trimmed !== current) {
-      updateElement(element.id, { note: trimmed.length > 0 ? trimmed : undefined } as any);
+      updateElement(element.id, { note: trimmed.length > 0 ? trimmed : undefined });
     }
     setEditing(false);
   };
 
   const clear = () => {
     setDraft('');
-    updateElement(element.id, { note: undefined } as any);
+    updateElement(element.id, { note: undefined });
     setEditing(false);
   };
 

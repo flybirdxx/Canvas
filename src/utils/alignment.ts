@@ -1,4 +1,4 @@
-import type { CanvasElement } from '../types/canvas';
+import type { CanvasElement } from '@/types/canvas';
 
 /**
  * Pure positional math for selection-based alignment / distribution / grid.

@@ -1,11 +1,11 @@
-import { useSettingsStore } from '../../../store/useSettingsStore';
-import { uploadBatchToImgbb } from '../../imgHost/imgbb';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { uploadBatchToImgbb } from '@/services/imgHost/imgbb';
 import type {
   GatewayProvider,
   ImageGenRequest,
   ImageGenResult,
   ProviderRuntimeConfig,
-} from '../types';
+} from '@/services/gateway/types';
 
 /**
  * t8star AI gateway —— 本项目当前接入的第一家真实 Provider。
@@ -177,14 +177,15 @@ async function runEdits(
   form.append('n', String(req.n));
   form.append('response_format', 'b64_json');
 
-  for (const url of req.referenceImages ?? []) {
-    const ref = await urlToBlob(url);
+  const refs = await Promise.all((req.referenceImages ?? []).map(urlToBlob));
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i];
     if (!ref) {
       return {
         ok: false,
         kind: 'network',
         message: '无法读取参考图数据',
-        detail: `URL: ${url.slice(0, 120)}${url.length > 120 ? '…' : ''}`,
+        detail: `URL: ${((req.referenceImages ?? [])[i] || '').slice(0, 120)}`,
       };
     }
     form.append('image', ref.blob, ref.filename);

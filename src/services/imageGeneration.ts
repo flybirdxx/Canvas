@@ -1,15 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { useAssetLibraryStore } from '../store/useAssetLibraryStore';
-import { useGenerationHistoryStore } from '../store/useGenerationHistoryStore';
-import { useGenerationQueueStore } from '../store/useGenerationQueueStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { useAssetLibraryStore } from '@/store/useAssetLibraryStore';
+import { useGenerationHistoryStore } from '@/store/useGenerationHistoryStore';
+import { useGenerationQueueStore } from '@/store/useGenerationQueueStore';
 import {
   AIGeneratingElement,
   CanvasElement,
   ImageElement,
   NodeVersion,
   PendingGenerationTask,
-} from '../types/canvas';
+} from '@/types/canvas';
 import { generateImageByModelId } from './gateway';
 import type { GatewayErrorKind } from './gateway/types';
 import { retryVideoGeneration } from './videoGeneration';

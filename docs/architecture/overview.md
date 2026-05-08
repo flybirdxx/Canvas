@@ -91,7 +91,6 @@ src/
 │   ├── videoGeneration.ts      # 视频生成服务层
 │   ├── taskResume.ts           # 跨会话 pending 任务恢复
 │   ├── fileIngest.ts           # 文件摄取（File → FileElement）
-│   ├── fileNodeTelemetry.ts    # file 节点埋点观察
 │   └── imgHost/
 │       └── imgbb.ts            # 图床上传代理
 ├── utils/

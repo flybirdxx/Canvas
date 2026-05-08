@@ -3,9 +3,9 @@ import {
   CheckCircle2, AlertTriangle, RefreshCw, X, Trash2,
   ListTodo, ChevronDown, ChevronUp, Image as ImageIcon, Video, MapPin,
 } from 'lucide-react';
-import { useGenerationQueueStore, QueueTask } from '../store/useGenerationQueueStore';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { retryGeneration } from '../services/imageGeneration';
+import { useGenerationQueueStore, QueueTask } from '@/store/useGenerationQueueStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { retryGeneration } from '@/services/imageGeneration';
 
 /**
  * GenerationQueuePanel — top-right paper chip.

@@ -1,5 +1,5 @@
 import { Trash } from 'lucide-react';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 /**
  * SaveControls — inside TopBar.

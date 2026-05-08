@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { useCanvasStore } from '../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function useCanvasPanZoom() {
   const { stageConfig, setStageConfig } = useCanvasStore();

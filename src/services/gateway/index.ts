@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../../store/useSettingsStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { RunningHubProvider } from './providers/runninghub';
 import { T8StarProvider } from './providers/t8star';
 import type {
@@ -8,6 +8,8 @@ import type {
   ImageGenResult,
   ModelDescriptor,
   ProviderRuntimeConfig,
+  TextGenRequest,
+  TextGenResult,
   VideoGenRequest,
   VideoGenResult,
 } from './types';
@@ -186,12 +188,40 @@ export async function generateVideoByModelId(
   return found.provider.generateVideo(req, config);
 }
 
+/**
+ * Text counterpart of {@link generateImageByModelId}. Same contract: never
+ * throws, surfaces structured failures for missing model / capability / key.
+ */
+export async function generateTextByModelId(
+  req: TextGenRequest,
+): Promise<TextGenResult> {
+  const found = findModel(req.model);
+  if (!found) {
+    return {
+      ok: false,
+      kind: 'unknown',
+      message: `未知模型：${req.model}`,
+    };
+  }
+  if (!found.provider.generateText) {
+    return {
+      ok: false,
+      kind: 'unknown',
+      message: `${found.provider.name} 不支持文本生成`,
+    };
+  }
+  const config = readProviderConfig(found.provider.id);
+  return found.provider.generateText(req, config);
+}
+
 export type {
   Capability,
   GatewayProvider,
   ModelDescriptor,
   ImageGenRequest,
   ImageGenResult,
+  TextGenRequest,
+  TextGenResult,
   VideoGenRequest,
   VideoGenResult,
 } from './types';

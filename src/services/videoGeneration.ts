@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { useAssetLibraryStore } from '../store/useAssetLibraryStore';
-import { useGenerationQueueStore } from '../store/useGenerationQueueStore';
-import { useGenerationHistoryStore } from '../store/useGenerationHistoryStore';
-import { AIGeneratingElement, CanvasElement, MediaElement, NodeVersion, PendingGenerationTask } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { useAssetLibraryStore } from '@/store/useAssetLibraryStore';
+import { useGenerationQueueStore } from '@/store/useGenerationQueueStore';
+import { useGenerationHistoryStore } from '@/store/useGenerationHistoryStore';
+import { AIGeneratingElement, CanvasElement, MediaElement, NodeVersion, PendingGenerationTask } from '@/types/canvas';
 import { generateVideoByModelId } from './gateway';
 import type { GatewayErrorKind, VideoGenResult } from './gateway/types';
 

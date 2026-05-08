@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { X, Archive, AlertTriangle } from 'lucide-react';
-import { exportZip, type ExportZipOptions } from '../utils/exportZip';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { getStage } from '../utils/stageRegistry';
+import { exportZip, type ExportZipOptions } from '@/utils/exportZip';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { getStage } from '@/utils/stageRegistry';
 
 interface ExportZipDialogProps {
   onClose: () => void;

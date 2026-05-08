@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useCanvasStore } from '../../store/useCanvasStore';
-import { syncAllScripts } from '../../services/storyboardSync';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { syncAllScripts } from '@/services/storyboardSync';
 
 export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObject<boolean>) {
   const { elements, addElement, deleteElements } = useCanvasStore();

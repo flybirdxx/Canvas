@@ -2,7 +2,7 @@ import {
   Layers, Type, Square, Settings2, Trash2, Link2, Upload,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
-import { useCanvasStore } from '../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 /**
  * PropertiesPanel — right-anchored paper chip inspector.
@@ -267,7 +267,7 @@ export function PropertiesPanel() {
                           return (
                             <button
                               key={btn.id}
-                              onClick={() => updateElement(el.id, { align: btn.id as any })}
+                              onClick={() => updateElement(el.id, { align: btn.id })}
                               className="flex-1 flex justify-center items-center transition-colors"
                               style={{
                                 padding: '4px 0',

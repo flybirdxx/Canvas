@@ -7,11 +7,11 @@ import {
   getRunElapsedMs,
   getRunStats,
   isRunComplete,
-} from '../store/useExecutionStore';
-import { useCanvasStore } from '../store/useCanvasStore';
+} from '@/store/useExecutionStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { dispatchToast } from './Toast';
-import { appendLog, clearLogs, subscribeLogs, type LogEntry } from '../services/executionLogs';
-import { cancelExecution, retryNode, retryRun, restartRun } from '../services/executionEngine';
+import { appendLog, clearLogs, subscribeLogs, type LogEntry } from '@/services/executionLogs';
+import { cancelExecution, retryNode, retryRun, restartRun } from '@/services/executionEngine';
 
 const STATUS_LABEL: Record<ExecutionNodeStatus, string> = {
   idle: '空闲', queued: '排队中', running: '执行中', success: '成功', failed: '失败',

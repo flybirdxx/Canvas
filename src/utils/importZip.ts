@@ -10,9 +10,9 @@
  *   groups → restoreGroups() → canvasStore.state.groups splice
  */
 import JSZip from 'jszip';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { CanvasElement, Connection } from '../types/canvas';
-import type { GroupRecord } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, Connection } from '@/types/canvas';
+import type { GroupRecord } from '@/store/useCanvasStore';
 
 const uuidv4 = () => crypto.randomUUID();
 

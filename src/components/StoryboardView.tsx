@@ -7,10 +7,10 @@
  * 增强（Story 2.3）: 点击选中、详情面板、拖拽排序。
  * 增强（Story 2.4）: DetailPanel 内联编辑、删除、关联缩略图、分组角标。
  */
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { BookOpen, GripVertical, X, Trash2, Edit3 } from 'lucide-react';
-import type { SceneElement, ScriptElement, ImageElement } from '../types/canvas';
+import type { SceneElement, ScriptElement, ImageElement } from '@/types/canvas';
 
 interface SceneCardProps {
   scene: SceneElement;

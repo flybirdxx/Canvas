@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { Sparkles, AlertTriangle, Settings as SettingsIcon, RefreshCw, Trash2 } from 'lucide-react';
-import { useCanvasStore } from '../../../store/useCanvasStore';
-import { retryGeneration } from '../../../services/imageGeneration';
-import type { AIGenerationError } from '../../../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { retryGeneration } from '@/services/imageGeneration';
+import type { AIGenerationError } from '@/types/canvas';
 import { POLAROID_STYLE, useExecutionBorder } from './shared';
 
 function GenErrorPanel({

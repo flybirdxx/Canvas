@@ -1,6 +1,6 @@
 import React from 'react';
 import { Group, Circle } from 'react-konva';
-import { useCanvasStore } from '../../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { getPortColor } from './shared';
 
 interface PortOverlayProps {

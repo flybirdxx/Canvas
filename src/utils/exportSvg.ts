@@ -1,6 +1,6 @@
 import { getStage } from './stageRegistry';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '@/types/canvas';
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

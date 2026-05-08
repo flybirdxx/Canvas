@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
-import { useCanvasStore } from '../../store/useCanvasStore';
-import { findSnapTargets, type GuideLine } from '../../utils/alignmentUtils';
-import type { SnapCallbacks } from '../../components/canvas/nodes/SelectionHandles';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { findSnapTargets, type GuideLine } from '@/utils/alignmentUtils';
+import type { SnapCallbacks } from '@/components/canvas/nodes/SelectionHandles';
 
 export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
   const [guideLines, setGuideLines] = useState<GuideLine[]>([]);

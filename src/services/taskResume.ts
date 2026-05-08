@@ -1,5 +1,5 @@
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { AIGeneratingElement, PendingGenerationTask } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { AIGeneratingElement, PendingGenerationTask } from '@/types/canvas';
 import { pollImageTaskByProviderId } from './gateway';
 import { replacePlaceholderWithImage, setPlaceholderError } from './imageGeneration';
 

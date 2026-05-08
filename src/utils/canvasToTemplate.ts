@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Connection } from '../types/canvas';
-import type { CanvasTemplate, TemplateElement, TemplateConnection } from '../data/templates';
-import { useCanvasStore } from '../store/useCanvasStore';
+import type { Connection } from '@/types/canvas';
+import type { CanvasTemplate, TemplateElement, TemplateConnection } from '@/data/templates';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 /**
  * Convert the center of the current browser viewport into canvas-unit coords,

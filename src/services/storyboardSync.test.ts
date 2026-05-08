@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeStoryboardDiff } from './storyboardSync';
-import type { SceneElement, ParsedScene } from '../types/canvas';
+import type { SceneElement, ParsedScene } from '@/types/canvas';
 
 describe('computeStoryboardDiff', () => {
   it('should identify scenes to add when no existing scenes exist', () => {
@@ -21,8 +21,8 @@ describe('computeStoryboardDiff', () => {
 
   it('should identify orphaned scenes to delete', () => {
     const existingScenes: SceneElement[] = [
-      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Old 1', scriptId: 'script-1' },
-      { id: 's3', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 3, title: 'Old 3', scriptId: 'script-1' },
+      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Old 1', content: '', scriptId: 'script-1' },
+      { id: 's3', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 3, title: 'Old 3', content: '', scriptId: 'script-1' },
     ];
     
     const parsedScenes: ParsedScene[] = [
@@ -41,8 +41,8 @@ describe('computeStoryboardDiff', () => {
 
   it('should do nothing if existing scenes perfectly match parsed scenes', () => {
     const existingScenes: SceneElement[] = [
-      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', scriptId: 'script-1' },
-      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', scriptId: 'script-1' },
+      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', content: '', scriptId: 'script-1' },
+      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', content: '', scriptId: 'script-1' },
     ];
     
     const parsedScenes: ParsedScene[] = [

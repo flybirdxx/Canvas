@@ -6,12 +6,12 @@ import {
   File as FileIcon, FileText, FileArchive, FileCode, FileAudio, FileVideo,
   FileImage, Upload,
 } from 'lucide-react';
-import { useCanvasStore } from '../../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import {
   formatBytes, formatDuration, previewKindForMime, buildFileElement,
-} from '../../../services/fileIngest';
-import type { FilePreviewKind } from '../../../services/fileIngest';
-import { readBlob } from '../../../services/fileStorage';
+} from '@/services/fileIngest';
+import type { FilePreviewKind } from '@/services/fileIngest';
+import { readBlobAsBlob } from '@/services/fileStorage';
 import { POLAROID_STYLE, PAPER_EDGE, BG_1 } from './shared';
 
 function pickAttachmentIcon(name: string, mime: string) {
@@ -411,12 +411,14 @@ export function FileNode({ el }: { el: any }) {
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
 
     if (el.persistence === 'blob' && el.blobKey) {
-      readBlob(el.blobKey).then((dataUrl) => {
+      readBlobAsBlob(el.blobKey).then((blob) => {
         if (cancelled) return;
-        if (dataUrl) {
-          setResolvedSrc(dataUrl);
+        if (blob) {
+          objectUrl = URL.createObjectURL(blob);
+          setResolvedSrc(objectUrl);
         } else {
           setBlobFailed(true);
         }
@@ -427,7 +429,7 @@ export function FileNode({ el }: { el: any }) {
       setResolvedSrc(el.src || '');
     }
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [el.id, el.blobKey]);
 
   const hydratedEl = (el.persistence === 'blob' && resolvedSrc)

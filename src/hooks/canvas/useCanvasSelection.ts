@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useCanvasStore } from '../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function useCanvasSelection(isShiftRef: React.MutableRefObject<boolean>) {
   const { elements, selectedIds, setSelection } = useCanvasStore();
@@ -105,6 +105,8 @@ export function useCanvasSelection(isShiftRef: React.MutableRefObject<boolean>) 
     return true;
   };
 
+  const clearSelectionBox = () => { setSelectionBox(null); };
+
   const endMarquee = () => {
     if (marquee.active && marquee.drawing) {
       marqueeStartRef.current = null;
@@ -125,6 +127,7 @@ export function useCanvasSelection(isShiftRef: React.MutableRefObject<boolean>) 
     startSelectionBox,
     updateSelectionBox,
     endSelectionBox,
+    clearSelectionBox,
     startMarquee,
     updateMarquee,
     endMarquee,

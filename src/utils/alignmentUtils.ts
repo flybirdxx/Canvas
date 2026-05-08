@@ -5,7 +5,7 @@
  * 算法优先级：边缘对齐 > 中心对齐 > 等间距对齐。距离相等时取边缘。
  */
 
-import type { CanvasElement } from '../types/canvas';
+import type { CanvasElement } from '@/types/canvas';
 
 /** 参考线类型 */
 export interface GuideLine {
@@ -240,9 +240,18 @@ export function findSnapTargets(
     return a.dist - b.dist;
   });
 
-  return {
-    snapDx: candidates[0].snapDx,
-    snapDy: candidates[0].snapDy,
-    guideLines: candidates[0].guideLines,
-  };
+  // 分别取最优的 X 轴和 Y 轴吸附项，合并为双向吸附结果
+  const bestX = candidates.find(c => c.snapDx !== 0);
+  const bestY = candidates.find(c => c.snapDy !== 0);
+
+  const snapDx = bestX?.snapDx ?? 0;
+  const snapDy = bestY?.snapDy ?? 0;
+  const guideLines: GuideLine[] = [];
+  if (bestX) guideLines.push(...bestX.guideLines);
+  if (bestY) guideLines.push(...bestY.guideLines);
+  if (bestX === bestY && guideLines.length > 1) {
+    guideLines.length = 1;
+  }
+
+  return { snapDx, snapDy, guideLines };
 }

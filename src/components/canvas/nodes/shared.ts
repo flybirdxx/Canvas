@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useExecutionStore, type ExecutionRun } from '../../../store/useExecutionStore';
+import { useExecutionStore, type ExecutionRun } from '@/store/useExecutionStore';
 
 /**
  * Warm-paper port palette.

@@ -5,9 +5,9 @@ import {
   TEMPLATE_CATEGORIES,
   CanvasTemplate,
   TemplateCategory,
-} from '../data/templates';
-import { instantiateTemplate } from '../utils/instantiateTemplate';
-import { useUserTemplatesStore } from '../store/useUserTemplatesStore';
+} from '@/data/templates';
+import { instantiateTemplate } from '@/utils/instantiateTemplate';
+import { useUserTemplatesStore } from '@/store/useUserTemplatesStore';
 import { SaveTemplateModal } from './SaveTemplateModal';
 
 type FilterKey = 'all' | TemplateCategory;

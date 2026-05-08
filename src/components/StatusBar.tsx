@@ -1,5 +1,5 @@
 import { Undo2, Redo2, Layers, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function StatusBar() {
   const undo = useCanvasStore(s => s.undo);

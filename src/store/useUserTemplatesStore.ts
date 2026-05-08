@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CanvasTemplate } from '../data/templates';
+import type { CanvasTemplate } from '@/data/templates';
 
 interface UserTemplatesState {
   templates: CanvasTemplate[];

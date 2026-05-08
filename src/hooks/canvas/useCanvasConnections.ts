@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { useCanvasStore } from '../../store/useCanvasStore';
-import type { CanvasElement } from '../../types/canvas';
-import { buildFileElement } from '../../services/fileIngest';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement } from '@/types/canvas';
+import { buildFileElement } from '@/services/fileIngest';
 
 export interface QuickAddMenuState {
   x: number;

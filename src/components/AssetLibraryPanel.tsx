@@ -12,8 +12,8 @@ import {
   ImageIcon,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { useAssetLibraryStore, AssetEntry } from '../store/useAssetLibraryStore';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useAssetLibraryStore, AssetEntry } from '@/store/useAssetLibraryStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 type Tab = 'recent' | 'favorites' | 'upload';
 
@@ -64,7 +64,7 @@ export function AssetLibraryPanel() {
       height,
       src: asset.src,
       prompt: asset.prompt,
-    } as any);
+    });
     setSelection([id]);
   };
 

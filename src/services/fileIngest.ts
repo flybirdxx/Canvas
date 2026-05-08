@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { FileElement } from '../types/canvas';
+import type { FileElement } from '@/types/canvas';
 import { storeBlob, blobKey, BLOB_THRESHOLD_BYTES } from './fileStorage';
 
 /**
@@ -154,7 +154,7 @@ async function extractAudioWaveform(file: File): Promise<{
   durationMs?: number;
 } | null> {
   if (file.size > AUDIO_WAVEFORM_MAX_BYTES) return null;
-  const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
   let ctx: AudioContext | null = null;
   try {

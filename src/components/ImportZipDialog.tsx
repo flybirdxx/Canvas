@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { X, Upload, CheckCircle, AlertCircle, FileArchive } from 'lucide-react';
-import { parseZipFile, restoreCanvas, type ParsedCanvas } from '../utils/importZip';
+import { parseZipFile, restoreCanvas, type ParsedCanvas } from '@/utils/importZip';
 
 interface ImportZipDialogProps {
   onClose: () => void;

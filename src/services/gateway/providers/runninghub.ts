@@ -1,5 +1,5 @@
-import { useSettingsStore } from '../../../store/useSettingsStore';
-import { ensurePublicUrl, uploadBatchToImgbb } from '../../imgHost/imgbb';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { ensurePublicUrl, uploadBatchToImgbb } from '@/services/imgHost/imgbb';
 import type {
   GatewayProvider,
   ImageGenFailure,
@@ -7,29 +7,45 @@ import type {
   ImageGenResult,
   ImageGenSuccess,
   ProviderRuntimeConfig,
+  TextGenRequest,
+  TextGenResult,
   VideoGenRequest,
   VideoGenResult,
-} from '../types';
+} from '@/services/gateway/types';
 
 /**
- * RunningHub (runninghub.cn) — 全能图片 G-2.0 系列图像模型
- * + SD2.0 (Seedance-V2) 视频模型（sparkvideo-2.0 / sparkvideo-2.0-fast）。
+ * RunningHub (runninghub.cn / llm.runninghub.ai)
  *
- * 和同步风格的 t8star 最大的不同：**异步任务模型**。所有渠道共用同一套
- * `submit → poll /openapi/v2/query` 的异步流程，但 **body schema 按渠道分叉**
- * （`CHANNELS` 常量）。
+ * 图像：全能图片 G-2.0 系列 + 全能图片PRO + 全能图片V2
+ * 视频：SD2.0 (Seedance-V2) sparkvideo-2.0 / sparkvideo-2.0-fast
+ * 文本：Gemini 3.1 Pro/Flash Lite + DeepSeek V4 Pro/Flash (OpenAI Chat 兼容协议)
+ *
+ * 图像/视频走异步任务模型（submit → poll /openapi/v2/query），body schema 按渠道分叉。
+ * 文本走同步 OpenAI Chat Completion 协议（POST /v1/chat/completions），
+ * 使用独立的 llm.runninghub.ai 域名，但鉴权复用同一个 API Key。
  *
  * 图像渠道（路径前缀均含 `rhart-image-*`）：
  *   · rhart-image-g-2  —— 低价渠道
  *   · rhart-image-g-2-official —— 官方稳定版
+ *   · rhart-image-n-pro      —— 全能图片PRO 低价渠道
+ *   · rhart-image-n-pro-official —— 全能图片PRO 官方稳定版
+ *   · rhart-image-n-g31-flash —— 全能图片V2 低价渠道
+ *   · rhart-image-n-g31-flash-official —— 全能图片V2 官方稳定版
+ *   · rhart-image-n-g31-flash-official-ultra —— 全能图片V2 Ultra
  *
  * 视频渠道（路径前缀均含 `rhart-video/sparkvideo-*`）：
  *   · rhart-video/sparkvideo-2.0/text-to-video      —— SD2.0 文生视频
- *   · rhart-video/sparkvideo-2.0/image-to-video     —— SD2.0 图生视频（首帧+可选尾帧）
+ *   · rhart-video/sparkvideo-2.0/image-to-video     —— SD2.0 图生视频
  *   · rhart-video/sparkvideo-2.0/multimodal-video    —— SD2.0 全能参考视频
  *   · rhart-video/sparkvideo-2.0-fast/text-to-video —— SD2.0-Fast 文生视频
  *   · rhart-video/sparkvideo-2.0-fast/image-to-video—— SD2.0-Fast 图生视频
  *   · rhart-video/sparkvideo-2.0-fast/multimodal-video—— SD2.0-Fast 全能参考视频
+ *
+ * 文本渠道（独立域名 llm.runninghub.ai）：
+ *   · google/gemini-3.1-pro-preview         —— Gemini 3.1 Pro
+ *   · google/gemini-3.1-flash-lite-preview  —— Gemini 3.1 Flash Lite
+ *   · deepseek/deepseek-v4-pro              —— DeepSeek V4 Pro
+ *   · deepseek/deepseek-v4-flash            —— DeepSeek V4 Flash
  *
  * 轮询响应 schema 所有渠道一致：
  *   POST /openapi/v2/query  { taskId }
@@ -41,6 +57,8 @@ import type {
  *   - ok:'pending' + taskId  → 提交成功但本轮轮询窗口耗尽仍在跑；
  *                               caller 负责把 taskId 持久化到 placeholder，
  *                               稍后由 `pollImageTask` / `taskResume` 接回
+ *
+ * `generateText` 走同步路径（等价于 t8star 风格），一次 HTTP 往返即可。
  *
  * 其它约束：
  *   · 所有渠道的 IMAGE 类型字段只接受**公网 URL**，不接受 base64；
@@ -112,6 +130,63 @@ const CHANNELS: Record<string, RHChannel> = {
         : base;
     },
   },
+  'rhart-image-n-pro': {
+    textPath: 'rhart-image-n-pro/text-to-image',
+    editPath: 'rhart-image-n-pro/edit',
+    buildBody: ({ prompt, aspect, imageUrls }) => {
+      const aspectRatio = snapAspect(aspect);
+      return imageUrls && imageUrls.length > 0
+        ? { prompt, aspectRatio, imageUrls }
+        : { prompt, aspectRatio };
+    },
+  },
+  'rhart-image-n-pro-official': {
+    textPath: 'rhart-image-n-pro-official/text-to-image',
+    editPath: 'rhart-image-n-pro-official/edit',
+    buildBody: ({ prompt, aspect, imageUrls, resolution, qualityLevel }) => {
+      const aspectRatio = snapAspect(aspect);
+      const res = toOfficialResolution(resolution);
+      const q = toOfficialQualityLevel(qualityLevel);
+      const base = { prompt, aspectRatio, resolution: res, quality: q };
+      return imageUrls && imageUrls.length > 0
+        ? { ...base, imageUrls }
+        : base;
+    },
+  },
+  'rhart-image-n-pro-official-ultra': {
+    textPath: 'rhart-image-n-pro-official/text-to-image-ultra',
+    editPath: 'rhart-image-n-pro-official/edit-ultra',
+    buildBody: ({ prompt, aspect, imageUrls, resolution }) => {
+      const aspectRatio = snapAspect(aspect);
+      const res = toOfficialResolution(resolution);
+      const base = { prompt, aspectRatio, resolution: res };
+      return imageUrls && imageUrls.length > 0
+        ? { ...base, imageUrls }
+        : base;
+    },
+  },
+  'rhart-image-n-g31-flash': {
+    textPath: 'rhart-image-n-g31-flash/text-to-image',
+    editPath: 'rhart-image-n-g31-flash/image-to-image',
+    buildBody: ({ prompt, aspect, imageUrls }) => {
+      const aspectRatio = snapAspect(aspect);
+      return imageUrls && imageUrls.length > 0
+        ? { prompt, aspectRatio, imageUrls }
+        : { prompt, aspectRatio };
+    },
+  },
+  'rhart-image-n-g31-flash-official': {
+    textPath: 'rhart-image-n-g31-flash-official/text-to-image',
+    editPath: 'rhart-image-n-g31-flash-official/image-to-image',
+    buildBody: ({ prompt, aspect, imageUrls, qualityLevel }) => {
+      const aspectRatio = snapAspect(aspect);
+      const q = toOfficialQualityLevel(qualityLevel);
+      const base = { prompt, aspectRatio, quality: q };
+      return imageUrls && imageUrls.length > 0
+        ? { ...base, imageUrls }
+        : base;
+    },
+  },
 };
 
 function toOfficialResolution(resolution: string | undefined): string {
@@ -131,7 +206,7 @@ function toOfficialQualityLevel(level: string | undefined): string {
 export const RunningHubProvider: GatewayProvider = {
   id: 'runninghub',
   name: 'RunningHub',
-  capabilities: ['image', 'video'],
+  capabilities: ['image', 'video', 'text'],
   auth: 'bearer',
   authHint: '异步任务模型，提交后轮询查询；图生参考图会自动经 imgbb 托管',
   models: [
@@ -171,6 +246,69 @@ export const RunningHubProvider: GatewayProvider = {
           high:   { '1k': 1.54, '2k': 2.82, '4k': 4.52 },
         },
       },
+    },
+
+    // ── 全能图片PRO (nano-banana-pro) ─────────────────────────────────
+    {
+      id: 'rhart-image-n-pro',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: '全能图片PRO',
+      caption: '全能图片 PRO · 低价渠道',
+      supportsSize: false,
+      supportsN: true,
+      supportedAspects: ['1:1','3:2','2:3','5:4','4:5','4:3','3:4','16:9','9:16','21:9'],
+      pricing: { currency: '¥', flat: 0.15 },
+    },
+    {
+      id: 'rhart-image-n-pro-official',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: '全能图片PRO · 官方稳定版',
+      caption: '全能图片 PRO · 官方稳定版（1K/2K/4K + 质量档位）',
+      supportsSize: false,
+      supportsN: true,
+      supportedAspects: ['1:1','3:2','2:3','5:4','4:5','4:3','3:4','16:9','9:16','21:9'],
+      supportedResolutions: ['1K','2K','4K'],
+      supportedQualityLevels: ['low','medium','high'],
+      pricing: { currency: '¥', matrix: { low:{'1k':0.34,'2k':0.49,'4k':1.02}, medium:{'1k':0.43,'2k':0.97,'4k':1.45}, high:{'1k':1.6,'2k':2.89,'4k':4.59} } },
+    },
+    {
+      id: 'rhart-image-n-pro-official-ultra',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: '全能图片PRO · Ultra',
+      caption: '全能图片 PRO · 官方 Ultra 高画质版',
+      supportsSize: false,
+      supportsN: true,
+      supportedAspects: ['1:1','3:2','2:3','5:4','4:5','4:3','3:4','16:9','9:16','21:9'],
+      supportedResolutions: ['1K','2K','4K'],
+      pricing: { currency: '¥', matrix: { '1k':2.0, '2k':3.5, '4k':5.5 } },
+    },
+
+    // ── 全能图片V2 (nano-banana2-gemini31flash) ────────────────────────
+    {
+      id: 'rhart-image-n-g31-flash',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: '全能图片V2',
+      caption: '全能图片 V2 · 低价渠道（Gemini Flash）',
+      supportsSize: false,
+      supportsN: true,
+      supportedAspects: ['1:1','3:2','2:3','5:4','4:5','4:3','3:4','16:9','9:16','21:9'],
+      pricing: { currency: '¥', flat: 0.12 },
+    },
+    {
+      id: 'rhart-image-n-g31-flash-official',
+      providerId: 'runninghub',
+      capability: 'image',
+      label: '全能图片V2 · 官方稳定版',
+      caption: '全能图片 V2 · 官方稳定版（Gemini Flash + 质量档位）',
+      supportsSize: false,
+      supportsN: true,
+      supportedAspects: ['1:1','3:2','2:3','5:4','4:5','4:3','3:4','16:9','9:16','21:9'],
+      supportedQualityLevels: ['low','medium','high'],
+      pricing: { currency: '¥', matrix: { low:{'1k':0.25,'2k':0.38}, medium:{'1k':0.32,'2k':0.76}, high:{'1k':1.25,'2k':2.30} } },
     },
 
     // ── SD2.0 视频模型（sparkvideo-2.0）────────────────────────────────
@@ -270,7 +408,7 @@ export const RunningHubProvider: GatewayProvider = {
       },
     },
     {
-      id: 'spark2.0-fast-multimodal',
+      id: 'sparkvideo-2.0-fast-multimodal',
       providerId: 'runninghub',
       capability: 'video',
       label: 'SD2.0-Fast · 全能参考视频',
@@ -286,6 +424,40 @@ export const RunningHubProvider: GatewayProvider = {
           '4k': 1.63,
         },
       },
+    },
+
+    // ── LLM 文本模型 ─────────────────────────────────────────────────
+    {
+      id: 'google/gemini-3.1-pro-preview',
+      providerId: 'runninghub',
+      capability: 'text',
+      label: 'Gemini 3.1 Pro',
+      caption: '谷歌最强预览版，适合复杂推理与创意写作',
+      pricing: { currency: '¥', flat: 0 },
+    },
+    {
+      id: 'google/gemini-3.1-flash-lite-preview',
+      providerId: 'runninghub',
+      capability: 'text',
+      label: 'Gemini 3.1 Flash Lite',
+      caption: '极速响应，适合短文本生成与提示词精修',
+      pricing: { currency: '¥', flat: 0 },
+    },
+    {
+      id: 'deepseek/deepseek-v4-pro',
+      providerId: 'runninghub',
+      capability: 'text',
+      label: 'DeepSeek V4 Pro',
+      caption: '深度求索最新专业版，代码与逻辑能力极强',
+      pricing: { currency: '¥', flat: 0 },
+    },
+    {
+      id: 'deepseek/deepseek-v4-flash',
+      providerId: 'runninghub',
+      capability: 'text',
+      label: 'DeepSeek V4 Flash',
+      caption: '高性价比大模型，适合大规模文本处理',
+      pricing: { currency: '¥', flat: 0 },
     },
   ],
 
@@ -375,6 +547,81 @@ export const RunningHubProvider: GatewayProvider = {
       return runSparkMultimodalVideo(config, req, seedImageUrl, VIDEO_POLL_MAX_WAIT_MS);
     }
     return { ok: false, kind: 'unknown', message: `未知视频模型：${req.model}` };
+  },
+
+  async generateText(req: TextGenRequest, config: ProviderRuntimeConfig): Promise<TextGenResult> {
+    if (!config.apiKey) {
+      return { ok: false, kind: 'missingKey', message: '请先在设置中配置 RunningHub 的 API 密钥' };
+    }
+
+    const LLM_BASE = 'https://llm.runninghub.ai';
+    const endpoint = `${LLM_BASE}/v1/chat/completions`;
+
+    const body = {
+      model: req.model,
+      messages: req.messages,
+      max_tokens: req.maxTokens ?? 4096,
+      temperature: req.temperature ?? 0.7,
+    };
+
+    let resp: Response;
+    try {
+      resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: req.signal,
+      });
+    } catch (e: unknown) {
+      return {
+        ok: false,
+        kind: 'network',
+        message: 'LLM 网络请求失败',
+        detail: buildRhNetworkErrorDetail(endpoint, e),
+      };
+    }
+
+    if (!resp.ok) {
+      const parsed = await parseErrorBody(resp);
+      return { ok: false, kind: 'server', message: parsed.message, detail: parsed.detail };
+    }
+
+    let data: unknown;
+    try {
+      data = await resp.json();
+    } catch {
+      return { ok: false, kind: 'empty', message: 'LLM 响应解析失败' };
+    }
+
+    // OpenAI Chat Completion response shape
+    const d = data as {
+      choices?: Array<{ message?: { content?: string } }>;
+      error?: { message?: string; code?: string };
+    };
+
+    if (d.error) {
+      return {
+        ok: false,
+        kind: 'server',
+        message: d.error.message ?? d.error.code ?? 'LLM 服务返回错误',
+        detail: safeStringify(d.error),
+      };
+    }
+
+    const content = d.choices?.[0]?.message?.content;
+    if (!content) {
+      return {
+        ok: false,
+        kind: 'empty',
+        message: 'LLM 未返回文本内容',
+        detail: safeStringify(data),
+      };
+    }
+
+    return { ok: true, text: content };
   },
 };
 

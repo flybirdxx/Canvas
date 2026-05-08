@@ -14,12 +14,12 @@ import {
   Archive,
   Upload,
 } from 'lucide-react';
-import { exportSelection, exportVisible } from '../utils/exportPng';
-import { exportSelectionAsSvg } from '../utils/exportSvg';
-import { exportViewportAsPdf, exportSelectionAsPdf, exportAsCustomPdf } from '../utils/exportPdf';
-import { exportAsStandaloneHtml } from '../utils/exportHtml';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { SceneElement } from '../types/canvas';
+import { exportSelection, exportVisible } from '@/utils/exportPng';
+import { exportSelectionAsSvg } from '@/utils/exportSvg';
+import { exportViewportAsPdf, exportSelectionAsPdf, exportAsCustomPdf } from '@/utils/exportPdf';
+import { exportAsStandaloneHtml } from '@/utils/exportHtml';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { SceneElement } from '@/types/canvas';
 import { ExportMp4Dialog } from './ExportMp4Dialog';
 import { ExportZipDialog } from './ExportZipDialog';
 import { ImportZipDialog } from './ImportZipDialog';

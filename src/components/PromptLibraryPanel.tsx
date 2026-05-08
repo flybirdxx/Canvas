@@ -7,8 +7,8 @@ import {
   PromptCategoryId,
   PromptMode,
   PromptPreset,
-} from '../data/promptLibrary';
-import { usePromptLibraryStore } from '../store/usePromptLibraryStore';
+} from '@/data/promptLibrary';
+import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 
 type TabId = 'all' | 'favorites' | 'recent' | 'custom' | PromptCategoryId;
 

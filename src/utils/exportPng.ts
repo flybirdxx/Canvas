@@ -1,4 +1,4 @@
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { getStage } from './stageRegistry';
 
 /**

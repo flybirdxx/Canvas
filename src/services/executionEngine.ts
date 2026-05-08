@@ -2,21 +2,21 @@
 // Story 1.4: AbortController, cancelRun, retryNode, retryRun
 // Story 1.5: generation:success CustomEvent, execId in GenRequest
 import { v4 as uuidv4 } from 'uuid';
-import { useCanvasStore } from '../store/useCanvasStore';
-import { useExecutionStore } from '../store/useExecutionStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { useExecutionStore } from '@/store/useExecutionStore';
 import {
   getUpstreamTextContributions,
   composeEffectivePrompt,
-} from '../utils/flowResolver';
+} from '@/utils/flowResolver';
 import { runGeneration } from './imageGeneration';
 import { runVideoGeneration } from './videoGeneration';
 import type { VideoGenRequest } from './videoGeneration';
 import type { GenRequest } from './imageGeneration';
-import type { Connection } from '../types/canvas';
-import type { ExecutionErrorKind } from '../store/useExecutionStore';
-import { dispatchToast } from '../components/Toast';
+import type { Connection } from '@/types/canvas';
+import type { ExecutionErrorKind } from '@/store/useExecutionStore';
+import { dispatchToast } from '@/components/Toast';
 import { appendLog } from './executionLogs';
-import { isRunComplete } from '../store/useExecutionStore';
+import { isRunComplete } from '@/store/useExecutionStore';
 
 /* -------------------------------------------------------------------- */
 /*  Module-level state (per run)                                              */

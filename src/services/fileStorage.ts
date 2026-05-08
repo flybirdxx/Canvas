@@ -51,6 +51,22 @@ export async function readBlob(key: string): Promise<string | null> {
   });
 }
 
+/** Retrieve a blob by key, return as raw Blob — callers can use URL.createObjectURL
+ *  to avoid the memory overhead of Base64 DataURL encoding for large files. */
+export async function readBlobAsBlob(key: string): Promise<Blob | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BLOB_STORE, 'readonly');
+    const req = tx.objectStore(BLOB_STORE).get(key);
+    req.onsuccess = () => {
+      const blob = req.result as Blob | undefined;
+      db.close();
+      resolve(blob || null);
+    };
+    req.onerror = () => { db.close(); reject(req.error); };
+  });
+}
+
 /** Delete a blob by key. */
 export async function deleteBlob(key: string): Promise<void> {
   const db = await openDb();

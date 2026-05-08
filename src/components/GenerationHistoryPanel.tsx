@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ImageIcon, Video, MapPin, X, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
-import { useGenerationHistoryStore, GenHistoryEntry } from '../store/useGenerationHistoryStore';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useGenerationHistoryStore, GenHistoryEntry } from '@/store/useGenerationHistoryStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function GenerationHistoryPanel() {
   const entries = useGenerationHistoryStore(s => s.entries);

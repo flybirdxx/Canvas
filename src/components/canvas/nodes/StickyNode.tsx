@@ -1,7 +1,7 @@
 import React from 'react';
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { useCanvasStore } from '../../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { useExecutionBorder } from './shared';
 
 export function StickyNode({ el }: { el: any }) {

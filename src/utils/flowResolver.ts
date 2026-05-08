@@ -1,4 +1,4 @@
-import type { CanvasElement, Connection } from '../types/canvas';
+import type { CanvasElement, Connection } from '@/types/canvas';
 
 /**
  * A single upstream contribution feeding into a target node via a connection.

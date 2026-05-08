@@ -1,7 +1,7 @@
 // src/utils/exportPdf.ts
 import { jsPDF } from 'jspdf';
 import { getStage } from './stageRegistry';
-import { useCanvasStore } from '../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 function hasChinese(text: string): boolean {
   return /[\u4e00-\u9fa5]/.test(text);

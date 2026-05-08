@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { useCanvasStore } from '../../../store/useCanvasStore';
-import { parseScriptMarkdown } from '../../../utils/parseScript';
-import type { ScriptElement } from '../../../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { parseScriptMarkdown } from '@/utils/parseScript';
+import type { ScriptElement } from '@/types/canvas';
 import { POLAROID_STYLE, useExecutionBorder } from './shared';
 
 export function ScriptNode({

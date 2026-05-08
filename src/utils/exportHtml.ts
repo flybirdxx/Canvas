@@ -1,6 +1,6 @@
 // src/utils/exportHtml.ts
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '@/types/canvas';
 
 function escapeHtml(s: string): string {
   return s

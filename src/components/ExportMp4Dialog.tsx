@@ -1,7 +1,7 @@
 // src/components/ExportMp4Dialog.tsx
 import { useState, useRef, useCallback } from 'react';
 import { X, Film, Upload } from 'lucide-react';
-import { exportMp4, type Transition, type Resolution, type ExportMp4Options } from '../utils/exportMp4';
+import { exportMp4, type Transition, type Resolution, type ExportMp4Options } from '@/utils/exportMp4';
 
 interface ExportMp4DialogProps {
   sceneCount: number;

@@ -3,25 +3,25 @@ import { Stage, Layer, Rect, Line, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { v4 as uuidv4 } from 'uuid';
-import { useCanvasStore } from '../../store/useCanvasStore';
+import { useCanvasStore } from '@/store/useCanvasStore';
 import { CanvasElements } from './CanvasElements';
-import { NodeInputBar } from '../NodeInputBar';
-import { NodeVersionSwitcher } from '../NodeVersionSwitcher';
-import { InpaintOverlay } from '../InpaintOverlay';
-import { NodeNoteIndicator } from '../NodeNoteIndicator';
-import { setStage } from '../../utils/stageRegistry';
-import { exportCanvasRect } from '../../utils/exportPng';
-import { useAssetLibraryStore } from '../../store/useAssetLibraryStore';
+import { NodeInputBar } from '@/components/NodeInputBar';
+import { NodeVersionSwitcher } from '@/components/NodeVersionSwitcher';
+import { InpaintOverlay } from '@/components/InpaintOverlay';
+import { NodeNoteIndicator } from '@/components/NodeNoteIndicator';
+import { setStage } from '@/utils/stageRegistry';
+import { exportCanvasRect } from '@/utils/exportPng';
+import { useAssetLibraryStore } from '@/store/useAssetLibraryStore';
 import { Type, ImageIcon, Video, Music, FileUp, Check, RotateCcw, X } from 'lucide-react';
-import { buildFileElement } from '../../services/fileIngest';
-import { runGeneration } from '../../services/imageGeneration';
+import { buildFileElement } from '@/services/fileIngest';
+import { runGeneration } from '@/services/imageGeneration';
 
 // Import our new hooks
-import { useKeyboardShortcuts } from '../../hooks/canvas/useKeyboardShortcuts';
-import { useCanvasPanZoom } from '../../hooks/canvas/useCanvasPanZoom';
-import { useCanvasSelection } from '../../hooks/canvas/useCanvasSelection';
-import { useCanvasConnections } from '../../hooks/canvas/useCanvasConnections';
-import { useSnapCallbacks } from '../../hooks/canvas/useSnapCallbacks';
+import { useKeyboardShortcuts } from '@/hooks/canvas/useKeyboardShortcuts';
+import { useCanvasPanZoom } from '@/hooks/canvas/useCanvasPanZoom';
+import { useCanvasSelection } from '@/hooks/canvas/useCanvasSelection';
+import { useCanvasConnections } from '@/hooks/canvas/useCanvasConnections';
+import { useSnapCallbacks } from '@/hooks/canvas/useSnapCallbacks';
 
 const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
   text: 260,
@@ -76,7 +76,7 @@ export function InfiniteCanvas() {
 
   const { isSpacePressed, isAltRef, isShiftRef } = useKeyboardShortcuts();
   const { handleWheel, startPan, updatePan, endPan, isPanningRef } = useCanvasPanZoom();
-  const { selectionBox, marquee, setMarquee, startSelectionBox, updateSelectionBox, endSelectionBox, startMarquee, updateMarquee, endMarquee } = useCanvasSelection(isShiftRef);
+  const { selectionBox, marquee, setMarquee, startSelectionBox, updateSelectionBox, endSelectionBox, startMarquee, updateMarquee, endMarquee, clearSelectionBox } = useCanvasSelection(isShiftRef);
   const { quickAddMenu, setQuickAddMenu, findPortUnderMouse, handleQuickAdd, handleQuickAddUpload } = useCanvasConnections();
   const { guideLines, snapCallbacks, dragDeltasRef } = useSnapCallbacks(isAltRef);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -249,7 +249,7 @@ export function InfiniteCanvas() {
         x, y, width, height,
         src: asset.src,
         prompt: asset.prompt,
-      } as any);
+      });
       setSelection([id]);
       setActiveTool('select');
       return;
@@ -276,7 +276,7 @@ export function InfiniteCanvas() {
       const y = (posY - stageConfig.y) / scale - height / 2;
 
       const id = uuidv4();
-      addElement({ id, type: isVideo ? 'video' : 'audio', x, y, width, height, src } as any);
+      addElement({ id, type: isVideo ? 'video' : 'audio', x, y, width, height, src });
       setSelection([id]);
       setActiveTool('select');
       return;
@@ -290,7 +290,7 @@ export function InfiniteCanvas() {
       const originX = (posX - stageConfig.x) / scale;
       const originY = (posY - stageConfig.y) / scale;
       buildFileElement(file, { x: originX, y: originY }).then((fileEl) => {
-        addElement(fileEl as any);
+        addElement(fileEl);
         setSelection([fileEl.id]);
         setActiveTool('select');
 
@@ -316,7 +316,7 @@ export function InfiniteCanvas() {
       const originX = (posX - stageConfig.x) / scale;
       const originY = (posY - stageConfig.y) / scale;
       buildFileElement(file, { x: originX, y: originY }).then((fileEl) => {
-        addElement(fileEl as any);
+        addElement(fileEl);
         setSelection([fileEl.id]);
         setActiveTool('select');
       }).catch((err) => {
@@ -366,7 +366,7 @@ export function InfiniteCanvas() {
         onPointerUp={handlePointerUp}
         onDblClick={(e) => {
           if (e.target === e.target.getStage()) {
-            startSelectionBox(0, 0); // null out selection box hack
+            clearSelectionBox();
             const pointer = e.target.getStage()?.getPointerPosition();
             if (!pointer) return;
             const scale = stageConfig.scale;

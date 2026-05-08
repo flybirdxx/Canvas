@@ -16,11 +16,11 @@
  *   └── thumbnails/        — per-node Konva screenshots
  */
 import JSZip from 'jszip';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { CanvasElement, Connection } from '../types/canvas';
-import type { GroupRecord } from '../store/useCanvasStore';
-import { readBlob } from '../services/fileStorage';
-import type { FileElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { CanvasElement, Connection } from '@/types/canvas';
+import type { GroupRecord } from '@/store/useCanvasStore';
+import { readBlob } from '@/services/fileStorage';
+import type { FileElement } from '@/types/canvas';
 
 const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024; // 5 MB
 

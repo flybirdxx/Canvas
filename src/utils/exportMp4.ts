@@ -1,7 +1,7 @@
 // src/utils/exportMp4.ts
 import { getStage } from './stageRegistry';
-import { useCanvasStore } from '../store/useCanvasStore';
-import type { SceneElement } from '../types/canvas';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import type { SceneElement } from '@/types/canvas';
 
 export type Transition = 'none' | 'fade' | 'slide';
 export type Resolution = '720p' | '1080p' | '4k';
