@@ -3,7 +3,7 @@ import { StickyNote, X } from 'lucide-react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { CanvasElement } from '@/types/canvas';
 
-export interface NodeNoteIndicatorProps {
+export interface NodeNoteIndicatorProps { key?: React.Key;
   element: CanvasElement;
   /** Top-right anchor of the node in SCREEN coords (px). */
   x: number;

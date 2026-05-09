@@ -14,6 +14,7 @@ export function ThumbChip({
   badge?: string;
   title?: string;
   onRemove: () => void;
+  key?: React.Key;
 }) {
   return (
     <div

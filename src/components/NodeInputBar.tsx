@@ -52,7 +52,7 @@ import {
   removeSnippetFromPrompt,
 } from './input-bar/utils';
 
-export interface NodeInputBarProps {
+export interface NodeInputBarProps { key?: React.Key;
   element: CanvasElement;
   x: number;
   y: number;
