@@ -20,5 +20,18 @@ export default defineConfig(({mode}) => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    build: {
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            konva: ['konva', 'react-konva', 'react-konva-utils'],
+            lucide: ['lucide-react'],
+            vendor: ['zustand', 'uuid', 'clsx', 'tailwind-merge'],
+          },
+        },
+      },
+    },
   };
 });

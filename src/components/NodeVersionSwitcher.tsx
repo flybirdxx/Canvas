@@ -11,7 +11,7 @@ import type { CanvasElement, NodeVersion } from '@/types/canvas';
  * Placement is handled by the parent (InfiniteCanvas overlay layer) — this
  * component only needs screen-space x/y and the element data.
  */
-export interface NodeVersionSwitcherProps {
+export interface NodeVersionSwitcherProps { key?: React.Key;
   element: CanvasElement;
   /** Top-center anchor in screen coords (already includes stage scale + translate). */
   x: number;
@@ -168,7 +168,7 @@ function renderDots(total: number, active: number, onPick: (i: number) => void) 
   return nodes;
 }
 
-function Dot({ active, index, onClick }: { active: boolean; index: number; onClick: () => void }) {
+function Dot({ key, active, index, onClick }: { active: boolean; index: number; onClick: () => void; key?: React.Key }) {
   return (
     <button
       type="button"
