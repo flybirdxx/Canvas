@@ -50,6 +50,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             className="btn btn-ghost btn-icon"
             style={{ width: 28, height: 28, borderRadius: '50%' }}
+            title="关闭设置"
+            aria-label="关闭设置"
           >
             <X className="w-4 h-4" strokeWidth={1.6} />
           </button>
