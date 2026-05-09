@@ -271,6 +271,38 @@ export interface Connection {
   toPortId: string;
 }
 
+// ── 结构化分镜 (Structured Storyboard) ─────────────────────────────
+
+export type LineType = 'dialogue' | 'action' | 'environment';
+
+export interface ScriptLine {
+  id: string;
+  role: string;
+  content: string;
+  emotion?: string;
+  emotionEmoji?: string;
+  lineType: LineType;
+  timestamp?: number;
+}
+
+/** 预设情绪标签 */
+export const EMOTION_PRESETS = [
+  { label: '开心', emoji: '😊' },
+  { label: '愤怒', emoji: '😡' },
+  { label: '悲伤', emoji: '😢' },
+  { label: '惊讶', emoji: '😲' },
+  { label: '恐惧', emoji: '😨' },
+  { label: '平静', emoji: '😐' },
+  { label: '紧张', emoji: '😰' },
+  { label: '兴奋', emoji: '🤩' },
+  { label: '厌恶', emoji: '🤢' },
+  { label: '思考', emoji: '🤔' },
+  { label: '得意', emoji: '😏' },
+  { label: '感动', emoji: '🥹' },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────
+
 /**
  * F26: 分镜锚点 —— 从 Markdown 剧本中解析出的单个场次结构。
  * `sceneNum` 为场次编号（如 1），`title` 为场次标题（如"咖啡厅相遇"），
@@ -280,6 +312,7 @@ export interface ParsedScene {
   sceneNum: number;
   title: string;
   content: string;
+  lines?: ScriptLine[];
 }
 
 /**
@@ -306,6 +339,14 @@ export interface SceneElement extends BaseElement {
   sceneNum: number;
   title: string;
   content: string;
+  /** 结构化剧本行 (OmniScript 风格)。缺省时回退到 content。 */
+  lines?: ScriptLine[];
+  /** 场次 AI/人工摘要 */
+  summary?: string;
+  /** 分析页签自由文本（地点、天气、摄影机角度等） */
+  analysisNote?: string;
+  /** 显式关联的图片节点 ID（素材关联）。优先于邻近搜索。 */
+  linkedImageId?: string;
   /** 关联的剧本节点 ID（用于双视图数据联动）。可缺省（独立 scene 节点）。 */
   scriptId?: string;
 }

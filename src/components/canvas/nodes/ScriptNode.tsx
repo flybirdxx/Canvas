@@ -5,6 +5,7 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { parseScriptMarkdown } from '@/utils/parseScript';
 import type { ScriptElement } from '@/types/canvas';
 import { POLAROID_STYLE, useExecutionBorder } from './shared';
+import { MarkdownRenderer } from './sceneNodeRenderer';
 
 export function ScriptNode({
   el, width, height, isSelected, autoEdit,
@@ -166,28 +167,36 @@ export function ScriptNode({
           }}>
             剧本
           </div>
-          {el.scenes.length === 0 ? (
+          {el.scenes.length === 0 && !el.markdown ? (
             <div style={{ fontSize: 12, color: 'var(--ink-3)', fontStyle: 'italic' }}>
               点击添加剧本内容…
             </div>
+          ) : el.scenes.length === 0 ? (
+            /* 有 markdown 但无分镜锚点：渲染 Markdown 预览 */
+            <div className="paper-scroll" style={{
+              flex: 1,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              minHeight: 0,
+            }}>
+              <MarkdownRenderer source={el.markdown!} />
+            </div>
           ) : (
-            <>
+            <div className="paper-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
               {previewScenes.map((s) => (
                 <div key={s.sceneNum} style={{
-                  fontSize: 12.5,
-                  color: 'var(--ink-1)',
                   lineHeight: 1.4,
                   paddingLeft: 8,
                   borderLeft: '2px solid var(--accent)',
+                  marginBottom: 6,
                 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--ink-0)' }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-0)' }}>
                     {s.title || `场 ${s.sceneNum}`}
-                  </span>
+                  </div>
                   {s.content && (
-                    <span style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 11 }}>
-                      {s.content.slice(0, 40)}
-                      {s.content.length > 40 ? '…' : ''}
-                    </span>
+                    <div style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 1 }}>
+                      <MarkdownRenderer source={s.content} />
+                    </div>
                   )}
                 </div>
               ))}
@@ -196,7 +205,7 @@ export function ScriptNode({
                   +{el.scenes.length - PREVIEW_SCENE_COUNT} 更多场次
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </Html>

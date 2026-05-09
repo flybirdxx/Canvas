@@ -14,6 +14,8 @@ import { TopBar } from './components/chrome/TopBar';
 import { ToolDock } from './components/chrome/ToolDock';
 import { FloatingActions } from './components/FloatingActions';
 import { useCanvasStore } from './store/useCanvasStore';
+import { SceneDetailOverlay } from './components/canvas/SceneDetailOverlay';
+import type { SceneElement } from './types/canvas';
 import { runExecution } from './services/executionEngine';
 import { RunPanel } from './components/RunPanel';
 import { ToastContainer } from './components/Toast';
@@ -51,6 +53,8 @@ function AppStoryboardViewLazy({ onCreateScript }: { onCreateScript: () => void 
  *   z=60 modals (Settings, Templates)
  */
 export default function App() {
+  const elements = useCanvasStore(s => s.elements);
+  const selectedIds = useCanvasStore(s => s.selectedIds);
   const activeTool = useCanvasStore(s => s.activeTool);
   const setActiveTool = useCanvasStore(s => s.setActiveTool);
   const stageConfig = useCanvasStore(s => s.stageConfig);
@@ -58,6 +62,15 @@ export default function App() {
   const setSelection = useCanvasStore(s => s.setSelection);
   const viewMode = useCanvasStore(s => s.viewMode);
   const setViewMode = useCanvasStore(s => s.setViewMode);
+
+  const selectedSceneId =
+    selectedIds.length === 1 &&
+    elements.find(e => e.id === selectedIds[0])?.type === 'scene'
+      ? selectedIds[0]
+      : null;
+  const selectedScene = selectedSceneId
+    ? elements.find(e => e.id === selectedSceneId) as SceneElement | undefined
+    : undefined;
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -256,6 +269,14 @@ export default function App() {
             {activeTool}
           </span>
         </div>
+      )}
+
+      {/* SceneDetailOverlay — 画布模式下选中分镜节点时的编辑面板 */}
+      {viewMode === 'canvas' && selectedScene && (
+        <SceneDetailOverlay
+          scene={selectedScene}
+          onClose={() => setSelection([])}
+        />
       )}
 
       {/* Modals (z=60) */}
