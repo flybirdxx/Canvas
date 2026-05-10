@@ -7,6 +7,7 @@
 import React from 'react';
 import { NodeNoteIndicator } from '@/components/NodeNoteIndicator';
 import type { CanvasElement } from '@/types/canvas';
+import { getDragOffset } from '../dragOffsets';
 
 interface NodeNoteOverlayProps {
   elements: CanvasElement[];
@@ -26,8 +27,11 @@ export function NodeNoteOverlay({ elements, selectedIds, stageConfig }: NodeNote
   return (
     <div className="absolute inset-0 pointer-events-none">
       {visible.map(el => {
-        const canvasRightX = el.x + el.width;
-        const canvasTopY = el.y - 28;
+        const offset = getDragOffset(el.id);
+        const ddx = offset ? offset.dx : 0;
+        const ddy = offset ? offset.dy : 0;
+        const canvasRightX = el.x + el.width + ddx;
+        const canvasTopY = el.y + ddy - 28;
         const screenX = stageConfig.x + canvasRightX * stageConfig.scale;
         const screenY = stageConfig.y + canvasTopY * stageConfig.scale;
         return (

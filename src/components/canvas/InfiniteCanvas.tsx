@@ -86,7 +86,7 @@ export function InfiniteCanvas() {
   const { handleWheel, startPan, updatePan, endPan, isPanningRef } = useCanvasPanZoom();
   const { selectionBox, marquee, setMarquee, startSelectionBox, updateSelectionBox, endSelectionBox, startMarquee, updateMarquee, endMarquee, clearSelectionBox } = useCanvasSelection(isShiftRef);
   const { quickAddMenu, setQuickAddMenu, findPortUnderMouse, handleQuickAdd, handleQuickAddUpload } = useCanvasConnections();
-  const { guideLines, snapCallbacks, dragDeltasRef } = useSnapCallbacks(isAltRef);
+  const { guideLines, snapCallbacks } = useSnapCallbacks(isAltRef);
   const { handleDrop } = useCanvasDrop(containerRef);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -298,7 +298,6 @@ export function InfiniteCanvas() {
           elements={elements}
           selectedIds={selectedIds}
           stageConfig={stageConfig}
-          dragDeltas={dragDeltasRef.current}
         />
       )}
       {inpaintMask && (

@@ -3,25 +3,15 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { syncAllScripts } from '@/services/storyboardSync';
 
 export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObject<boolean>) {
-  const { elements, addElement, deleteElements } = useCanvasStore();
+  const { elements, addElement, deleteElements, updateElement } = useCanvasStore();
   
   const dragOrResizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushSyncAfterDragRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    if (isDraggingOrResizingRef.current) {
-      flushSyncAfterDragRef.current = () => {
-        const diff = syncAllScripts(elements);
-        if (diff.idsToDelete.length > 0) {
-          deleteElements(diff.idsToDelete);
-        }
-        for (const scene of diff.scenesToAdd) {
-          addElement(scene);
-        }
-      };
-      return;
-    }
+  // CR-5: skip diff when elements reference hasn't changed (no-op re-renders)
+  const prevElementsRef = useRef<typeof elements>(elements);
 
+  const applyDiff = () => {
     const diff = syncAllScripts(elements);
     if (diff.idsToDelete.length > 0) {
       deleteElements(diff.idsToDelete);
@@ -29,7 +19,27 @@ export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObjec
     for (const scene of diff.scenesToAdd) {
       addElement(scene);
     }
-  }, [elements, deleteElements, addElement, isDraggingOrResizingRef]);
+    // CR-3: update existing scene content when script changed
+    for (const update of diff.scenesToUpdate) {
+      updateElement(update.id, {
+        title: update.title,
+        content: update.content,
+        lines: update.lines,
+      });
+    }
+  };
+
+  useEffect(() => {
+    // CR-5: skip when elements haven't changed — avoids full diff on unrelated state changes
+    if (prevElementsRef.current === elements) return;
+    prevElementsRef.current = elements;
+
+    if (isDraggingOrResizingRef.current) {
+      flushSyncAfterDragRef.current = applyDiff;
+      return;
+    }
+    applyDiff();
+  }, [elements, deleteElements, addElement, updateElement, isDraggingOrResizingRef]);
 
   const flushSync = () => {
     if (flushSyncAfterDragRef.current) {

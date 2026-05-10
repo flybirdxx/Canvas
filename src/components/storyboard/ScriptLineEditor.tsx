@@ -30,6 +30,7 @@ export function ScriptLineEditor({
   const [showEmotionPicker, setShowEmotionPicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const roleInputRef = useRef<HTMLInputElement>(null);
+  const emotionBtnRef = useRef<HTMLButtonElement>(null);
 
   // Close pickers on outside click
   useEffect(() => {
@@ -84,6 +85,7 @@ export function ScriptLineEditor({
 
         {/* 情绪 Emoji */}
         <button
+          ref={emotionBtnRef}
           className="sl-picker"
           onClick={() => setShowEmotionPicker(v => !v)}
           title={line.emotion || '选择情绪'}
@@ -101,13 +103,15 @@ export function ScriptLineEditor({
           {line.emotionEmoji || '🎭'}
         </button>
 
-        {/* 情绪选择器弹出 */}
-        {showEmotionPicker && (
+        {/* CR-8: emotion picker positioned relative to its trigger button */}
+        {showEmotionPicker && emotionBtnRef.current && (
           <div
             className="sl-picker"
             style={{
-              position: 'absolute',
+              position: 'fixed',
               zIndex: 50,
+              top: emotionBtnRef.current.getBoundingClientRect().bottom + 4,
+              left: emotionBtnRef.current.getBoundingClientRect().left - 4,
               background: 'var(--bg-1)',
               border: '1px solid var(--line-2)',
               borderRadius: 'var(--r-sm)',
@@ -116,8 +120,6 @@ export function ScriptLineEditor({
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
               gap: 3,
-              marginTop: 180,
-              marginLeft: -4,
             }}
           >
             <button

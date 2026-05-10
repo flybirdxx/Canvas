@@ -72,7 +72,8 @@ describe('parseSceneLines', () => {
     expect(result).toHaveLength(1);
     expect(result[0].role).toBe('');
     expect(result[0].content).toBe('这是一段普通的叙述文字');
-    expect(result[0].lineType).toBe('dialogue');
+    // CR-9: unrecognised lines are now 'action', not 'dialogue'
+    expect(result[0].lineType).toBe('action');
   });
 });
 
@@ -117,7 +118,7 @@ describe('parseScriptMarkdown', () => {
     expect(result[0].lines![2].emotion).toBe('恐惧');
   });
 
-  it('should ignore non-matching headings', () => {
+  it('should preserve preamble text before the first scene anchor', () => {
     const markdown = `
 # 标题
 ## 场景一
@@ -130,7 +131,8 @@ describe('parseScriptMarkdown', () => {
     expect(result).toHaveLength(1);
     expect(result[0].sceneNum).toBe(3);
     expect(result[0].title).toBe('结局');
-    expect(result[0].content).toBe('结束。');
+    // CR-2: preamble text (# 标题, ## 场景一) is now preserved in first scene
+    expect(result[0].content).toBe('# 标题\n## 场景一\n结束。');
   });
 
   it('should return empty array for empty input', () => {

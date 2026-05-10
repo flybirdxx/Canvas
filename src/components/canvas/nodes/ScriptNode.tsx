@@ -3,6 +3,7 @@ import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { parseScriptMarkdown } from '@/utils/parseScript';
+import { Trash2 } from 'lucide-react';
 import type { ScriptElement } from '@/types/canvas';
 import { POLAROID_STYLE, useExecutionBorder } from './shared';
 import { MarkdownRenderer } from './sceneNodeRenderer';
@@ -24,25 +25,30 @@ export function ScriptNode({
   
   const executionBorder = useExecutionBorder(el.id);
   const updateElement = useCanvasStore(s => s.updateElement);
+  const deleteElements = useCanvasStore(s => s.deleteElements);
+  const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     isEditingRef.current = editing;
   }, [editing]);
 
+  // CR-7: merged auto-edit + draft-sync into a single effect with clear precedence.
   useEffect(() => {
+    // Priority 1: auto-edit for newly created nodes
     if (el.isNew && !didAutoEdit.current) {
       didAutoEdit.current = true;
       setDraft(el.markdown || '');
       setEditing(true);
       updateElement(el.id, { isNew: undefined });
+      return;
     }
-  }, [el.id, el.isNew, el.markdown, updateElement]);
-
-  useEffect(() => {
+    // Priority 2: sync draft from store when the user is not editing
     if (!isEditingRef.current && el.markdown !== draft) {
       setDraft(el.markdown || '');
     }
-  }, [el.id, el.markdown, draft]);
+  // draft is intentionally excluded — we only sync when markdown changes externally.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [el.id, el.markdown, el.isNew]);
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -71,9 +77,15 @@ export function ScriptNode({
     e.stopPropagation();
   }
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteElements([el.id]);
+  };
+
   const PREVIEW_SCENE_COUNT = 3;
   const previewScenes = el.scenes.slice(0, PREVIEW_SCENE_COUNT);
   const hasMore = el.scenes.length > PREVIEW_SCENE_COUNT;
+  const showDelete = (isSelected || hovered) && !editing;
 
   if (editing) {
     return (
@@ -134,6 +146,8 @@ export function ScriptNode({
         setDraft(el.markdown || '');
         setEditing(true);
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <Rect width={width} height={height} fill="transparent" />
       <Rect
@@ -155,6 +169,7 @@ export function ScriptNode({
             flexDirection: 'column',
             gap: 6,
             overflow: 'hidden',
+            pointerEvents: 'auto',
           }}
         >
           <div style={{
@@ -209,6 +224,36 @@ export function ScriptNode({
           )}
         </div>
       </Html>
+
+      {/* Delete button — visible on hover or selection (FIX: divProps pointerEvents:none 防止 Konva 拦截事件) */}
+      {showDelete && (
+        <Html divProps={{ style: { pointerEvents: 'none' } }}>
+          <div
+            onClick={handleDelete}
+            title="删除剧本节点 (Delete)"
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 22,
+              height: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--bg-3)',
+              border: '1px solid var(--line-1)',
+              borderRadius: 'var(--r-xs)',
+              cursor: 'pointer',
+              color: 'var(--danger)',
+              pointerEvents: 'auto',
+              userSelect: 'none',
+              zIndex: 10,
+            }}
+          >
+            <Trash2 size={11} strokeWidth={1.6} />
+          </div>
+        </Html>
+      )}
     </Group>
   );
 }

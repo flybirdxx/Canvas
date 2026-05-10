@@ -189,14 +189,15 @@ export function parseSceneLines(content: string): ScriptLine[] {
       continue;
     }
 
-    // Fallback: treat as plain text (narration)
+    // CR-9: unrecognised lines are plain narration, not dialogue.
+    // Labelling them 'dialogue' inflated the dialogue count in the analysis tab.
     result.push({
       id: uuidv4(),
       role: '',
       content: line,
       emotion: undefined,
       emotionEmoji: undefined,
-      lineType: 'dialogue',
+      lineType: 'action',
       timestamp: undefined,
     });
   }
@@ -210,6 +211,8 @@ export function parseScriptMarkdown(text: string): ParsedScene[] {
   const rawLines = text.split('\n');
   const scenes: ParsedScene[] = [];
   let current: ParsedScene | null = null;
+  /** CR-2: collect lines before the first scene anchor so they aren't silently dropped. */
+  let preambleLines: string[] = [];
 
   for (const raw of rawLines) {
     const line = raw.trimEnd();
@@ -217,7 +220,6 @@ export function parseScriptMarkdown(text: string): ParsedScene[] {
 
     if (match) {
       if (current) {
-        // 解析结构化行
         current.lines = parseSceneLines(current.content);
         scenes.push(current);
       }
@@ -229,12 +231,30 @@ export function parseScriptMarkdown(text: string): ParsedScene[] {
         current.content += '\n';
       }
       current.content += line;
+    } else {
+      // CR-2: save lines before the first anchor as preamble
+      if (line.trim()) {
+        preambleLines.push(line);
+      }
     }
   }
 
   if (current) {
+    // CR-2: prepend preamble to the first scene's content
+    if (scenes.length === 0 && preambleLines.length > 0) {
+      current.content = preambleLines.join('\n') + (current.content ? '\n' + current.content : '');
+    }
     current.lines = parseSceneLines(current.content);
     scenes.push(current);
+  } else if (preambleLines.length > 0) {
+    // CR-2: no scene anchors at all — treat entire text as a single scene
+    const content = preambleLines.join('\n');
+    scenes.push({
+      sceneNum: 1,
+      title: '',
+      content,
+      lines: parseSceneLines(content),
+    });
   }
 
   return scenes;

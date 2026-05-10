@@ -76,7 +76,7 @@ export const useCanvasStore = create<CanvasState>()(
     }),
     {
       name: 'ai-canvas-document',
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => createThrottledLocalStorage(300)),
       partialize: (state) => ({
         elements: state.elements,
@@ -153,6 +153,41 @@ export const useCanvasStore = create<CanvasState>()(
           if (!Array.isArray(persistedState.groups)) {
             persistedState.groups = [];
           }
+        }
+        // v9 -> v10: E7 Scene/Script port initialization
+        // Add Prompt input + Image/Text outputs to existing scene nodes,
+        // and a '剧本' text output to existing script nodes.
+        if (version < 10 && persistedState && Array.isArray(persistedState.elements)) {
+          const hasTextInput = (ports: any[]) =>
+            Array.isArray(ports) && ports.some((p: any) => p && p.type === 'text');
+          const hasImageOutput = (ports: any[]) =>
+            Array.isArray(ports) && ports.some((p: any) => p && p.type === 'image');
+          const hasTextOutput = (ports: any[]) =>
+            Array.isArray(ports) && ports.some((p: any) => p && p.type === 'text');
+          persistedState.elements = persistedState.elements.map((el: any) => {
+            if (!el || typeof el.id !== 'string') return el;
+            if (el.type === 'scene') {
+              if (!hasTextInput(el.inputs)) {
+                el.inputs = el.inputs ?? [];
+                el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+              }
+              if (!hasImageOutput(el.outputs)) {
+                el.outputs = el.outputs ?? [];
+                el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+              }
+              if (!hasTextOutput(el.outputs)) {
+                el.outputs = el.outputs ?? [];
+                el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
+              }
+            }
+            if (el.type === 'script') {
+              if (!hasTextOutput(el.outputs)) {
+                el.outputs = el.outputs ?? [];
+                el.outputs.push({ id: uuidv4(), type: 'text', label: '剧本' });
+              }
+            }
+            return el;
+          });
         }
         return persistedState;
       },

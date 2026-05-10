@@ -81,6 +81,17 @@ export function SceneDetailOverlay({ scene, scriptTitle, onClose }: SceneDetailO
 
   // Auto-save on any change
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // CR-4: clear pending save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const save = useCallback((newLines: ScriptLine[], newTitle: string, newAnalysisNote: string) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {

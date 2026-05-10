@@ -1,4 +1,5 @@
 import type { CanvasElement, Connection } from '@/types/canvas';
+import { composeScenePrompt } from '@/services/scenePromptComposer';
 
 /**
  * A single upstream contribution feeding into a target node via a connection.
@@ -17,16 +18,33 @@ export interface UpstreamTextContribution {
 }
 
 /**
+ * Merge all child scene texts from a script element, sorted by sceneNum.
+ */
+function getScriptText(script: any, elements: CanvasElement[]): string {
+  const childScenes = elements
+    .filter((e): e is any => e.type === 'scene' && e.scriptId === script.id)
+    .sort((a, b) => (a.sceneNum ?? 0) - (b.sceneNum ?? 0));
+  const parts: string[] = [];
+  for (const scene of childScenes) {
+    const sceneText = composeScenePrompt(scene);
+    if (sceneText) parts.push(sceneText);
+  }
+  return parts.join('\n\n');
+}
+
+/**
  * Pull the textual content a given element carries for downstream consumers.
  * Rules:
  *  - text / sticky node → its `text` field
  *  - image / video / audio / generating node → its user-authored `prompt`
+ *  - scene → its structured lines composed into a prompt
+ *  - script → aggregated text of all child scenes (sorted by sceneNum)
  *  - shapes → empty (no semantic content)
  *
  * Returning `''` (rather than `undefined`) keeps callers simple — an empty
  * contribution is dropped silently.
  */
-function getOutgoingText(el: CanvasElement): string {
+function getOutgoingText(el: CanvasElement, elements: CanvasElement[]): string {
   switch (el.type) {
     case 'text':
     case 'sticky':
@@ -36,6 +54,12 @@ function getOutgoingText(el: CanvasElement): string {
     case 'audio':
     case 'aigenerating':
       return ((el as any).prompt ?? '').trim();
+    // E7 Story 4: scene as a text source — compose its structured lines into a prompt
+    case 'scene':
+      return composeScenePrompt(el as any);
+    // E7 Epic 6: script as aggregated text source — merge all child scene prompts
+    case 'script':
+      return getScriptText(el as any, elements);
     default:
       return '';
   }
@@ -68,13 +92,15 @@ export function getUpstreamTextContributions(
 
     const src = elementsById.get(c.fromId);
     if (!src) continue;
-    const content = getOutgoingText(src);
+    const content = getOutgoingText(src, elements);
     if (!content) continue;
 
     const firstLine = content.split(/\r?\n/).find(l => l.trim().length > 0) ?? content;
     const typeLabel =
       src.type === 'text' ? '文本'
       : src.type === 'sticky' ? '便签'
+      : src.type === 'scene' ? '分镜'
+      : src.type === 'script' ? '剧本'
       : src.type === 'image' ? '图像提示'
       : src.type === 'video' ? '视频提示'
       : src.type === 'audio' ? '音频提示'
@@ -163,6 +189,14 @@ export function getUpstreamImageContributions(
       const name = String((src as any).name || '').trim();
       const preview = name.length > 20 ? `${name.slice(0, 20)}…` : name;
       label = preview ? `图像 · ${preview}` : '图像';
+    // E7 Story 4: scene as an image source — follow its linkedImageId
+    } else if (src.type === 'scene') {
+      const linkedId = (src as any).linkedImageId;
+      if (!linkedId) continue;
+      const linked = elementsById.get(linkedId) as any;
+      if (!linked || !linked.src) continue;
+      url = linked.src;
+      label = `分镜${(src as any).sceneNum} · ${(src as any).title || '未命名'}`;
     } else {
       continue;
     }

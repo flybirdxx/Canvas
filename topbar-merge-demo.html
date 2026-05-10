@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TopBar 合并方案 Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #f5f0e8;
+    --bg-1: #faf7f2;
+    --bg-2: #ede7da;
+    --bg-3: #e2dbcf;
+    --ink-0: #1a1714;
+    --ink-1: #4a4235;
+    --ink-2: #8a7d6b;
+    --ink-3: #b5a99a;
+    --accent: #c45c3a;
+    --accent-fg: #faf7f2;
+    --line-1: #d4c9b8;
+    --grid-dot: rgba(74, 66, 53, 0.12);
+    --shadow-ink-1: 0 1px 3px rgba(26,23,20,0.08), 0 1px 2px rgba(26,23,20,0.06);
+    --shadow-ink-2: 0 4px 12px rgba(26,23,20,0.12), 0 2px 4px rgba(26,23,20,0.08);
+    --font-serif: 'Noto Serif SC', Georgia, serif;
+    --font-sans: 'Noto Sans SC', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --r-pill: 999px;
+    --r-sm: 6px;
+    --r-xs: 4px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-0);
+    color: var(--ink-0);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-family: var(--font-serif);
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--ink-2);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .demo-card {
+    background: var(--bg-1);
+    border: 1px solid var(--line-1);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-ink-1);
+  }
+
+  .demo-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line-1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-2);
+  }
+  .demo-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-0);
+  }
+  .demo-tag {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: var(--bg-3);
+    color: var(--ink-1);
+    font-weight: 500;
+  }
+  .demo-tag.recommended {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .demo-viewport {
+    position: relative;
+    height: 200px;
+    background: var(--bg-1);
+    overflow: hidden;
+    border-bottom: 1px solid var(--line-1);
+  }
+
+  .demo-content {
+    padding: 20px;
+    font-size: 13px;
+    color: var(--ink-1);
+    line-height: 1.7;
+  }
+  .demo-content strong {
+    color: var(--ink-0);
+    font-weight: 600;
+  }
+  .demo-content .pros { color: #3a8c5c; font-weight: 500; }
+  .demo-content .cons { color: #c45c3a; font-weight: 500; }
+
+  /* ── Baseline (current) ── */
+  .baseline-topbar {
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 28;
+  }
+  .baseline-execbar {
+    position: absolute;
+    top: 58px;
+    left: 0;
+    right: 0;
+    z-index: 29;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 24px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--line-1);
+    border-bottom: 1px solid var(--line-1);
+  }
+  .baseline-grid {
+    position: absolute;
+    top: 104px;
+    left: 40px;
+    right: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .baseline-card {
+    height: 80px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-sm);
+  }
+  .baseline-content {
+    position: absolute;
+    top: 110px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  /* ── Proposal 1 ── */
+  .prop1-bar {
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 28;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: 99px;
+    padding: 4px 8px;
+    box-shadow: var(--shadow-ink-1);
+  }
+  .prop1-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--line-1);
+    margin: 0 4px;
+  }
+  .prop1-grid {
+    position: absolute;
+    top: 80px;
+    left: 40px;
+    right: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .prop1-content {
+    position: absolute;
+    top: 86px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  /* ── Proposal 2 ── */
+  .prop2-topbar {
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 28;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: 99px;
+    padding: 4px 8px;
+    box-shadow: var(--shadow-ink-1);
+  }
+  .prop2-execbar {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    z-index: 29;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 24px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--line-1);
+    border-bottom: 1px solid var(--line-1);
+  }
+  .prop2-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--ink-1);
+  }
+  .prop2-progress-track {
+    width: 80px;
+    height: 3px;
+    background: var(--line-1);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .prop2-progress-fill {
+    width: 40%;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .prop2-grid {
+    position: absolute;
+    top: 88px;
+    left: 40px;
+    right: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .prop2-content {
+    position: absolute;
+    top: 94px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  /* ── Shared components ── */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition: all 150ms ease;
+    white-space: nowrap;
+  }
+  .chip-accent {
+    background: var(--accent);
+    color: var(--accent-fg);
+    box-shadow: var(--shadow-ink-1);
+  }
+  .chip-ghost {
+    background: transparent;
+    color: var(--ink-1);
+  }
+  .chip-ghost.active {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .chip-outline {
+    background: transparent;
+    border: 1px solid var(--line-1);
+    color: var(--ink-2);
+  }
+  .chip-surface {
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    color: var(--ink-0);
+    box-shadow: var(--shadow-ink-1);
+  }
+  .chip-surface:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .pill-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: 99px;
+    box-shadow: var(--shadow-ink-1);
+  }
+  .pill-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 150ms ease;
+    background: transparent;
+    color: var(--ink-2);
+  }
+  .pill-btn.active {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .logo-mark {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ink-0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo-mark::after {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-fg);
+  }
+
+  .scene-card {
+    height: 80px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-sm);
+    position: relative;
+  }
+  .scene-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .scene-title {
+    position: absolute;
+    top: 10px;
+    left: 38px;
+    font-family: var(--font-serif);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-0);
+  }
+  .scene-desc {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--bg-3);
+    border-radius: 99px;
+    font-size: 11px;
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+
+  /* Full-width layout section */
+  .full-section {
+    max-width: 1400px;
+    margin: 24px auto 0;
+  }
+  .full-section h2 {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .full-width-card {
+    background: var(--bg-1);
+    border: 1px solid var(--line-1);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-ink-1);
+  }
+  .full-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line-1);
+    background: var(--bg-2);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-0);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .full-viewport {
+    position: relative;
+    height: 180px;
+    background: var(--bg-1);
+    overflow: hidden;
+  }
+  .full-content {
+    padding: 20px;
+    font-size: 13px;
+    color: var(--ink-1);
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+
+<h1>TopBar + StoryboardExecuteBar 合并方案</h1>
+<p class="subtitle">基于当前 Warm Paper Studio 设计语言的视觉 Demo</p>
+
+<div class="demo-grid">
+
+  <!-- ══════════════════════════════ BASELINE ══════════════════════════════ -->
+  <div class="demo-card">
+    <div class="demo-header">
+      <span class="demo-title">当前状态（Baseline）</span>
+      <span class="demo-tag">现状</span>
+    </div>
+    <div class="demo-viewport" style="background: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px); background-color: var(--bg-1);">
+      <!-- TopBar -->
+      <div class="baseline-topbar">
+        <button class="chip chip-surface" style="padding: 5px 12px; gap:4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          返回
+        </button>
+        <div class="pill-group">
+          <button class="pill-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            画布
+          </button>
+          <button class="pill-btn active">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            分镜
+          </button>
+        </div>
+        <button class="chip chip-ghost" style="padding: 5px 8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+
+      <!-- StoryboardExecuteBar -->
+      <div class="baseline-execbar">
+        <span style="font-family: var(--font-serif); font-size: 13px; font-weight: 600; color: var(--ink-0);">分镜执行</span>
+        <div style="width: 1px; height: 18px; background: var(--line-1);"></div>
+        <button class="chip chip-accent" style="padding: 5px 12px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          生成全部 <span style="opacity:0.8; font-size:11px;">(3)</span>
+        </button>
+        <button class="chip chip-outline" style="padding: 5px 12px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor"/></svg>
+          生成选中 <span style="opacity:0.8; font-size:11px;">(1)</span>
+        </button>
+        <div style="flex:1;"></div>
+        <button class="chip chip-outline" style="padding: 5px 10px; font-size: 11px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          查看画布
+        </button>
+      </div>
+
+      <!-- Grid cards -->
+      <div class="baseline-content">
+        <div class="baseline-grid">
+          <div class="scene-card" style="border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-2));">
+            <div class="scene-badge">1</div>
+            <div class="scene-title">咖啡馆相遇</div>
+            <div class="scene-desc">男主在咖啡馆独自写作...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">2</div>
+            <div class="scene-title">初次交谈</div>
+            <div class="scene-desc">女主走近询问...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">3</div>
+            <div class="scene-title">交换联系方式</div>
+            <div class="scene-desc">分别时互相留下...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-content">
+      <strong>问题：</strong>两行固定工具栏，<strong class="cons">占用顶部 100px+ 空间</strong>，信息密度低，TopBar 只显示一个"返回"按钮极为浪费。
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ PROPOSAL 1 ══════════════════════════════ -->
+  <div class="demo-card">
+    <div class="demo-header">
+      <span class="demo-title">方案一：单行统一工具栏</span>
+      <span class="demo-tag recommended">推荐</span>
+    </div>
+    <div class="demo-viewport" style="background: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px); background-color: var(--bg-1);">
+      <!-- Unified single bar -->
+      <div class="prop1-bar">
+        <!-- Logo + project -->
+        <div style="display:flex; align-items:center; gap:8px; margin-right:4px;">
+          <div class="logo-mark"></div>
+          <span style="font-size:13px; font-weight:500; color:var(--ink-0);">Untitled</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.6"><path d="M8 12h8M12 8l4 4-4 4"/></svg>
+        </div>
+
+        <div class="prop1-divider"></div>
+
+        <!-- View switcher (pill) -->
+        <div class="pill-group">
+          <button class="pill-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            画布
+          </button>
+          <button class="pill-btn active">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            分镜
+          </button>
+        </div>
+
+        <div class="prop1-divider"></div>
+
+        <!-- Scene info -->
+        <span class="info-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          3 个场景
+        </span>
+
+        <div style="flex:1;"></div>
+
+        <!-- Execution actions -->
+        <button class="chip chip-accent" style="padding: 5px 12px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          生成全部
+        </button>
+        <button class="chip chip-outline" style="padding: 5px 10px; font-size: 11px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          查看画布
+        </button>
+
+        <div class="prop1-divider"></div>
+
+        <!-- Settings -->
+        <button class="chip chip-ghost" style="padding: 5px 7px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+
+      <!-- Grid cards -->
+      <div class="prop1-content">
+        <div class="prop1-grid">
+          <div class="scene-card" style="border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-2));">
+            <div class="scene-badge">1</div>
+            <div class="scene-title">咖啡馆相遇</div>
+            <div class="scene-desc">男主在咖啡馆独自写作...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">2</div>
+            <div class="scene-title">初次交谈</div>
+            <div class="scene-desc">女主走近询问...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">3</div>
+            <div class="scene-title">交换联系方式</div>
+            <div class="scene-desc">分别时互相留下...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-content">
+      <strong>合并 StoryboardExecuteBar 到 TopBar，单行解决一切。</strong><br>
+      <span class="pros">✓ 节省 ~44px 空间</span> &nbsp;
+      <span class="pros">✓ 操作路径最短</span> &nbsp;
+      <span class="pros">✓ 视觉更紧凑</span><br>
+      <span class="cons">⚠ 分镜模式下工具栏按钮较多（但可精简）</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ PROPOSAL 2 ══════════════════════════════ -->
+  <div class="demo-card">
+    <div class="demo-header">
+      <span class="demo-header">
+        <span class="demo-title">方案二：双行紧凑化</span>
+      </span>
+      <span class="demo-tag">备选</span>
+    </div>
+    <div class="demo-viewport" style="background: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px); background-color: var(--bg-1);">
+      <!-- TopBar (richer in storyboard mode) -->
+      <div class="prop2-topbar">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="chip chip-surface" style="padding: 4px 10px; gap:4px; font-size: 11px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            返回
+          </button>
+        </div>
+        <div class="pill-group">
+          <button class="pill-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            画布
+          </button>
+          <button class="pill-btn active">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            分镜
+          </button>
+        </div>
+        <span class="info-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          脚本: 无标题剧本
+        </span>
+        <div style="flex:1;"></div>
+        <button class="chip chip-ghost" style="padding: 4px 7px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+
+      <!-- Compact exec bar -->
+      <div class="prop2-execbar">
+        <span style="font-size: 11px; color: var(--ink-2); font-weight: 500;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" style="vertical-align:-1px;"><polyline points="20 6 9 17 4 12"/></svg>
+          已选 1/3
+        </span>
+        <div style="width: 1px; height: 14px; background: var(--line-1);"></div>
+        <button class="chip chip-accent" style="padding: 4px 10px; font-size: 11px; gap: 4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          生成全部
+        </button>
+        <button class="chip chip-outline" style="padding: 4px 10px; font-size: 11px; gap: 4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor"/></svg>
+          生成选中
+        </button>
+        <div style="flex:1;"></div>
+
+        <!-- Running progress -->
+        <div class="prop2-progress">
+          <div class="prop2-progress-track">
+            <div class="prop2-progress-fill"></div>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 10px;">2/5</span>
+          <span style="font-size: 10px; color: var(--ink-3);">→ 场 3</span>
+        </div>
+
+        <button class="chip chip-outline" style="padding: 4px 8px; font-size: 11px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          查看画布
+        </button>
+      </div>
+
+      <!-- Grid cards -->
+      <div class="prop2-content">
+        <div class="prop2-grid">
+          <div class="scene-card" style="border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-2));">
+            <div class="scene-badge">1</div>
+            <div class="scene-title">咖啡馆相遇</div>
+            <div class="scene-desc">男主在咖啡馆独自写作...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">2</div>
+            <div class="scene-title">初次交谈</div>
+            <div class="scene-desc">女主走近询问...</div>
+          </div>
+          <div class="scene-card">
+            <div class="scene-badge">3</div>
+            <div class="scene-title">交换联系方式</div>
+            <div class="scene-desc">分别时互相留下...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-content">
+      <strong>两行但更紧凑：TopBar 显示更多信息，执行栏更矮更精致。</strong><br>
+      <span class="pros">✓ 保留执行栏独立感</span> &nbsp;
+      <span class="pros">✓ 显示当前脚本名</span> &nbsp;
+      <span class="pros">✓ 执行状态更明显</span><br>
+      <span class="cons">⚠ 仍占用两行空间</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Full-width execution states -->
+<div class="full-section">
+  <h2>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    方案一执行状态变化
+  </h2>
+
+  <div class="full-width-card">
+    <div class="full-header">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      执行中状态（方案一单行 Bar）
+    </div>
+    <div class="full-viewport" style="background: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, var(--line-1) 19px, var(--line-1) 20px); background-color: var(--bg-1);">
+      <div class="prop1-bar">
+        <div style="display:flex; align-items:center; gap:8px; margin-right:4px;">
+          <div class="logo-mark"></div>
+          <span style="font-size:13px; font-weight:500; color:var(--ink-0);">Untitled</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.6"><path d="M8 12h8M12 8l4 4-4 4"/></svg>
+        </div>
+        <div class="prop1-divider"></div>
+        <div class="pill-group">
+          <button class="pill-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            画布
+          </button>
+          <button class="pill-btn active">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            分镜
+          </button>
+        </div>
+        <div class="prop1-divider"></div>
+        <span class="info-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          3 个场景
+        </span>
+        <div style="flex:1;"></div>
+
+        <!-- Progress indicator inline -->
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-1);">
+          <div style="width: 100px; height: 4px; background: var(--line-1); border-radius: 2px; overflow: hidden;">
+            <div style="width: 66%; height: 100%; background: var(--accent); border-radius: 2px; transition: width 300ms ease;"></div>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px;">2/3</span>
+          <span style="font-size: 11px; color: var(--ink-2);">→ 场 3</span>
+        </div>
+
+        <button class="chip chip-outline" style="padding: 5px 10px; font-size: 11px; opacity: 0.5;" disabled>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          查看画布
+        </button>
+
+        <div class="prop1-divider"></div>
+        <button class="chip chip-ghost" style="padding: 5px 7px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="full-content">
+      执行时，进度条以内联形式融入单行 Bar，<strong>"生成全部"按钮变为禁用态</strong>，当前执行的场景号显示在右侧。
+      完成时进度条消失，Bar 恢复空闲状态。<br>
+      <br>
+      <strong>执行中的设计细节：</strong>进度条使用 <code style="background:var(--bg-3); padding: 1px 6px; border-radius: 4px; font-size:12px;">300ms ease</code> 过渡动画，"生成全部"按钮显示 <code style="background:var(--bg-3); padding: 1px 6px; border-radius: 4px; font-size:12px;">opacity: 0.5</code> 表示正在执行中。
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

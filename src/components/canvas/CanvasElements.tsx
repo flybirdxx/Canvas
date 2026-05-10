@@ -7,10 +7,11 @@ import type { CanvasElement, ScriptElement, SceneElement } from '@/types/canvas'
 import {
   ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
   AIGeneratingNode, FileNode, ScriptNode, SceneNode,
-  PortOverlay, SelectionHandles, SnapCallbacks
+  PortOverlay, SelectionHandles, SnapCallbacks, RunningPulse
 } from './nodes';
 import { INK_1 } from './nodes/shared';
 import { useStoryboardSync } from '@/hooks/canvas/useStoryboardSync';
+import { setDragOffset, clearDragOffset, setGroupDragOffsets, clearGroupDragOffsets } from './dragOffsets';
 
 
 export interface CanvasElementsProps {
@@ -99,6 +100,9 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               //   store 位置仅通过 onDragEnd 的 batchUpdatePositions 一次性同步
               snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
 
+              // 实时写入拖拽偏移量 → ConnectionLines 可读取以实时跟随
+              setDragOffset(id, dx, dy);
+
               const stage = e.target.getStage();
               if (stage) {
                 // FR1 编组节点：兄弟节点通过 Konva API 直接移动，不经过 store。
@@ -106,6 +110,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
                 // 防御：编组超过 50 个成员时不移动兄弟节点（防止误操作把全画布分组后
                 // 拖任意节点都带着全部元素跑）。
                 if (group && group.childIds.length <= 50) {
+                  const groupDeltas: { id: string; dx: number; dy: number }[] = [];
                   for (const sid of group.childIds) {
                     if (sid === id) continue;
                     const siblingNode = stage.findOne('#' + sid);
@@ -113,9 +118,12 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
                       const sibOrigin = dragStartPosRef.current[sid];
                       if (sibOrigin) {
                         siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
+                        groupDeltas.push({ id: sid, dx, dy });
                       }
                     }
                   }
+                  // 批量写入编组兄弟偏移量
+                  if (groupDeltas.length > 0) setGroupDragOffsets(groupDeltas);
                 }
               }
             }
@@ -131,9 +139,12 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               snapCallbacks.onDragEnd(id, finalX, finalY);
               // Clean up ref
               delete dragStartPosRef.current[id];
+              // 清除拖拽偏移量 — store 已更新，连线回退到纯 store 位置
+              clearDragOffset(id);
               // FR1: 清理编组兄弟节点在 dragStartPosRef 中的条目。
               const cleanupGroup = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
               if (cleanupGroup) {
+                clearGroupDragOffsets(cleanupGroup.childIds);
                 for (const sid of cleanupGroup.childIds) delete dragStartPosRef.current[sid];
               }
             }
@@ -199,6 +210,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
             <PortOverlay el={el} isSelected={isSelected} hoveredId={hoveredId} />
             {groupBorder}
             {nodeContent}
+            <RunningPulse el={el} />
           </Group>
         );
       })}

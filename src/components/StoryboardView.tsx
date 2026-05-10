@@ -6,6 +6,8 @@
  *   - 卡片「在画布中查看」按钮 — 跳转并定位
  *   - 图片拖拽到卡片建立显式素材关联（linkedImageId）
  *   - 缩略图优先使用 linkedImageId，其次邻近搜索
+ *   - E7 Story 7: Ctrl+点击多选，Shift+点击范围选择
+ *   - E7 Story 8: 执行控件已移至 TopBar（方案一单行合并）
  */
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -19,7 +21,7 @@ interface SceneCardProps {
   scriptTitle: string;
   thumbnailSrc?: string;
   groupColor?: string;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, e?: React.MouseEvent) => void;
   onViewOnCanvas: (scene: SceneElement) => void;
   onDragStart: (e: React.DragEvent, scene: SceneElement) => void;
   onDragOver: (e: React.DragEvent, sceneId: string) => void;
@@ -58,7 +60,7 @@ function SceneCard({
       onDragOver={e => { e.preventDefault(); onDragOver(e, scene.id); }}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onClick={() => onSelect(scene.id)}
+      onClick={(e) => onSelect(scene.id, e)}
       className="chip-paper"
       style={{
         padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px',
@@ -141,12 +143,10 @@ function SceneCard({
 /* ── Helpers ────────────────────────────────────────────────────────── */
 
 function findThumbnailForScene(scene: SceneElement, images: ImageElement[]): string | undefined {
-  // 1. Explicit link
   if (scene.linkedImageId) {
     const linked = images.find(img => img.id === scene.linkedImageId);
     if (linked?.src) return linked.src;
   }
-  // 2. Proximity fallback
   const nearby = images.filter(img => {
     if (!img.src) return false;
     return Math.abs(img.x - scene.x) + Math.abs(img.y - scene.y) <= 300;
@@ -156,12 +156,10 @@ function findThumbnailForScene(scene: SceneElement, images: ImageElement[]): str
   return nearby[0].src;
 }
 
-/** Compute stageConfig to center on a given element */
 function computeCenterOnNode(el: SceneElement, viewW: number, viewH: number) {
   const cx = el.x + el.width / 2;
   const cy = el.y + el.height / 2;
-  const scale = 1; // use current scale or default
-  return { x: viewW / 2 - cx * scale, y: viewH / 2 - cy * scale, scale };
+  return { x: viewW / 2 - cx, y: viewH / 2 - cy, scale: 1 };
 }
 
 /* ── Empty State ────────────────────────────────────────────────────── */
@@ -189,29 +187,45 @@ function EmptyState({ onCreateScript, onSwitchToCanvas }: { onCreateScript: () =
 interface StoryboardViewProps {
   onCreateScript: () => void;
   onSwitchToCanvas?: () => void;
+  /** Notify App of selected IDs so TopBar can show "生成选中" and call execute */
+  onSceneSelectionIdsChange: (ids: string[]) => void;
+  onExecuteAll: () => void;
+  onExecuteSelected: (sceneIds: string[]) => void;
+  /** Execution progress from useSceneExecution (for future inline indicators) */
+  executionProgress: { done: number; total: number; current: string | null; isRunning: boolean };
 }
 
-export function StoryboardView({ onCreateScript, onSwitchToCanvas }: StoryboardViewProps) {
+export function StoryboardView({
+  onCreateScript,
+  onSwitchToCanvas,
+  onSceneSelectionIdsChange,
+}: StoryboardViewProps) {
   const elements = useCanvasStore(s => s.elements);
-  const selectedIds = useCanvasStore(s => s.selectedIds);
   const setSelection = useCanvasStore(s => s.setSelection);
   const updateElement = useCanvasStore(s => s.updateElement);
   const setViewMode = useCanvasStore(s => s.setViewMode);
   const setStageConfig = useCanvasStore(s => s.setStageConfig);
 
+  // E7 Story 7: multi-select scene IDs (local state, separate from canvas store selectedIds)
+  const [sceneSelectedIds, setSceneSelectedIds] = useState<string[]>([]);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragItemRef = useRef<SceneElement | null>(null);
 
+  // Derived collections
   const scenes = elements.filter((el): el is SceneElement => el.type === 'scene');
   const scripts = elements.filter((el): el is ScriptElement => el.type === 'script');
   const images = elements.filter((el): el is ImageElement => el.type === 'image');
-
-  // Derive selected scene from store.selectedIds (single scene only)
   const sceneIds = new Set(scenes.map(s => s.id));
-  const sceneSelectedIds = selectedIds.filter(id => sceneIds.has(id));
+
+  // Single-selection for detail overlay
   const selectedSceneId = sceneSelectedIds.length === 1 ? sceneSelectedIds[0] : null;
   const selectedScene = selectedSceneId ? scenes.find(s => s.id === selectedSceneId) ?? null : null;
+
+  // Sync selection IDs to App (for TopBar "生成选中" and execute)
+  useEffect(() => {
+    onSceneSelectionIdsChange(sceneSelectedIds);
+  }, [sceneSelectedIds, onSceneSelectionIdsChange]);
 
   const getScriptTitle = useCallback((scriptId?: string) => {
     if (!scriptId) return '';
@@ -221,19 +235,38 @@ export function StoryboardView({ onCreateScript, onSwitchToCanvas }: StoryboardV
 
   const sortedScenes = [...scenes].sort((a, b) => a.sceneNum - b.sceneNum);
 
-  // ── Selection ──────────────────────────────────────────────────────
-  const handleSelect = useCallback((id: string) => {
-    // Toggle: if already the only selected, deselect; otherwise select exclusively
-    if (selectedSceneId === id) {
-      setSelection([]);
+  const handleSwitchToCanvas = useCallback(() => {
+    setViewMode('canvas');
+  }, [setViewMode]);
+
+  // ── Selection (E7 Story 7: multi-select) ────────────────────────────
+  const handleSelect = useCallback((id: string, e?: React.MouseEvent) => {
+    if (e?.ctrlKey || e?.metaKey) {
+      if (sceneSelectedIds.includes(id)) {
+        setSceneSelectedIds(sceneSelectedIds.filter(sid => sid !== id));
+      } else {
+        setSceneSelectedIds([...sceneSelectedIds, id]);
+      }
+    } else if (e?.shiftKey && sceneSelectedIds.length > 0) {
+      const sorted = [...scenes].sort((a, b) => a.sceneNum - b.sceneNum);
+      const lastId = sceneSelectedIds[sceneSelectedIds.length - 1];
+      const lastScene = scenes.find(s => s.id === lastId);
+      const currentScene = scenes.find(s => s.id === id);
+      if (lastScene && currentScene) {
+        const inRange = sorted.filter(
+          s => s.sceneNum >= Math.min(lastScene.sceneNum, currentScene.sceneNum) &&
+               s.sceneNum <= Math.max(lastScene.sceneNum, currentScene.sceneNum)
+        );
+        setSceneSelectedIds([...new Set([...sceneSelectedIds, ...inRange.map(s => s.id)])]);
+      }
     } else {
-      setSelection([id]);
+      setSceneSelectedIds([id]);
     }
-  }, [selectedSceneId, setSelection]);
+  }, [sceneSelectedIds, scenes]);
 
   const handleCloseOverlay = useCallback(() => {
-    setSelection([]);
-  }, [setSelection]);
+    setSceneSelectedIds([]);
+  }, []);
 
   // ── Drag reorder ───────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.DragEvent, scene: SceneElement) => {
@@ -270,9 +303,7 @@ export function StoryboardView({ onCreateScript, onSwitchToCanvas }: StoryboardV
   // ── View on canvas ─────────────────────────────────────────────────
   const handleViewOnCanvas = useCallback((scene: SceneElement) => {
     setSelection([scene.id]);
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const cfg = computeCenterOnNode(scene, vw, vh);
+    const cfg = computeCenterOnNode(scene, window.innerWidth, window.innerHeight);
     setStageConfig(cfg);
     setViewMode('canvas');
   }, [setSelection, setStageConfig, setViewMode]);
@@ -280,7 +311,6 @@ export function StoryboardView({ onCreateScript, onSwitchToCanvas }: StoryboardV
   // ── Image drop to link ─────────────────────────────────────────────
   const handleImageDropOnCard = useCallback((sceneId: string, e: React.DragEvent) => {
     e.preventDefault();
-    // Try to get image id from dataTransfer
     const imageId = e.dataTransfer.getData('text/plain');
     if (!imageId) return;
     const img = images.find(i => i.id === imageId);
@@ -288,26 +318,33 @@ export function StoryboardView({ onCreateScript, onSwitchToCanvas }: StoryboardV
     updateElement(sceneId, { linkedImageId: imageId });
   }, [images, updateElement]);
 
-  // ── Escape key ─────────────────────────────────────────────────────
+  // ── Escape key — deselect ─────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedSceneId) setSelection([]);
+      if (e.key === 'Escape' && selectedSceneId) setSceneSelectedIds([]);
     };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [selectedSceneId, setSelection]);
+  }, [selectedSceneId]);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-1)', overflowY: 'auto', paddingBottom: selectedScene ? '55vh' : '40px' }}>
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-1)', overflowY: 'auto' }}>
+      {/* Grid: paddingTop 80px = single unified TopBar height (top:16 + ~48px bar + 16px gap) */}
       {sortedScenes.length === 0 ? (
-        <EmptyState onCreateScript={onCreateScript} onSwitchToCanvas={onSwitchToCanvas || (() => setViewMode('canvas'))} />
+        <EmptyState onCreateScript={onCreateScript} onSwitchToCanvas={onSwitchToCanvas || handleSwitchToCanvas} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignContent: 'start', padding: '80px 40px 40px' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: 16,
+          alignContent: 'start',
+          padding: '80px 40px 56px',
+        }}>
           {sortedScenes.map(scene => (
             <SceneCard
               key={scene.id}
               scene={scene}
-              isSelected={selectedSceneId === scene.id}
+              isSelected={sceneSelectedIds.includes(scene.id)}
               scriptTitle={getScriptTitle(scene.scriptId)}
               thumbnailSrc={findThumbnailForScene(scene, images)}
               onSelect={handleSelect}

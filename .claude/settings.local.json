@@ -15,7 +15,10 @@
       "Bash(npm view *)",
       "Bash(python3 _bmad/scripts/resolve_customization.py --skill \".claude/skills/bmad-generate-project-context\" --key workflow)",
       "mcp__chrome-devtools__list_pages",
-      "mcp__Claude_in_Chrome__tabs_context_mcp"
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(claude plugin *)",
+      "Skill(glm-plan-usage:usage-query)",
+      "Skill(glm-plan-usage:usage-query-skill)"
     ]
   }
 }

@@ -4,11 +4,17 @@
  * Extracted from InfiniteCanvas to isolate pure-visual rendering logic.
  * Contains both established connection lines (double-stroke glow effect)
  * and the transient "drawing" line shown while dragging a port.
+ *
+ * 拖拽实时跟随：ConnectionLines 从 dragOffsets 读取拖拽中的节点偏移量，
+ * 叠加到 store 位置以实时更新贝塞尔曲线端点。React.memo 已移除 —
+ * 连线需要随 guideLines 变化（即每次 onDragMove 触发 setGuideLines）
+ * 而重新渲染。
  */
 import React from 'react';
 import { Line, Group } from 'react-konva';
 import type { CanvasElement, Connection } from '@/types/canvas';
 import type { DrawingConnection } from '@/store/types';
+import { getDragOffset } from './dragOffsets';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -39,7 +45,7 @@ interface ConnectionLinesProps {
   connections: Connection[];
 }
 
-export const ConnectionLines = React.memo(function ConnectionLines({
+export const ConnectionLines = function ConnectionLines({
   elements,
   connections,
 }: ConnectionLinesProps) {
@@ -59,10 +65,18 @@ export const ConnectionLines = React.memo(function ConnectionLines({
         const outputSpacing = fromEl.height / (fromEl.outputs.length + 1);
         const inputSpacing = toEl.height / (toEl.inputs.length + 1);
 
-        const startX = fromEl.x + fromEl.width;
-        const startY = fromEl.y + outputSpacing * (fromPortIdx + 1);
-        const endX = toEl.x;
-        const endY = toEl.y + inputSpacing * (toPortIdx + 1);
+        // 拖拽实时跟随：叠加 dragOffsets 的偏移量
+        const fromOffset = getDragOffset(fromEl.id);
+        const toOffset = getDragOffset(toEl.id);
+        const fromX = fromEl.x + (fromOffset?.dx ?? 0);
+        const fromY = fromEl.y + (fromOffset?.dy ?? 0);
+        const toX = toEl.x + (toOffset?.dx ?? 0);
+        const toY = toEl.y + (toOffset?.dy ?? 0);
+
+        const startX = fromX + fromEl.width;
+        const startY = fromY + outputSpacing * (fromPortIdx + 1);
+        const endX = toX;
+        const endY = toY + inputSpacing * (toPortIdx + 1);
 
         return (
           <Group key={conn.id}>
@@ -88,7 +102,7 @@ export const ConnectionLines = React.memo(function ConnectionLines({
       })}
     </>
   );
-});
+};
 
 // ── Transient drawing line ───────────────────────────────────────────
 
@@ -96,7 +110,7 @@ interface DrawingConnectionLineProps {
   drawingConnection: DrawingConnection;
 }
 
-export const DrawingConnectionLine = React.memo(function DrawingConnectionLine({
+export const DrawingConnectionLine = function DrawingConnectionLine({
   drawingConnection,
 }: DrawingConnectionLineProps) {
   return (
@@ -112,4 +126,4 @@ export const DrawingConnectionLine = React.memo(function DrawingConnectionLine({
       lineCap="round"
     />
   );
-});
+};

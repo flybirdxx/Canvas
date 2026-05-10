@@ -12,6 +12,7 @@ describe('computeStoryboardDiff', () => {
     const diff = computeStoryboardDiff('script-1', parsedScenes, [], 100, 100);
     
     expect(diff.scenesToAdd).toHaveLength(2);
+    expect(diff.scenesToUpdate).toHaveLength(0);
     expect(diff.idsToDelete).toHaveLength(0);
     
     expect(diff.scenesToAdd[0].sceneNum).toBe(1);
@@ -34,6 +35,9 @@ describe('computeStoryboardDiff', () => {
     
     expect(diff.scenesToAdd).toHaveLength(1);
     expect(diff.scenesToAdd[0].sceneNum).toBe(2);
+    // CR-3: existing scene 1 has title+content changes → appears in scenesToUpdate
+    expect(diff.scenesToUpdate).toHaveLength(1);
+    expect(diff.scenesToUpdate[0].id).toBe('s1');
     
     expect(diff.idsToDelete).toHaveLength(1);
     expect(diff.idsToDelete[0]).toBe('s3');
@@ -41,19 +45,19 @@ describe('computeStoryboardDiff', () => {
 
   it('should do nothing if existing scenes perfectly match parsed scenes', () => {
     const existingScenes: SceneElement[] = [
-      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', content: '', scriptId: 'script-1' },
-      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', content: '', scriptId: 'script-1' },
+      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', content: 'Content 1', scriptId: 'script-1' },
+      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', content: 'Content 2', scriptId: 'script-1' },
     ];
     
     const parsedScenes: ParsedScene[] = [
-      { sceneNum: 1, title: 'Scene 1 Modified', content: 'Content 1' },
+      { sceneNum: 1, title: 'Scene 1', content: 'Content 1' },
       { sceneNum: 2, title: 'Scene 2', content: 'Content 2' },
     ];
     
     const diff = computeStoryboardDiff('script-1', parsedScenes, existingScenes, 100, 100);
     
-    // Note: computeStoryboardDiff only diffs based on sceneNum. It does not update existing nodes' content.
     expect(diff.scenesToAdd).toHaveLength(0);
+    expect(diff.scenesToUpdate).toHaveLength(0);
     expect(diff.idsToDelete).toHaveLength(0);
   });
 });

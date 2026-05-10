@@ -12,7 +12,9 @@ import { runGeneration } from './imageGeneration';
 import { runVideoGeneration } from './videoGeneration';
 import type { VideoGenRequest } from './videoGeneration';
 import type { GenRequest } from './imageGeneration';
-import type { Connection } from '@/types/canvas';
+import type { Connection, SceneElement, ScriptElement, ImageElement } from '@/types/canvas';
+import { isSceneElement, isScriptElement } from '@/types/canvas';
+import { PORT_DEFAULTS, makePorts } from '@/store/portDefaults';
 import type { ExecutionErrorKind } from '@/store/useExecutionStore';
 import { dispatchToast } from '@/components/Toast';
 import { appendLog } from './executionLogs';
@@ -181,11 +183,11 @@ export function topologicalSort(
  * 2. Cycle → rejectRun with toast
  * 3. Else → initRun → commitExecutionOrder → execute level by level
  */
-export async function runExecution(selectedIds: string[]): Promise<void> {
+export async function runExecution(selectedIds: string[]): Promise<string | null> {
   const { elements, connections } = useCanvasStore.getState();
   if (selectedIds.length === 0) {
     dispatchToast('请先选中要执行的节点', 'info');
-    return;
+    return null;
   }
 
   // Create a fresh AbortController for this run.
@@ -208,43 +210,44 @@ export async function runExecution(selectedIds: string[]): Promise<void> {
       useExecutionStore.getState().rejectRun(execId, '检测到循环依赖', selectedIds);
       dispatchToast('检测到循环依赖，无法执行', 'danger');
       appendLog(execId, 'error', '检测到循环依赖，执行被拒绝');
-      return;
+      return null;
     }
 
     appendLog(execId, 'info', `开始执行 ${selectedIds.length} 个节点，共 ${levels.length} 个拓扑层级`);
 
     // Step 2: init run with idle states, then commit order.
     useExecutionStore.getState().initRun(execId, selectedIds);
-  useExecutionStore.getState().commitExecutionOrder(execId, levels);
+    useExecutionStore.getState().commitExecutionOrder(execId, levels);
 
-  // Step 3: execute level by level.
-  for (let i = 0; i < levels.length; i++) {
-    // Bail out if cancelled.
-    if (isAborted()) break;
+    // Step 3: execute level by level.
+    for (let i = 0; i < levels.length; i++) {
+      // Bail out if cancelled.
+      if (isAborted()) break;
 
-    const level = levels[i];
-    const depthLabel = `层级 ${i + 1}/${levels.length} (${level.length} 节点)`;
-    appendLog(execId, 'info', `开始 ${depthLabel}`);
+      const level = levels[i];
+      const depthLabel = `层级 ${i + 1}/${levels.length} (${level.length} 节点)`;
+      appendLog(execId, 'info', `开始 ${depthLabel}`);
 
-    const pending = level.map((nodeId) =>
-      executeNode(nodeId, execId, elements, connections),
-    );
-    await Promise.all(pending);
-  }
-  // Step 4: mark run complete and log summary.
-  useExecutionStore.getState().completeRun(execId);
-  const stats = useExecutionStore.getState().getActiveRun();
-  if (stats) {
-    const s = Object.values(stats.nodeStates);
-    const success = s.filter((n) => n.status === 'success').length;
-    const failed = s.filter((n) => n.status === 'failed').length;
-    appendLog(execId, 'info', `执行完成：${success} 成功，${failed} 失败`);
-    if (failed > 0) {
-      dispatchToast(`${failed} 个节点失败`, 'danger');
-    } else {
-      dispatchToast('执行完成', 'success');
+      const pending = level.map((nodeId) =>
+        executeNode(nodeId, execId, elements, connections),
+      );
+      await Promise.all(pending);
     }
-  }
+    // Step 4: mark run complete and log summary.
+    useExecutionStore.getState().completeRun(execId);
+    const stats = useExecutionStore.getState().getActiveRun();
+    if (stats) {
+      const s = Object.values(stats.nodeStates);
+      const success = s.filter((n) => n.status === 'success').length;
+      const failed = s.filter((n) => n.status === 'failed').length;
+      appendLog(execId, 'info', `执行完成：${success} 成功，${failed} 失败`);
+      if (failed > 0) {
+        dispatchToast(`${failed} 个节点失败`, 'danger');
+      } else {
+        dispatchToast('执行完成', 'success');
+      }
+    }
+    return execId;
   } finally {
     // F5 fix: always clean up listener and module state regardless of exit path.
     window.removeEventListener('generation:success', onSuccess);
@@ -268,6 +271,7 @@ export async function executeNode(
   connections: ReturnType<typeof useCanvasStore.getState>['connections'],
 ): Promise<void> {
   const store = useExecutionStore.getState();
+  const canvasState = useCanvasStore.getState();
 
   // Check abort signal before starting.
   if (isAborted()) return;
@@ -290,6 +294,98 @@ export async function executeNode(
     store.updateNodeStatus(nodeId, 'success');
     appendLog(execId, 'info', `${nodeId} (${el.type}) 跳过生成`, nodeId);
     return Promise.resolve();
+  }
+
+  // E7 Story 5: scene execution — find or create linked image, then execute it
+  if (isSceneElement(el)) {
+    const scene = el as SceneElement;
+    // Check abort before starting
+    if (isAborted()) return;
+
+    // Strategy: find or create a linked image node, then execute that
+    let imageId = scene.linkedImageId;
+    let imageEl = imageId ? canvasState.elements.find(e => e.id === imageId) : undefined;
+
+    if (!imageEl) {
+      // No linked image — create one at scene's right side
+      const newImageId = uuidv4();
+      const newImage: ImageElement = {
+        id: newImageId,
+        type: 'image',
+        x: el.x + el.width + 60,
+        y: el.y,
+        width: Math.min(el.width, 512),
+        height: Math.min(el.height, 512),
+        src: '',
+        prompt: '',
+        inputs: makePorts(PORT_DEFAULTS.image.inputs),
+        outputs: makePorts(PORT_DEFAULTS.image.outputs),
+      };
+      canvasState.addElement(newImage);
+
+      // Create connection: scene (Text output) → image (Prompt input)
+      const sceneTextOut = el.outputs?.find(p => p.type === 'text');
+      if (sceneTextOut && newImage.inputs?.[0]) {
+        canvasState.addConnection({
+          id: uuidv4(),
+          fromId: el.id,
+          fromPortId: sceneTextOut.id,
+          toId: newImageId,
+          toPortId: newImage.inputs[0].id,
+        });
+      }
+
+      // Update scene.linkedImageId
+      canvasState.updateElement(el.id, { linkedImageId: newImageId });
+      imageId = newImageId;
+      imageEl = newImage;
+
+      appendLog(execId, 'info', `${nodeId} 自动创建图像节点 ${newImageId}`, nodeId);
+    }
+
+    // Now execute the image node
+    appendLog(execId, 'info', `${nodeId} 执行关联图像节点 ${imageId}`, nodeId);
+    await executeNode(imageId, execId, useCanvasStore.getState().elements, useCanvasStore.getState().connections);
+    // Scene's own status mirrors the image node's final status
+    const finalImage = useCanvasStore.getState().elements.find(e => e.id === imageId);
+    if (finalImage?.type === 'aigenerating') {
+      // Still pending — leave scene as running
+      return;
+    }
+    const imageState = store.getRun(execId)?.nodeStates[imageId];
+    if (imageState?.status === 'success') {
+      store.updateNodeStatus(nodeId, 'success');
+      appendLog(execId, 'info', `${nodeId} 场景执行完成`, nodeId);
+    } else if (imageState?.status === 'failed') {
+      store.updateNodeStatus(nodeId, 'failed', imageState.errorMessage, imageState.errorKind as ExecutionErrorKind);
+    }
+    return;
+  }
+
+  // E7 Story 5: script execution — execute all child scenes in sceneNum order
+  if (isScriptElement(el)) {
+    const script = el as ScriptElement;
+    if (isAborted()) return;
+
+    const childScenes = canvasState.elements.filter(
+      (e): e is SceneElement => isSceneElement(e) && e.scriptId === script.id
+    );
+
+    if (childScenes.length === 0) {
+      store.updateNodeStatus(nodeId, 'success');
+      appendLog(execId, 'info', `${nodeId} 无子分镜，跳过`, nodeId);
+      return;
+    }
+
+    const sorted = [...childScenes].sort((a, b) => a.sceneNum - b.sceneNum);
+    appendLog(execId, 'info', `${nodeId} 执行 ${sorted.length} 个子分镜`, nodeId);
+    for (const scene of sorted) {
+      if (isAborted()) return;
+      await executeNode(scene.id, execId, useCanvasStore.getState().elements, useCanvasStore.getState().connections);
+    }
+    store.updateNodeStatus(nodeId, 'success');
+    appendLog(execId, 'info', `${nodeId} 剧本执行完成`, nodeId);
+    return;
   }
 
   // Already has content: skip.

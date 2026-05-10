@@ -1,11 +1,10 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { findSnapTargets, type GuideLine } from '@/utils/alignmentUtils';
 import type { SnapCallbacks } from '@/components/canvas/nodes/SelectionHandles';
 
 export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
   const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
-  const dragDeltasRef = useRef<Record<string, { dx: number; dy: number }>>({});
 
   const snapOnDragMove = useCallback((id: string, dx: number, dy: number, originX: number, originY: number, width: number, height: number) => {
     const allElements = useCanvasStore.getState().elements;
@@ -18,14 +17,12 @@ export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
     originX: number, originY: number, width: number, height: number,
   ): { x: number; y: number } => {
     if (isAltRef.current) {
-      dragDeltasRef.current[id] = { dx: proposedX - originX, dy: proposedY - originY };
       return { x: proposedX, y: proposedY };
     }
     const allElements = useCanvasStore.getState().elements;
     const dx = proposedX - originX;
     const dy = proposedY - originY;
     const result = findSnapTargets(id, allElements, dx, dy, width, height, originX, originY);
-    dragDeltasRef.current[id] = { dx: dx + result.snapDx, dy: dy + result.snapDy };
     setGuideLines(result.guideLines);
     return { x: proposedX + result.snapDx, y: proposedY + result.snapDy };
   }, [isAltRef]);
@@ -50,7 +47,6 @@ export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
       useCanvasStore.getState().batchUpdatePositions([{ id, x: finalX, y: finalY }]);
     }
 
-    delete dragDeltasRef.current[id];
     setGuideLines([]);
   }, []);
 
@@ -88,5 +84,5 @@ export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
     computeDragSnap,
   };
 
-  return { guideLines, snapCallbacks, dragDeltasRef };
+  return { guideLines, snapCallbacks };
 }

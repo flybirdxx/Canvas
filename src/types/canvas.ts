@@ -352,3 +352,25 @@ export interface SceneElement extends BaseElement {
 }
 
 export type CanvasElement = ShapeElement | TextElement | ImageElement | StickyElement | MediaElement | AIGeneratingElement | FileElement | ScriptElement | SceneElement;
+
+// ── Type guards ─────────────────────────────────────────────────────
+
+/** Returns true if `el` is a scene node. */
+export function isSceneElement(el: CanvasElement): el is SceneElement {
+  return el.type === 'scene';
+}
+
+/** Returns true if `el` is a script node. */
+export function isScriptElement(el: CanvasElement): el is ScriptElement {
+  return el.type === 'script';
+}
+
+/** Returns true if `el` is an image node with a loaded src. */
+export function isImageWithContent(el: CanvasElement): el is ImageElement {
+  return el.type === 'image' && !!(el as ImageElement).src;
+}
+
+/** Returns true if `el` is a media node (video/audio) with a loaded src. */
+export function isMediaWithContent(el: CanvasElement): el is MediaElement {
+  return (el.type === 'video' || el.type === 'audio') && !!(el as MediaElement).src;
+}

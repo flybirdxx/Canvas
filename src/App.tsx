@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense, useCallback } from 'react';
 import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
 import { PropertiesPanel } from './components/properties/PropertiesPanel';
 import { SettingsModal } from './components/SettingsModal';
@@ -23,19 +23,38 @@ import { resumePendingImageTasks } from './services/taskResume';
 import { buildFileElement } from './services/fileIngest';
 import { storeBlob, blobKey } from './services/fileStorage';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useSceneExecution } from './hooks/canvas/useSceneExecution';
 
 // AD2: StoryboardView 懒加载 — Konva 不在分镜模式下初始化
 const StoryboardView = lazy(() => import('./components/StoryboardView').then(m => ({ default: m.StoryboardView })));
 
 /** 兜底 SSR / Suspense 友好 wrapper */
-function AppStoryboardViewLazy({ onCreateScript }: { onCreateScript: () => void }) {
+function AppStoryboardViewLazy({
+  onCreateScript,
+  onSceneSelectionIdsChange,
+  onExecuteAll,
+  onExecuteSelected,
+  progress,
+}: {
+  onCreateScript: () => void;
+  onSceneSelectionIdsChange: (ids: string[]) => void;
+  onExecuteAll: () => void;
+  onExecuteSelected: (sceneIds: string[]) => void;
+  progress: { done: number; total: number; current: string | null; isRunning: boolean };
+}) {
   return (
     <Suspense fallback={
       <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--ink-2)', fontFamily:'var(--font-serif)' }}>
         加载分镜视图中…
       </div>
     }>
-      <StoryboardView onCreateScript={onCreateScript} />
+      <StoryboardView
+        onCreateScript={onCreateScript}
+        onSceneSelectionIdsChange={onSceneSelectionIdsChange}
+        onExecuteAll={onExecuteAll}
+        onExecuteSelected={onExecuteSelected}
+        executionProgress={progress}
+      />
     </Suspense>
   );
 }
@@ -71,6 +90,25 @@ export default function App() {
   const selectedScene = selectedSceneId
     ? elements.find(e => e.id === selectedSceneId) as SceneElement | undefined
     : undefined;
+
+  // Storyboard execution: IDs and count of scene cards selected in StoryboardView
+  const [storyboardSelectedIds, setStoryboardSelectedIds] = useState<string[]>([]);
+  const storyboardSelectedCount = storyboardSelectedIds.length;
+
+  // Keep storyboardSelectedIds in sync when StoryboardView updates selection
+  const handleSceneSelectionIdsChange = useCallback((ids: string[]) => {
+    setStoryboardSelectedIds(ids);
+  }, []);
+
+  // Storyboard execution: scene count derived from canvas elements
+  const totalSceneCount = elements.filter(e => e.type === 'scene').length;
+
+  // Storyboard execution: batch execution hook (shared between TopBar and StoryboardView)
+  const {
+    progress: executionProgress,
+    handleExecuteAll: execHandleExecuteAll,
+    handleExecuteSelected: execHandleExecuteSelected,
+  } = useSceneExecution();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -219,11 +257,18 @@ export default function App() {
       >
         {viewMode === 'storyboard' && (
           // Lazy-load — import lazily so Konva doesn't initialise in storyboard mode
-          <AppStoryboardViewLazy onCreateScript={() => handleCreateNode('script')} />
+          <AppStoryboardViewLazy
+            onCreateScript={() => handleCreateNode('script')}
+            onSceneSelectionIdsChange={handleSceneSelectionIdsChange}
+            onExecuteAll={execHandleExecuteAll}
+            onExecuteSelected={execHandleExecuteSelected}
+            progress={executionProgress}
+          />
         )}
       </div>
 
-      {/* Chrome (z=30) — floating paper chips */}
+      {/* Chrome (z=30) — floating paper chips.
+          Canvas-only components are hidden in storyboard mode to prevent overlap. */}
       <TopBar
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
@@ -235,22 +280,34 @@ export default function App() {
         }}
         onToggleView={() => setViewMode(viewMode === 'canvas' ? 'storyboard' : 'canvas')}
         viewMode={viewMode}
+        totalScenes={totalSceneCount}
+        sceneSelectedCount={storyboardSelectedCount}
+        executionProgress={executionProgress}
+        onExecuteAll={execHandleExecuteAll}
+        onExecuteSelected={() => execHandleExecuteSelected(storyboardSelectedIds)}
       />
-      <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} activeTool={activeTool} onSetActiveTool={setActiveTool} />
-      <FloatingActions onOpenTemplates={() => setIsTemplatesOpen(true)} onOpenChat={() => setIsTemplatesOpen(true)} />
-      <PropertiesPanel />
-      <HistoryPanel />
+
+      {/* Canvas-only chrome */}
+      {viewMode === 'canvas' && (
+        <>
+          <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} activeTool={activeTool} onSetActiveTool={setActiveTool} />
+          <FloatingActions onOpenTemplates={() => setIsTemplatesOpen(true)} onOpenChat={() => setIsTemplatesOpen(true)} />
+          <PropertiesPanel />
+          <HistoryPanel />
+          <AlignmentToolbar />
+        </>
+      )}
+
+      {/* Shared chrome (visible in both canvas and storyboard) */}
       <AssetLibraryPanel />
-      <AlignmentToolbar />
       <GenerationQueuePanel />
       <GenerationHistoryPanel />
       <RunPanel />
       <ToastContainer />
-      <StatusBar />
+      {viewMode === 'canvas' && <StatusBar />}
 
-      {/* Tool hint when not select — tiny serif chip at the top-center
-          rim so the user knows they're "loaded" with a tool. */}
-      {activeTool !== 'select' && (
+      {/* Tool hint — canvas-only */}
+      {viewMode === 'canvas' && activeTool !== 'select' && (
         <div
           className="chip-paper chip-paper--flat anim-fade-in pointer-events-none"
           style={{

@@ -44,14 +44,16 @@ export const PORT_DEFAULTS: Record<ElementType, { inputs: PortTemplate[]; output
     inputs: [],  
     outputs: [],  
   },  
-  script: {  
-    inputs: [],  
-    outputs: [],  
-  },  
-  scene: {  
-    inputs: [],  
-    outputs: [],  
-  },  
+  script: {
+    inputs: [],
+    // E7 Epic 6: Script as "剧本容器" — single text output aggregating all child scenes' content.
+    // When connected to an Image node's Prompt input, the merged content is used as effective prompt.
+    outputs: [{ type: 'text', label: '剧本' }],
+  },
+  scene: {
+    inputs: [{ type: 'text', label: 'Prompt' }],
+    outputs: [{ type: 'image', label: 'Image' }, { type: 'text', label: 'Text' }],
+  },
 }; 
   
 import { v4 as uuidv4 } from 'uuid'; 

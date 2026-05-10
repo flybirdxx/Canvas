@@ -10,4 +10,5 @@ export { SceneNode } from './SceneNode';
 export { PortOverlay } from './PortOverlay';
 export { SelectionHandles } from './SelectionHandles';
 export type { SnapCallbacks } from './SelectionHandles';
+export { RunningPulse, useRunningStatus } from './RunningPulse';
 export { getPortColor, INK_1, PAPER_EDGE, BG_1, POLAROID_STYLE, useExecutionBorder } from './shared';

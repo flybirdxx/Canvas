@@ -9,6 +9,7 @@ import {
   ImageElement,
   NodeVersion,
   PendingGenerationTask,
+  isSceneElement,
 } from '@/types/canvas';
 import { generateImageByModelId } from './gateway';
 import type { GatewayErrorKind } from './gateway/types';
@@ -199,6 +200,29 @@ export function replacePlaceholderWithImage(
     ...(versions ? { versions, activeVersionIndex } : {}),
   };
   store.replaceElement(placeholderId, newElement as CanvasElement, '生成完成');
+
+  // E7 Story 6: auto-link the new image to any scene that has this placeholder
+  // as its linkedImageId, or any scene that has a connection to this placeholder.
+  // This closes the loop: scene → placeholder → image → scene.linkedImageId.
+  const updatedElements = store.elements;
+  const newImageId = newElement.id;
+
+  // Path 1: scene.linkedImageId === placeholderId
+  for (const el of updatedElements) {
+    if (isSceneElement(el) && el.linkedImageId === placeholderId) {
+      store.updateElement(el.id, { linkedImageId: newImageId });
+    }
+  }
+
+  // Path 2: scene outputs connect to this placeholder — update linkedImageId
+  for (const c of store.connections) {
+    if (c.toId === placeholderId) {
+      const src = updatedElements.find(e => e.id === c.fromId);
+      if (src && isSceneElement(src) && !src.linkedImageId) {
+        store.updateElement(src.id, { linkedImageId: newImageId });
+      }
+    }
+  }
 
   // Story 1.5: notify the execution engine so it can update node status.
   onSuccess?.(placeholderId);

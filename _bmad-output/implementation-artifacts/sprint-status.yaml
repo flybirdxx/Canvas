@@ -11,6 +11,7 @@
 #   - backlog: Epic not yet started
 #   - in-progress: Epic actively being worked on
 #   - done: All stories in epic completed
+#   - optional: Epic deferred — not required for current milestone
 #
 # Epic Status Transitions:
 #   - backlog → in-progress: Automatically when first story is created (via create-story)
@@ -37,7 +38,7 @@
 # - Epic 3/5/6 可与其他 Epic 并行
 
 generated: 2026-05-05
-last_updated: 2026-05-05T22:55:00+08:00
+last_updated: 2026-05-10
 project: Canvas
 project_key: NOKEY
 tracking_system: file-system
@@ -110,7 +111,7 @@ development_status:
   # FRs: FR12
   # Stories: 2
   # ===========================================================================
-  epic-5: backlog
+  epic-5: optional
 
   5-1-ju-bu-zhong-hui-mo-shi-meng-ban: backlog
   5-2-meng-ban-sheng-cheng-ai-inpainting: backlog
@@ -123,9 +124,29 @@ development_status:
   # FRs: FR44, FR45
   # Stories: 2
   # ===========================================================================
-  epic-6: backlog
+  epic-6: optional
 
   6-1-tauri-chu-shi-hua-web-ying-yong: backlog
   6-2-canvas-wen-jian-guan-lian: backlog
 
   epic-6-retrospective: optional
+
+  # ===========================================================================
+  # Epic 7: omniScript × Canvas 深度联动
+  # Scene 节点端口化，Flow Resolver 集成，执行引擎关联，
+  # 生成结果自动回填 linkedImageId，Storyboard 一键批量生成。
+  # PRD: prd-omniscript-canvas-integration.md
+  # Stories: 8
+  # ===========================================================================
+  epic-7: in-progress
+
+  7-1-scene-duan-kou-mo-ban-kuo-zhan: done
+  7-2-lei-xing-shou-wei-han-shu: done
+  7-3-compose-scene-prompt-han-shu: done
+  7-4-flow-resolver-scene-ji-cheng: done
+  7-5-scene-zhi-xing-luo-ji: done
+  7-6-sheng-cheng-jie-guo-hui-tian: done
+  7-7-storyboard-duo-xuan-zhi-chi: done
+  7-8-storyboard-pi-liang-zhi-xing: done
+
+  epic-7-retrospective: optional

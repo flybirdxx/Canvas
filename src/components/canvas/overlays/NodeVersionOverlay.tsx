@@ -7,6 +7,7 @@
 import React from 'react';
 import { NodeVersionSwitcher } from '@/components/NodeVersionSwitcher';
 import type { CanvasElement } from '@/types/canvas';
+import { getDragOffset } from '../dragOffsets';
 
 interface NodeVersionOverlayProps {
   elements: CanvasElement[];
@@ -27,8 +28,11 @@ export function NodeVersionOverlay({ elements, selectedIds, stageConfig }: NodeV
   return (
     <div className="absolute inset-0 pointer-events-none">
       {visible.map(el => {
-        const canvasCx = el.x + el.width / 2;
-        const canvasTop = el.y;
+        const offset = getDragOffset(el.id);
+        const ddx = offset ? offset.dx : 0;
+        const ddy = offset ? offset.dy : 0;
+        const canvasCx = el.x + el.width / 2 + ddx;
+        const canvasTop = el.y + ddy;
         const screenX = stageConfig.x + canvasCx * stageConfig.scale;
         const screenY = stageConfig.y + canvasTop * stageConfig.scale;
         return (

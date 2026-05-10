@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateTextByModelId, listModels } from '@/services/gateway';
 import type { ScriptLine, LineType } from '@/types/canvas';
 import { EMOTION_PRESETS } from '@/types/canvas';
+import { parseSceneLines } from '@/utils/parseScript';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -147,17 +148,21 @@ export async function structureSceneWithAI(
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    return {
-      ok: false,
-      message: `AI 返回了无法解析的内容：${cleaned.slice(0, 200)}`,
-    };
+    // CR-10: JSON 解析失败 → 降级到正则引擎
+    const fallbackLines = parseSceneLines(inputText);
+    if (fallbackLines.length === 0) {
+      return { ok: false, message: 'AI 返回了无法解析的内容，降级解析也未得到有效行' };
+    }
+    return { ok: true, lines: fallbackLines };
   }
 
   if (!Array.isArray(parsed)) {
-    return {
-      ok: false,
-      message: `AI 返回的数据格式不正确（期望数组，得到 ${typeof parsed}）`,
-    };
+    // CR-10: 返回非数组 → 降级到正则引擎
+    const fallbackLines = parseSceneLines(inputText);
+    if (fallbackLines.length === 0) {
+      return { ok: false, message: 'AI 返回格式不正确，降级解析也未得到有效行' };
+    }
+    return { ok: true, lines: fallbackLines };
   }
 
   const lines: ScriptLine[] = [];
@@ -167,7 +172,12 @@ export async function structureSceneWithAI(
   }
 
   if (lines.length === 0) {
-    return { ok: false, message: 'AI 未返回有效行数据' };
+    // CR-10: AI 返回了空数据 → 降级到正则引擎
+    const fallbackLines = parseSceneLines(inputText);
+    if (fallbackLines.length === 0) {
+      return { ok: false, message: 'AI 未返回有效行数据，降级解析也未得到有效行' };
+    }
+    return { ok: true, lines: fallbackLines };
   }
 
   return { ok: true, lines };

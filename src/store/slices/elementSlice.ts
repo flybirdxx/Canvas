@@ -28,7 +28,7 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
 
   addElement: (element) => set((state) => {
     const el = { ...element };
-    if (!el.inputs) {
+    if (!el.inputs || el.inputs.length === 0) {
       el.inputs = [];
       if (el.type === 'image') {
         el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
@@ -39,9 +39,13 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
       if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
         el.inputs.push({ id: uuidv4(), type: 'any', label: 'In' });
       }
+      // E7 Story 1: scene as executable node — needs Prompt input
+      if (el.type === 'scene') {
+        el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
+      }
     }
 
-    if (!el.outputs) {
+    if (!el.outputs || el.outputs.length === 0) {
       el.outputs = [];
       if (el.type === 'text') el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
       if (el.type === 'image') el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
@@ -50,11 +54,35 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
       if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
         el.outputs.push({ id: uuidv4(), type: 'any', label: 'Out' });
       }
+      // E7 Story 1: scene as executable node — needs Image + Text outputs
+      if (el.type === 'scene') {
+        el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
+        el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
+      }
+      // E7 Epic 6: script as "剧本容器" — outputs aggregated child scene text
+      if (el.type === 'script') {
+        el.outputs.push({ id: uuidv4(), type: 'text', label: '剧本' });
+      }
       if (el.type === 'file') {
         const mt = String((el as any).mimeType || '').toLowerCase();
         if (mt.startsWith('image/')) {
           el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
         }
+      }
+    }
+
+    // CR-6: warn on duplicate sceneNum within the same script
+    if (el.type === 'scene' && (el as any).sceneNum !== undefined) {
+      const dup = state.elements.find(
+        e => e.type === 'scene' &&
+          (e as any).sceneNum === (el as any).sceneNum &&
+          (e as any).scriptId === (el as any).scriptId
+      );
+      if (dup) {
+        console.warn(
+          `[sceneNum] 场 ${(el as any).sceneNum} 的 scene 节点已存在 (id: ${dup.id})，` +
+          '重复添加可能导致 Storyboard 排序混乱'
+        );
       }
     }
 
@@ -72,6 +100,22 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
 
   updateElement: (id, attrs, labelOverride) => set((state) => {
     const target = state.elements.find(el => el.id === id);
+
+    // CR-6: warn when updating sceneNum to a value already used by another scene
+    if (target?.type === 'scene' && (attrs as any).sceneNum !== undefined) {
+      const newSceneNum = (attrs as any).sceneNum as number;
+      const dup = state.elements.find(
+        e => e.type === 'scene' && e.id !== id &&
+          (e as any).sceneNum === newSceneNum &&
+          (e as any).scriptId === (target as any).scriptId
+      );
+      if (dup) {
+        console.warn(
+          `[sceneNum] 将场号更新为 ${newSceneNum} 时发现重复 (已有 id: ${dup.id})`
+        );
+      }
+    }
+
     const label = labelOverride ?? (target ? `修改${typeLabelMap[target.type] ?? target.type}` : '修改元素');
     const nextElements: CanvasElement[] = state.elements.map((el) =>
       el.id === id ? ({ ...el, ...attrs } as CanvasElement) : el
