@@ -146,6 +146,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title}
       className="btn btn-ghost btn-icon"
       style={{
         width: 30,
