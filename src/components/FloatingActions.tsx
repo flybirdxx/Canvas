@@ -25,6 +25,7 @@ export function FloatingActions({ onOpenTemplates, onOpenChat }: FloatingActions
       <button
         onClick={onOpenTemplates}
         title="Templates"
+        aria-label="Open templates"
         style={{
           width: 40, height: 40, borderRadius: '50%',
           background: 'var(--danger-soft)',
@@ -50,6 +51,7 @@ export function FloatingActions({ onOpenTemplates, onOpenChat }: FloatingActions
       {/* Translate — placeholder */}
       <button
         title="Translate (coming soon)"
+        aria-label="Translate (coming soon)"
         style={{
           width: 40, height: 40, borderRadius: '50%',
           background: 'var(--danger-soft)',
@@ -77,6 +79,7 @@ export function FloatingActions({ onOpenTemplates, onOpenChat }: FloatingActions
       <button
         onClick={onOpenChat}
         title="Chat"
+        aria-label="Open chat"
         style={{
           width: 40, height: 40, borderRadius: '50%',
           background: 'var(--danger-soft)',
