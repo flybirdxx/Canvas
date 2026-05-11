@@ -1,0 +1,18 @@
+# Normalize line endings to LF in the repository.
+# Contributors on Windows will have their files auto-converted
+# on commit (core.autocrlf can stay at its default).
+* text=auto eol=lf
+
+# Binary files — no conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.mp4 binary
+*.webm binary

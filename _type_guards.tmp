@@ -1,0 +1,6 @@
+  
+// ©¤©¤ Type Guards ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤  
+  
+export function isImageElement(el: CanvasElement): el is ImageElement {  
+  return el.type === 'image';  
+} 
