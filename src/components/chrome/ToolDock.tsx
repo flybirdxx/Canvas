@@ -58,7 +58,8 @@ export function ToolDock({ onCreate, onUploadFiles, activeTool, onSetActiveTool 
             transition: 'all 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
             transform: menuOpen ? 'rotate(45deg)' : 'rotate(0deg)',
           }}
-          title="Add">
+          title="Add"
+          aria-label="Add">
           <Plus style={{ width:20, height:20 }} strokeWidth={1.6} />
         </button>
 
@@ -107,7 +108,7 @@ export function ToolDock({ onCreate, onUploadFiles, activeTool, onSetActiveTool 
 
       <div style={{ width:1, height:20, background:'var(--line-1)', margin:'0 4px' }} />
 
-      <button type="button" onClick={()=>ref.current?.click()} title="Upload files" style={{ width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', borderRadius:'50%', background:'transparent', color:'var(--ink-0)', cursor:'pointer', transition:'all 120ms ease' }}
+      <button type="button" onClick={()=>ref.current?.click()} title="Upload files" aria-label="Upload files" style={{ width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', borderRadius:'50%', background:'transparent', color:'var(--ink-0)', cursor:'pointer', transition:'all 120ms ease' }}
         onMouseEnter={e => e.currentTarget.style.background='var(--bg-3)'}
         onMouseLeave={e => e.currentTarget.style.background='transparent'}>
         <FileUp style={{ width:20, height:20 }} strokeWidth={1.6} />
