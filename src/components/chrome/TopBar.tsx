@@ -244,7 +244,7 @@ export function TopBar({
           <Download size={15} strokeWidth={1.6} style={{ color: 'var(--ink-2)' }} />
           <span style={{ color: 'var(--ink-2)' }}>Export</span>
         </button>
-        <button onClick={onOpenSettings} title="Settings" style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--ink-0)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-fg)', cursor: 'pointer', boxShadow: 'var(--shadow-ink-1)' }}><Settings size={16} strokeWidth={1.6} /></button>
+        <button onClick={onOpenSettings} title="Settings" aria-label="Settings" style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--ink-0)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-fg)', cursor: 'pointer', boxShadow: 'var(--shadow-ink-1)' }}><Settings size={16} strokeWidth={1.6} /></button>
         {onOpenTemplates && (
           <button onClick={onOpenTemplates} title="Chat" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent)', border: 'none', borderRadius: '99px', boxShadow: 'var(--shadow-ink-1)', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--accent-fg)', fontFamily: 'inherit' }}>
             <MessageCircle size={15} strokeWidth={1.6} />Chat
