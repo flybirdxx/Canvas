@@ -29,6 +29,16 @@ import { replacePlaceholderWithImage, setPlaceholderError } from './imageGenerat
 // 只是个软降频。
 const inFlight = new Set<string>();
 
+/**
+ * TODO(A4): 视频异步任务恢复 — 当接入异步视频 provider 后实现。
+ * 模式对齐 resumePendingImageTasks()：
+ *   1. 扫描 aigenerating 元素中 pendingTask 的 modality === 'video'
+ *   2. 调用 pollVideoTaskByProviderId（待 gateway/index.ts 添加）
+ *   3. 成功 → 替换为 video 元素；失败（终态）→ setPlaceholderError
+ *   4. pending → 保留 pendingTask 待下次启动恢复
+ * export function resumePendingVideoTasks(): void { ... }
+ */
+
 export function resumePendingImageTasks(): void {
   const state = useCanvasStore.getState();
   const pendings = state.elements.filter(

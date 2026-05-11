@@ -287,8 +287,30 @@ export function StoryboardView({
     if (!dragged || !targetId || dragged.id === targetId) { setDragOverId(null); setDraggingId(null); dragItemRef.current = null; return; }
     const target = scenes.find(s => s.id === targetId);
     if (!target) return;
-    updateElement(dragged.id, { sceneNum: target.sceneNum }, '重排分镜顺序');
-    updateElement(target.id, { sceneNum: dragged.sceneNum }, '重排分镜顺序');
+
+    // B4: 插入式重排 — 将 dragged 移到 target 位置，中间元素顺移
+    const fromNum = dragged.sceneNum;
+    const toNum = target.sceneNum;
+
+    if (fromNum < toNum) {
+      // 下移：在 (fromNum, toNum] 范围内的元素 sceneNum 减 1
+      for (const s of scenes) {
+        if (s.id === dragged.id) continue;
+        if (s.sceneNum > fromNum && s.sceneNum <= toNum) {
+          updateElement(s.id, { sceneNum: s.sceneNum - 1 }, '重排分镜顺序');
+        }
+      }
+    } else {
+      // 上移：在 [toNum, fromNum) 范围内的元素 sceneNum 加 1
+      for (const s of scenes) {
+        if (s.id === dragged.id) continue;
+        if (s.sceneNum >= toNum && s.sceneNum < fromNum) {
+          updateElement(s.id, { sceneNum: s.sceneNum + 1 }, '重排分镜顺序');
+        }
+      }
+    }
+    updateElement(dragged.id, { sceneNum: toNum }, '重排分镜顺序');
+
     setDragOverId(null);
     setDraggingId(null);
     dragItemRef.current = null;

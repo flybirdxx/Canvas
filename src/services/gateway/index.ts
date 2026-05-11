@@ -192,6 +192,17 @@ export async function generateVideoByModelId(
  * Text counterpart of {@link generateImageByModelId}. Same contract: never
  * throws, surfaces structured failures for missing model / capability / key.
  */
+/**
+ * TODO(A4): 异步视频任务查询（pollVideoTaskByProviderId）。
+ * 模式对齐 pollImageTaskByProviderId — 按 providerId + taskId 查询，
+ * 返回 VideoGenResult，含 'pending' 变体表示任务仍在跑。
+ * 接入异步视频 provider 时取消注释并实现。
+ * export async function pollVideoTaskByProviderId(
+ *   providerId: string,
+ *   taskId: string,
+ * ): Promise<VideoGenResult> { ... }
+ */
+
 export async function generateTextByModelId(
   req: TextGenRequest,
 ): Promise<TextGenResult> {

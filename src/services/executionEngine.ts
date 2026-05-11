@@ -12,7 +12,7 @@ import { runGeneration } from './imageGeneration';
 import { runVideoGeneration } from './videoGeneration';
 import type { VideoGenRequest } from './videoGeneration';
 import type { GenRequest } from './imageGeneration';
-import type { Connection, SceneElement, ScriptElement, ImageElement } from '@/types/canvas';
+import type { Connection, SceneElement, ScriptElement, ImageElement, AIGeneratingElement } from '@/types/canvas';
 import { isSceneElement, isScriptElement } from '@/types/canvas';
 import { PORT_DEFAULTS, makePorts } from '@/store/portDefaults';
 import type { ExecutionErrorKind } from '@/store/useExecutionStore';
@@ -20,6 +20,11 @@ import { dispatchToast } from '@/components/Toast';
 import { appendLog } from './executionLogs';
 import { isRunComplete } from '@/store/useExecutionStore';
 import { getController, setController, getExecId, setExecId, getSignal, isAborted, abortSession, phIdToNodeId } from './executionSession';
+
+/** A2: sceneId → imageId 映射，用于场景节点终态回写。
+ *  当 scene 触发 image 生成时记录关联，_handleGenerationSuccess 和
+ *  错误路径据此将 image 的终态镜像回写到 scene。 */
+const sceneImageMap = new Map<string, string>();
 
 /* -------------------------------------------------------------------- */
 /*  Module-level state (per run)                                              */
@@ -55,6 +60,15 @@ function _handleGenerationSuccess(e: Event): void {
     store.updateNodeStatus(nodeId, 'success');
     appendLog(execId ?? getExecId() ?? '', 'info', `${nodeId} 生成成功`, nodeId);
     phIdToNodeId.delete(placeholderId);
+
+    // A2: 同步更新关联的场景节点状态
+    for (const [sceneId, imageId] of sceneImageMap) {
+      if (imageId === nodeId) {
+        store.updateNodeStatus(sceneId, 'success');
+        appendLog(getExecId() ?? '', 'info', `${sceneId} 场景执行完成`, sceneId);
+        sceneImageMap.delete(sceneId);
+      }
+    }
     return;
   }
 
@@ -98,11 +112,32 @@ export function cancelExecution(execId: string): void {
     const cancelledNodeIds = Object.values(execState.nodeStates)
       .filter((ns) => ns.status === 'running' || ns.status === 'queued')
       .map((ns) => ns.nodeId);
-    const aigIds = canvasState.elements
-      .filter((e) => e.type === 'aigenerating' && cancelledNodeIds.includes(e.id))
-      .map((e) => e.id);
-    if (aigIds.length > 0) {
-      canvasState.deleteElements(aigIds);
+    const idsToRemove = new Set<string>();
+
+    // A3: 清理 run 中 running/queued 节点本身是 aigenerating 的元素
+    for (const el of canvasState.elements) {
+      if (el.type === 'aigenerating' && cancelledNodeIds.includes(el.id)) {
+        idsToRemove.add(el.id);
+      }
+    }
+
+    // A3: 清理由该 run 映射产生的 placeholder（phIdToNodeId）
+    for (const [phId, nodeId] of phIdToNodeId) {
+      if (cancelledNodeIds.includes(nodeId)) {
+        idsToRemove.add(phId);
+        phIdToNodeId.delete(phId);
+      }
+    }
+
+    // A2: 清理被取消节点的 scene→image 映射
+    for (const [sceneId, imageId] of sceneImageMap) {
+      if (cancelledNodeIds.includes(imageId) || cancelledNodeIds.includes(sceneId)) {
+        sceneImageMap.delete(sceneId);
+      }
+    }
+
+    if (idsToRemove.size > 0) {
+      canvasState.deleteElements([...idsToRemove]);
     }
   }
 }
@@ -341,6 +376,12 @@ export async function executeNode(
       imageEl = newImage;
 
       appendLog(execId, 'info', `${nodeId} 自动创建图像节点 ${newImageId}`, nodeId);
+
+      // A2: 注册场景→图像映射
+      sceneImageMap.set(scene.id, imageId);
+    } else {
+      // A2: 注册场景→图像映射（已有图像）
+      sceneImageMap.set(scene.id, imageId);
     }
 
     // Now execute the image node
@@ -356,8 +397,10 @@ export async function executeNode(
     if (imageState?.status === 'success') {
       store.updateNodeStatus(nodeId, 'success');
       appendLog(execId, 'info', `${nodeId} 场景执行完成`, nodeId);
+      sceneImageMap.delete(scene.id);
     } else if (imageState?.status === 'failed') {
       store.updateNodeStatus(nodeId, 'failed', imageState.errorMessage, imageState.errorKind as ExecutionErrorKind);
+      sceneImageMap.delete(scene.id);
     }
     return;
   }
@@ -468,23 +511,61 @@ export async function executeNode(
     phIdToNodeId.set(nodeId, nodeId);
     await runGeneration([nodeId], request);
 
-    // Clean up mapping on return (success or still-pending).
-    phIdToNodeId.delete(nodeId);
-
-    // Check abort again before updating success.
-    if (isAborted()) return;
-
-    // Check if placeholder still exists (still pending).
-    const updated = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
-    if (updated?.type === 'aigenerating') {
-      // Still generating — leave status as running; generation callbacks handle resolution.
-      appendLog(execId, 'info', `${nodeId} 生成中（异步）`, nodeId);
-      // Do NOT delete mapping — keep it for when the callback fires later.
+    // A1: 显式检查生成结果，避免"失败被标记成功"
+    if (isAborted()) {
+      phIdToNodeId.delete(nodeId);
       return;
     }
-    // onSuccess callback above already updated success; this line is a no-op guard.
-    store.updateNodeStatus(nodeId, 'success');
-    appendLog(execId, 'info', `${nodeId} 生成成功`, nodeId);
+
+    const updated = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
+    if (!updated) {
+      phIdToNodeId.delete(nodeId);
+      store.updateNodeStatus(nodeId, 'failed', '节点已被删除', 'unknown');
+      appendLog(execId, 'error', `${nodeId} 节点已不存在`, nodeId);
+      return;
+    }
+    if (updated.type === 'aigenerating') {
+      const ag = updated as AIGeneratingElement;
+      if (ag.error) {
+        phIdToNodeId.delete(nodeId);
+        const errMsg = ag.error.message || '生成失败';
+        store.updateNodeStatus(nodeId, 'failed', errMsg, 'unknown');
+        appendLog(execId, 'error', `${nodeId} 生成失败：${errMsg}`, nodeId);
+        // A2: 同步标记关联场景为失败
+        for (const [sceneId, imageId] of sceneImageMap) {
+          if (imageId === nodeId) {
+            store.updateNodeStatus(sceneId, 'failed', errMsg, 'unknown');
+            appendLog(execId, 'error', `${sceneId} 场景执行失败`, sceneId);
+            sceneImageMap.delete(sceneId);
+          }
+        }
+        return;
+      }
+      if (ag.pendingTask) {
+        // 异步生成仍在进行中 — 保留 phIdToNodeId 映射供回调使用
+        appendLog(execId, 'info', `${nodeId} 生成中（异步）`, nodeId);
+        return;
+      }
+      // aigenerating 但既无 error 也无 pendingTask — 异常状态
+      phIdToNodeId.delete(nodeId);
+      store.updateNodeStatus(nodeId, 'failed', '生成状态未知', 'unknown');
+      appendLog(execId, 'error', `${nodeId} 生成状态未知`, nodeId);
+      return;
+    }
+    // 已被替换为具体类型且有内容 → 成功
+    if ((updated.type === 'image' || updated.type === 'video' || updated.type === 'audio') && (updated as any).src) {
+      phIdToNodeId.delete(nodeId);
+      const currentStatus = store.getRun(execId)?.nodeStates[nodeId]?.status;
+      if (currentStatus !== 'success') {
+        store.updateNodeStatus(nodeId, 'success');
+      }
+      appendLog(execId, 'info', `${nodeId} 生成成功`, nodeId);
+      return;
+    }
+    // 兜底：未预期的元素状态
+    phIdToNodeId.delete(nodeId);
+    store.updateNodeStatus(nodeId, 'failed', '生成结果异常', 'unknown');
+    appendLog(execId, 'error', `${nodeId} 生成结果异常（类型: ${updated.type}）`, nodeId);
   } catch (err) {
     // F9 fix: after AbortError, explicitly transition to idle so the state
     // machine reflects the cancelled state regardless of how cancelRun is invoked.
@@ -505,6 +586,14 @@ export async function executeNode(
     const kind: ExecutionErrorKind = classifyError(err);
     store.updateNodeStatus(nodeId, 'failed', msg, kind);
     appendLog(execId, 'error', `${nodeId} 生成失败：${msg}`, nodeId);
+    // A2: 同步标记关联场景为失败
+    for (const [sceneId, imageId] of sceneImageMap) {
+      if (imageId === nodeId) {
+        store.updateNodeStatus(sceneId, 'failed', msg, kind);
+        appendLog(execId, 'error', `${sceneId} 场景执行失败`, sceneId);
+        sceneImageMap.delete(sceneId);
+      }
+    }
   }
 }
 

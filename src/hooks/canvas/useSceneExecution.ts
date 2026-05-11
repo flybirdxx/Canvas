@@ -83,12 +83,10 @@ export function useSceneExecution(onAllComplete?: () => void) {
       const execId = await runExecution([scene.id]);
 
       if (execId) {
+        // B1: pollUntilComplete 内不提前推进 done；
+        // 每个 scene 的 run 真正完成后再 done = i + 1（见下方 setProgress）
         await pollUntilComplete(execId, () => {
-          // Progress reflects that at least one scene in the batch has started
-          setProgress(prev => {
-            if (prev.done < i + 1) return { ...prev, done: i + 1 };
-            return prev;
-          });
+          // 心跳回调：仅用于保持轮询活跃，不做状态推进
         });
       }
 
