@@ -42,6 +42,7 @@ export function renderMarkdown(md: string): string {
       // Don't wrap block-level elements (headings, hrs, pre/code blocks)
       if (
         /^<(h[2-4]|hr|pre|div|blockquote|ul|ol|li|table)/.test(trimmed) ||
+        // eslint-disable-next-line no-control-regex
         /^\x00CODEBLOCK\d+\x00$/.test(trimmed)
       ) {
         return trimmed;
@@ -53,6 +54,7 @@ export function renderMarkdown(md: string): string {
     .join('\n');
 
   // Phase 6: restore code blocks
+  // eslint-disable-next-line no-control-regex
   processed = processed.replace(/\x00CODEBLOCK(\d+)\x00/g, (_full, idx) => {
     return codeBlocks[Number(idx)] ?? '';
   });

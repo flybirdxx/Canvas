@@ -67,7 +67,12 @@ export function computeStoryboardDiff(
         const titleChanged = existing.title !== parsed.title;
         const contentChanged = existing.content !== parsed.content;
         const newLines = parseSceneLines(parsed.content);
-        const linesChanged = JSON.stringify(existing.lines) !== JSON.stringify(newLines);
+
+        // Compare lines without generated IDs
+        const existingLinesNoId = existing.lines?.map(({ id, ...rest }) => rest) || [];
+        const newLinesNoId = newLines.map(({ id, ...rest }) => rest);
+        const linesChanged = JSON.stringify(existingLinesNoId) !== JSON.stringify(newLinesNoId);
+
         if (titleChanged || contentChanged || linesChanged) {
           scenesToUpdate.push({
             id: existing.id,

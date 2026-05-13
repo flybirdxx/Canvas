@@ -32,7 +32,7 @@ function buildPdfImage(stage: any, x: number, y: number, w: number, h: number): 
     return stage.toDataURL({ x, y, width: w, height: h, pixelRatio: 2, mimeType: 'image/png' });
   } catch (e) {
     console.error('PDF rasterize failed', e);
-    throw new Error('导出失败：素材可能存在跨域限制，请尝试导出为 SVG 格式。');
+    throw new Error('导出失败：素材可能存在跨域限制，请尝试导出为 SVG 格式。', { cause: e });
   }
 }
 

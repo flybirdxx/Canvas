@@ -1142,15 +1142,15 @@ async function submitTask(endpoint: string, body: Record<string, unknown>, apiKe
       body: JSON.stringify(body),
     });
   } catch (e: unknown) {
-    throw new Error(`RunningHub 任务提交失败：${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`RunningHub 任务提交失败：${e instanceof Error ? e.message : String(e)}`, { cause: e });
   }
   if (!resp.ok) {
     const parsed = await parseErrorBody(resp);
     throw new Error(`RunningHub 任务提交失败（${resp.status}）：${parsed.message}`);
   }
   let json: unknown;
-  try { json = await resp.json(); } catch {
-    throw new Error('RunningHub 任务提交响应解析失败');
+  try { json = await resp.json(); } catch (e) {
+    throw new Error('RunningHub 任务提交响应解析失败', { cause: e });
   }
   const j = json as {
     errorCode?: string;
