@@ -45,8 +45,8 @@ describe('computeStoryboardDiff', () => {
 
   it('should do nothing if existing scenes perfectly match parsed scenes', () => {
     const existingScenes: SceneElement[] = [
-      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', content: 'Content 1', scriptId: 'script-1' },
-      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', content: 'Content 2', scriptId: 'script-1' },
+      { id: 's1', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 1, title: 'Scene 1', content: 'Content 1', scriptId: 'script-1', lines: [{ id: 'ignore1', role: '', content: 'Content 1', emotion: undefined, emotionEmoji: undefined, lineType: 'action', timestamp: undefined }] },
+      { id: 's2', type: 'scene', x: 0, y: 0, width: 100, height: 100, sceneNum: 2, title: 'Scene 2', content: 'Content 2', scriptId: 'script-1', lines: [{ id: 'ignore2', role: '', content: 'Content 2', emotion: undefined, emotionEmoji: undefined, lineType: 'action', timestamp: undefined }] },
     ];
     
     const parsedScenes: ParsedScene[] = [

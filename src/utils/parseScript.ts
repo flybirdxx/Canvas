@@ -105,17 +105,11 @@ export function parseSceneLines(content: string): ScriptLine[] {
     const line = raw.trim();
     if (!line) continue;
 
-    let role = '';
-    let lineContent = '';
-    let emotion: string | undefined;
-    let emotionEmoji: string | undefined;
-    let lineType: LineType = 'dialogue';
-
     // Try [情绪] 快捷语法
     const actionMatch = line.match(ACTION_RE);
     if (actionMatch) {
-      lineType = 'action';
-      lineContent = actionMatch[1].trim();
+      const lineType: LineType = 'action';
+      const lineContent = actionMatch[1].trim();
       result.push({
         id: uuidv4(),
         role: '',
@@ -130,8 +124,8 @@ export function parseSceneLines(content: string): ScriptLine[] {
 
     const envMatch = line.match(ENVIRONMENT_RE);
     if (envMatch) {
-      lineType = 'environment';
-      lineContent = envMatch[1].trim();
+      const lineType: LineType = 'environment';
+      const lineContent = envMatch[1].trim();
       result.push({
         id: uuidv4(),
         role: '',
@@ -147,9 +141,12 @@ export function parseSceneLines(content: string): ScriptLine[] {
     // Try 角色 (情绪)：内容
     const emotionMatch = line.match(DIALOGUE_EMOTION_RE);
     if (emotionMatch) {
-      role = emotionMatch[1].trim();
+      const role = emotionMatch[1].trim();
       const rawEmotion = emotionMatch[2].trim();
-      lineContent = emotionMatch[3].trim();
+      const lineContent = emotionMatch[3].trim();
+
+      let emotion: string | undefined;
+      let emotionEmoji: string | undefined;
 
       const found = findEmotion(rawEmotion);
       if (found) {
@@ -174,8 +171,8 @@ export function parseSceneLines(content: string): ScriptLine[] {
     // Try 角色：内容
     const plainMatch = line.match(DIALOGUE_PLAIN_RE);
     if (plainMatch) {
-      role = plainMatch[1].trim();
-      lineContent = plainMatch[2].trim();
+      const role = plainMatch[1].trim();
+      const lineContent = plainMatch[2].trim();
 
       result.push({
         id: uuidv4(),
@@ -212,7 +209,7 @@ export function parseScriptMarkdown(text: string): ParsedScene[] {
   const scenes: ParsedScene[] = [];
   let current: ParsedScene | null = null;
   /** CR-2: collect lines before the first scene anchor so they aren't silently dropped. */
-  let preambleLines: string[] = [];
+  const preambleLines: string[] = [];
 
   for (const raw of rawLines) {
     const line = raw.trimEnd();

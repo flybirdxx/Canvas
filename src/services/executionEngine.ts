@@ -339,7 +339,7 @@ export async function executeNode(
 
     // Strategy: find or create a linked image node, then execute that
     let imageId = scene.linkedImageId;
-    let imageEl = imageId ? canvasState.elements.find(e => e.id === imageId) : undefined;
+    const imageEl = imageId ? canvasState.elements.find(e => e.id === imageId) : undefined;
 
     if (!imageEl) {
       // No linked image — create one at scene's right side
@@ -373,7 +373,6 @@ export async function executeNode(
       // Update scene.linkedImageId
       canvasState.updateElement(el.id, { linkedImageId: newImageId });
       imageId = newImageId;
-      imageEl = newImage;
 
       appendLog(execId, 'info', `${nodeId} 自动创建图像节点 ${newImageId}`, nodeId);
 
