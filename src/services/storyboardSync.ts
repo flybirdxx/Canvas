@@ -5,6 +5,7 @@ import { parseSceneLines } from '@/utils/parseScript';
 /** Attributes that may need updating on an already-existing scene. */
 export interface SceneUpdate {
   id: string;
+  sourceSceneNum?: number;
   title: string;
   content: string;
   lines?: ScriptLine[];
@@ -15,6 +16,14 @@ export interface SyncDiff {
   /** CR-3: existing scene nodes whose title/content/lines changed upstream. */
   scenesToUpdate: SceneUpdate[];
   idsToDelete: string[];
+}
+
+function comparableLines(lines: ScriptLine[]): Array<Omit<ScriptLine, 'id'>> {
+  return lines.map(({ id: _id, ...line }) => line);
+}
+
+function getScriptSceneKey(scene: SceneElement): number {
+  return scene.sourceSceneNum ?? scene.sceneNum;
 }
 
 /**
@@ -29,11 +38,11 @@ export function computeStoryboardDiff(
   scriptY: number
 ): SyncDiff {
   const scriptSceneNums = new Set(parsedScenes.map(s => s.sceneNum));
-  const existingSceneNums = new Set(existingScenes.map(s => s.sceneNum));
+  const existingSceneNums = new Set(existingScenes.map(getScriptSceneKey));
 
   // Build lookup: sceneNum → existing SceneElement
   const existingByNum = new Map<number, SceneElement>();
-  for (const s of existingScenes) existingByNum.set(s.sceneNum, s);
+  for (const s of existingScenes) existingByNum.set(getScriptSceneKey(s), s);
 
   const scenesToAdd: SceneElement[] = [];
   const scenesToUpdate: SceneUpdate[] = [];
@@ -54,6 +63,7 @@ export function computeStoryboardDiff(
         width: baseWidth,
         height: baseHeight,
         sceneNum: parsed.sceneNum,
+        sourceSceneNum: parsed.sceneNum,
         title: parsed.title,
         content: parsed.content,
         lines: parseSceneLines(parsed.content),
@@ -64,13 +74,16 @@ export function computeStoryboardDiff(
       // CR-3: check if existing scene needs content update
       const existing = existingByNum.get(parsed.sceneNum);
       if (existing) {
+        const sourceChanged = existing.sourceSceneNum !== parsed.sceneNum;
         const titleChanged = existing.title !== parsed.title;
         const contentChanged = existing.content !== parsed.content;
         const newLines = parseSceneLines(parsed.content);
-        const linesChanged = JSON.stringify(existing.lines) !== JSON.stringify(newLines);
-        if (titleChanged || contentChanged || linesChanged) {
+        const existingLines = existing.lines ?? parseSceneLines(existing.content);
+        const linesChanged = JSON.stringify(comparableLines(existingLines)) !== JSON.stringify(comparableLines(newLines));
+        if (sourceChanged || titleChanged || contentChanged || linesChanged) {
           scenesToUpdate.push({
             id: existing.id,
+            sourceSceneNum: parsed.sceneNum,
             title: parsed.title,
             content: parsed.content,
             lines: newLines,
@@ -82,7 +95,7 @@ export function computeStoryboardDiff(
 
   // Remove orphaned scene nodes
   const idsToDelete = existingScenes
-    .filter(s => !scriptSceneNums.has(s.sceneNum))
+    .filter(s => !scriptSceneNums.has(getScriptSceneKey(s)))
     .map(s => s.id);
 
   return { scenesToAdd, scenesToUpdate, idsToDelete };

@@ -430,7 +430,7 @@ export function FileNode({ el }: { el: any }) {
     }
 
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [el.id, el.blobKey]);
+  }, [el.id, el.blobKey, el.persistence, el.src]);
 
   const hydratedEl = (el.persistence === 'blob' && resolvedSrc)
     ? { ...el, src: resolvedSrc }

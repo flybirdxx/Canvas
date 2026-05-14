@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { syncAllScripts } from '@/services/storyboardSync';
 
@@ -11,7 +11,7 @@ export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObjec
   // CR-5: skip diff when elements reference hasn't changed (no-op re-renders)
   const prevElementsRef = useRef<typeof elements>(elements);
 
-  const applyDiff = () => {
+  const applyDiff = useCallback(() => {
     const diff = syncAllScripts(elements);
     if (diff.idsToDelete.length > 0) {
       deleteElements(diff.idsToDelete);
@@ -22,12 +22,13 @@ export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObjec
     // CR-3: update existing scene content when script changed
     for (const update of diff.scenesToUpdate) {
       updateElement(update.id, {
+        sourceSceneNum: update.sourceSceneNum,
         title: update.title,
         content: update.content,
         lines: update.lines,
       });
     }
-  };
+  }, [elements, deleteElements, addElement, updateElement]);
 
   useEffect(() => {
     // CR-5: skip when elements haven't changed — avoids full diff on unrelated state changes
@@ -39,7 +40,7 @@ export function useStoryboardSync(isDraggingOrResizingRef: React.MutableRefObjec
       return;
     }
     applyDiff();
-  }, [elements, deleteElements, addElement, updateElement, isDraggingOrResizingRef]);
+  }, [elements, applyDiff, isDraggingOrResizingRef]);
 
   const flushSync = () => {
     if (flushSyncAfterDragRef.current) {

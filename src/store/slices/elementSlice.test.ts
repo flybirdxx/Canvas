@@ -1,6 +1,6 @@
 // Store slice tests - element CRUD, history undo/redo, connections 
   
-import { describe, it, expect, beforeEach } from 'vitest'; 
+import { describe, it, expect } from 'vitest'; 
 import { create } from 'zustand'; 
 import { createElementSlice } from './elementSlice';  
 import { createHistorySlice } from './historySlice';  

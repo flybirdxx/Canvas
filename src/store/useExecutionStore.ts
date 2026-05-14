@@ -1,8 +1,8 @@
 // transient store — no persist
 import { create } from 'zustand';
 
-/** Five states that a node can be in during an execution run. */
-export type ExecutionNodeStatus = 'idle' | 'queued' | 'running' | 'success' | 'failed';
+/** States that a node can be in during an execution run. */
+export type ExecutionNodeStatus = 'idle' | 'queued' | 'running' | 'pending' | 'success' | 'failed';
 
 /** Error kinds that can cause a node to enter the failed state. */
 export type ExecutionErrorKind = 'api-limit' | 'network' | 'timeout' | 'unknown';
@@ -40,11 +40,12 @@ export interface ExecutionRun {
 /* -------------------------------------------------------------------- */
 
 const LEGAL_TRANSITIONS: Record<ExecutionNodeStatus, ExecutionNodeStatus[]> = {
-  idle:    ['queued'],
+  idle:    ['queued', 'running'],
   queued:  ['running'],
-  running: ['success', 'failed'],
+  running: ['idle', 'success', 'failed', 'pending'],
   success: [],
-  failed:  ['queued'], // Story 1.4: allows retry — queued triggers re-execution
+  failed:  ['queued'], // Story 1.4
+  pending: ['success', 'failed'],
 };
 
 function isLegalTransition(from: ExecutionNodeStatus, to: ExecutionNodeStatus): boolean {
@@ -160,7 +161,7 @@ interface ExecutionState {
 /*  unsubscribe function returned by subscribe() on unmount.              */
 /* -------------------------------------------------------------------- */
 
-let _listeners = new Set<(state: ExecutionState) => void>();
+const _listeners = new Set<(state: ExecutionState) => void>();
 
 function notify(state: ExecutionState) {
   _listeners.forEach(fn => fn(state));
@@ -294,6 +295,7 @@ export const useExecutionStore = create<ExecutionState>()((set, get) => ({
           `[executionStore] completeRun(${execId}) called but ` +
           `not all nodes are terminal: ${JSON.stringify(getRunStats(run))}`,
         );
+        return s;
       }
       const runs = [...s.runs];
       runs[idx] = { ...run, completed: true, finishedAt: Date.now() };
@@ -475,7 +477,7 @@ export function getRunStats(run: ExecutionRun) {
     running: states.filter(s => s.status === 'running').length,
     success: states.filter(s => s.status === 'success').length,
     failed:  states.filter(s => s.status === 'failed').length,
-    pending: states.filter(s => s.status === 'idle' || s.status === 'queued').length,
+    pending: states.filter(s => s.status === 'pending').length,
   };
 }
 

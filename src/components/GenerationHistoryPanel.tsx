@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ImageIcon, Video, MapPin, X, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
+import { ImageIcon, Video, MapPin, X, Clock, History, ChevronDown } from 'lucide-react';
 import { useGenerationHistoryStore, GenHistoryEntry } from '@/store/useGenerationHistoryStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
 

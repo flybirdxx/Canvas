@@ -81,7 +81,6 @@ export async function runTextGeneration(payload: TextGenRequestPayload): Promise
   } else {
     // Leave existing text in place; surface the error
     const msg = `文本生成失败：${result.message}${result.detail ? `\n${result.detail}` : ''}`;
-    // eslint-disable-next-line no-alert
     alert(msg);
   }
 

@@ -49,7 +49,7 @@ src/
 ├── App.tsx                     # App Shell（布局 + 快捷键 + 生命周期）
 ├── index.css                   # TailwindCSS + CSS tokens
 ├── types/
-│   └── canvas.ts               # 核心类型定义（7 种节点 + Connection + Port）
+│   └── canvas.ts               # 核心类型定义（11 种节点 + Connection + Port）
 ├── components/
 │   ├── canvas/
 │   │   ├── InfiniteCanvas.tsx  # 画布主控（事件/视图变换/拖放）
@@ -109,6 +109,6 @@ src/
 ## 运行时生命周期
 
 1. **启动** → StrictMode 挂载 App → Zustand persist rehydrate (localStorage 同步读取)
-2. **恢复** → `taskResume.resumePendingImageTasks()` 扫描带 `pendingTask` 的 AIGeneratingElement，调用 `pollImageTaskByProviderId` 接回未完成任务
+2. **恢复** → `taskResume.resumePendingImageTasks()` 扫描带 `pendingTask` 的 AIGeneratingElement，按任务类型调用 `pollImageTaskByProviderId` / `pollVideoTaskByProviderId` 接回未完成任务
 3. **运行** → 节点 CRUD → 连线 → AI 生成 → 300ms 防抖持久化 → 周期性任务扫描（每 3 分钟）
 4. **关闭** → `beforeunload` / `pagehide` 事件 → `flush()` 强制将最后一次 set 写入 localStorage

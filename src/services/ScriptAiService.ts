@@ -58,7 +58,7 @@ function stripMarkdownFence(text: string): string {
 }
 
 /** 验证并清洗 LLM 返回的单行数据 */
-function sanitizeLine(raw: unknown, index: number): ScriptLine | null {
+function sanitizeLine(raw: unknown, _index: number): ScriptLine | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
 

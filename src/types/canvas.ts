@@ -337,6 +337,8 @@ export interface ScriptElement extends BaseElement {
 export interface SceneElement extends BaseElement {
   type: 'scene';
   sceneNum: number;
+  /** Original scene number from the parent script. Stable identity for script sync. */
+  sourceSceneNum?: number;
   title: string;
   content: string;
   /** 结构化剧本行 (OmniScript 风格)。缺省时回退到 content。 */

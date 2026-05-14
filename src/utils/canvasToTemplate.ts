@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Connection } from '@/types/canvas';
 import type { CanvasTemplate, TemplateElement, TemplateConnection } from '@/data/templates';
 import { useCanvasStore } from '@/store/useCanvasStore';
 

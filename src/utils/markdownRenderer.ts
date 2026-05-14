@@ -14,7 +14,7 @@ export function renderMarkdown(md: string): string {
     codeBlocks.push(
       `<pre style="background:var(--bg-1);border-radius:6px;padding:10px;overflow-x:auto;font-size:0.875em;line-height:1.5;margin:8px 0;"><code>${escapeHtml(code.trimEnd())}</code></pre>`,
     );
-    return `\x00CODEBLOCK${idx}\x00`;
+    return `@@CODEBLOCK_${idx}@@`;
   });
 
   // Phase 2: inline formatting (order matters — bold before italic)
@@ -42,7 +42,7 @@ export function renderMarkdown(md: string): string {
       // Don't wrap block-level elements (headings, hrs, pre/code blocks)
       if (
         /^<(h[2-4]|hr|pre|div|blockquote|ul|ol|li|table)/.test(trimmed) ||
-        /^\x00CODEBLOCK\d+\x00$/.test(trimmed)
+        /^@@CODEBLOCK_\d+@@$/.test(trimmed)
       ) {
         return trimmed;
       }
@@ -53,7 +53,7 @@ export function renderMarkdown(md: string): string {
     .join('\n');
 
   // Phase 6: restore code blocks
-  processed = processed.replace(/\x00CODEBLOCK(\d+)\x00/g, (_full, idx) => {
+  processed = processed.replace(/@@CODEBLOCK_(\d+)@@/g, (_full, idx) => {
     return codeBlocks[Number(idx)] ?? '';
   });
 

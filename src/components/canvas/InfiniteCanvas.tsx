@@ -66,7 +66,6 @@ export function InfiniteCanvas() {
   const {
     stageConfig, setStageConfig,
     activeTool,
-    setSelection,
     elements, connections, addConnection,
     drawingConnection, setDrawingConnection,
     selectedIds,

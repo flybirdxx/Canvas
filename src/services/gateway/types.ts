@@ -205,6 +205,8 @@ export interface VideoGenRequest {
    * single seed frame.
    */
   seedImage?: string;
+  /** Execution run id that submitted this task, persisted for resume status updates. */
+  execId?: string;
   /**
    * 异步 provider 在提交成功、开始轮询前会调用此回调告知上层 taskId。
    * 上层利用该信号把 `{providerId, taskId}` 持久化到 placeholder.pendingTask 上，
@@ -317,6 +319,13 @@ export interface GatewayProvider {
    * 超时 / 浏览器刷新遗留的未完成任务。同步 provider 不需要实现。
    */
   pollImageTask?(taskId: string, config: ProviderRuntimeConfig): Promise<ImageGenResult>;
+
+  /**
+   * Video counterpart of pollImageTask. Providers with async video tasks should
+   * implement this so `taskResume` can recover pending video placeholders after
+   * refresh or restart.
+   */
+  pollVideoTask?(taskId: string, config: ProviderRuntimeConfig): Promise<VideoGenResult>;
 
   /**
    * Runs a text generation (LLM chat completion). Same error-return contract

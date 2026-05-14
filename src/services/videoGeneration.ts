@@ -25,6 +25,8 @@ export interface VideoGenRequest {
   durationSec: number;
   /** Optional i2v seed frame (data URL or hosted URL). */
   seedImage?: string;
+  /** Execution run id that submitted this async task. */
+  execId?: string;
 }
 
 export type VideoGenErrorKind = GatewayErrorKind;
@@ -40,7 +42,7 @@ function getStore() {
   return useCanvasStore.getState();
 }
 
-function setPlaceholderError(id: string, error: VideoGenError) {
+export function setPlaceholderVideoError(id: string, error: VideoGenError) {
   const store = getStore();
   const el = store.elements.find(e => e.id === id);
   if (!el || el.type !== 'aigenerating') return;
@@ -91,7 +93,7 @@ function attachPendingVideoTask(id: string, pending: PendingGenerationTask) {
  */
 const materializingVideos = new Set<string>();
 
-function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, prompt: string): string | null {
+export function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, prompt: string): string | null {
   if (materializingVideos.has(placeholderId)) return null;
   materializingVideos.add(placeholderId);
 
@@ -140,6 +142,37 @@ function replacePlaceholderWithVideo(placeholderId: string, videoUrl: string, pr
   return newElement.id;
 }
 
+export function completeVideoPlaceholder(
+  placeholderId: string,
+  videoUrl: string,
+  request: VideoGenRequest,
+): string | null {
+  const newElementId = replacePlaceholderWithVideo(placeholderId, videoUrl, request.prompt);
+  if (!newElementId) return null;
+
+  const name = request.prompt.trim().split(/\r?\n/)[0].slice(0, 40) || '生成视频';
+  useAssetLibraryStore.getState().addAsset({
+    kind: 'video',
+    src: videoUrl,
+    name,
+    prompt: request.prompt,
+    width: request.w,
+    height: request.h,
+    source: 'generated',
+  });
+  useGenerationHistoryStore.getState().addEntry({
+    id: uuidv4(),
+    elementId: newElementId,
+    prompt: request.prompt,
+    model: request.model || '',
+    thumbnailUrl: videoUrl,
+    resultUrls: [videoUrl],
+    modality: 'video',
+  });
+
+  return newElementId;
+}
+
 /**
  * Run a single video generation through the gateway registry, filling one
  * placeholder in-place. Fails gracefully — never rejects; errors surface via
@@ -168,6 +201,7 @@ export async function runVideoGeneration(
     size: request.size,
     durationSec: request.durationSec,
     seedImage: request.seedImage,
+    execId: request.execId,
     onTaskSubmitted: ({ providerId, taskId }) => {
       attachPendingVideoTask(placeholderId, {
         providerId,
@@ -177,6 +211,9 @@ export async function runVideoGeneration(
           model: request.model,
           prompt: request.prompt,
           size: request.size,
+          w: request.w,
+          h: request.h,
+          execId: request.execId,
           durationSec: request.durationSec,
           seedImage: request.seedImage,
         },
@@ -185,7 +222,7 @@ export async function runVideoGeneration(
   });
 
   if (result.ok === false) {
-    setPlaceholderError(placeholderId, {
+    setPlaceholderVideoError(placeholderId, {
       kind: result.kind,
       message: result.message,
       detail: result.detail,
@@ -205,7 +242,7 @@ export async function runVideoGeneration(
 
   const url = result.urls[0];
   if (!url) {
-    setPlaceholderError(placeholderId, {
+    setPlaceholderVideoError(placeholderId, {
       kind: 'empty',
       message: '接口未返回视频',
       request,
@@ -216,29 +253,8 @@ export async function runVideoGeneration(
     return;
   }
 
-  const newElementId = replacePlaceholderWithVideo(placeholderId, url, request.prompt);
+  const newElementId = completeVideoPlaceholder(placeholderId, url, request);
   if (!newElementId) return; // 并发去重：另一个调用路径已 materialize 此 placeholder
-
-  // 与 imageGeneration.replacePlaceholderWithImage 对齐：素材库归档 + 生成历史记录。
-  const name = request.prompt.trim().split(/\r?\n/)[0].slice(0, 40) || '生成视频';
-  useAssetLibraryStore.getState().addAsset({
-    kind: 'video',
-    src: url,
-    name,
-    prompt: request.prompt,
-    width: request.w,
-    height: request.h,
-    source: 'generated',
-  });
-  useGenerationHistoryStore.getState().addEntry({
-    id: uuidv4(),
-    elementId: newElementId,
-    prompt: request.prompt,
-    model: request.model || '',
-    thumbnailUrl: url,
-    resultUrls: [url],
-    modality: 'video',
-  });
 
   useGenerationQueueStore.getState().completeTask(taskId, 'success');
 }

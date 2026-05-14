@@ -1,7 +1,7 @@
 // src/utils/exportMp4.ts
 import { getStage } from './stageRegistry';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { SceneElement } from '@/types/canvas';
+import type { ImageElement, SceneElement } from '@/types/canvas';
 
 export type Transition = 'none' | 'fade' | 'slide';
 export type Resolution = '720p' | '1080p' | '4k';
@@ -112,9 +112,9 @@ async function loadImageDataFromUrl(src: string, w: number, h: number): Promise<
 
 async function collectStoryboardFrames(
   opts: ExportMp4Options,
-): Promise<{ frames: ImageData[]; sceneIds: string[] }> {
+): Promise<{ frames: ImageData[] }> {
   const stage = getStage();
-  const { elements, stageConfig } = useCanvasStore.getState();
+  const { elements } = useCanvasStore.getState();
 
   if (!stage) throw new Error('画布尚未就绪，无法导出。');
 
@@ -126,11 +126,19 @@ async function collectStoryboardFrames(
 
   const { width: targetW, height: targetH } = RESOLUTION_MAP[opts.resolution];
   const frames: ImageData[] = [];
+  const images = elements.filter((e): e is ImageElement => e.type === 'image');
 
   for (const scene of scenes) {
     let frameData: ImageData | null = null;
 
-    if (scene.content) {
+    if (scene.linkedImageId) {
+      const linked = images.find(img => img.id === scene.linkedImageId);
+      if (linked?.src) {
+        frameData = await loadImageDataFromUrl(linked.src, targetW, targetH);
+      }
+    }
+
+    if (!frameData && scene.content) {
       const imgMatch = scene.content.match(/!\[.*?\]\((.*?)\)/);
       if (imgMatch) {
         frameData = await loadImageDataFromUrl(imgMatch[1], targetW, targetH);
@@ -144,7 +152,18 @@ async function collectStoryboardFrames(
     frames.push(frameData);
   }
 
-  return { frames, sceneIds: scenes.map(s => s.id) };
+  return { frames };
+}
+
+function blendFrames(prev: ImageData, next: ImageData, alpha: number): ImageData {
+  const out = new ImageData(prev.width, prev.height);
+  for (let i = 0; i < out.data.length; i += 4) {
+    out.data[i] = Math.round(prev.data[i] * (1 - alpha) + next.data[i] * alpha);
+    out.data[i + 1] = Math.round(prev.data[i + 1] * (1 - alpha) + next.data[i + 1] * alpha);
+    out.data[i + 2] = Math.round(prev.data[i + 2] * (1 - alpha) + next.data[i + 2] * alpha);
+    out.data[i + 3] = 255;
+  }
+  return out;
 }
 
 function generateTransitionFrames(
@@ -160,14 +179,7 @@ function generateTransitionFrames(
 
   if (transition === 'fade') {
     for (let i = 0; i < count; i++) {
-      const alpha = i / count;
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-      ctx.putImageData(prev, 0, 0);
-      ctx.globalAlpha = alpha;
-      ctx.putImageData(next, 0, 0);
-      frames.push(ctx.getImageData(0, 0, w, h));
+      frames.push(blendFrames(prev, next, (i + 1) / (count + 1)));
     }
   } else if (transition === 'slide') {
     for (let i = 0; i < count; i++) {
@@ -206,14 +218,19 @@ export async function concatenateFrames(
   if (!isWebCodecsSupported()) {
     throw new Error('您的浏览器不支持 WebCodecs（MP4 编码），请使用 Chrome 94+ / Edge 94+ / Safari 16.4+。');
   }
+  if (opts.audioData) {
+    throw new Error('当前 MP4 导出暂不支持混入音频轨道，请先移除音频文件后导出。');
+  }
 
   const { width, height } = RESOLUTION_MAP[opts.resolution];
   const fps = 30;
-  const transitionFrames = opts.transition !== 'none' ? Math.round(fps * 0.5) : 0;
+  const holdFrameCount = Math.max(1, Math.round(Math.max(0.1, opts.frameDuration) * fps));
 
   const totalFrames: ImageData[] = [];
   for (let i = 0; i < frames.length; i++) {
-    totalFrames.push(frames[i]);
+    for (let hold = 0; hold < holdFrameCount; hold++) {
+      totalFrames.push(frames[i]);
+    }
     if (i < frames.length - 1 && opts.transition !== 'none') {
       const transFrames = generateTransitionFrames(
         frames[i], frames[i + 1],
@@ -271,10 +288,13 @@ export async function concatenateFrames(
   return { blob, width, height, frameCount: totalEncodedFrames };
 }
 
-export async function exportMp4(opts: ExportMp4Options): Promise<ExportMp4Result> {
-  const { frames, sceneIds } = await collectStoryboardFrames(opts);
+export async function exportMp4(
+  opts: ExportMp4Options,
+  onProgress?: (pct: number) => void,
+): Promise<ExportMp4Result> {
+  const { frames } = await collectStoryboardFrames(opts);
 
-  const result = await concatenateFrames(frames, opts);
+  const result = await concatenateFrames(frames, opts, onProgress);
 
   downloadBlob(result.blob, `canvas-storyboard-${Date.now()}.mp4`);
 

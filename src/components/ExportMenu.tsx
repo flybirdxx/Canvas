@@ -199,7 +199,6 @@ export function ExportMenu() {
                 icon={<Film className="w-4 h-4" strokeWidth={1.6} style={{ color: 'var(--accent)' }} />}
                 label="导出 MP4"
                 onClick={() => {
-                  const sceneCount = (elements.filter((e): e is SceneElement => e.type === 'scene')).length;
                   setOpen(false);
                   setTimeout(() => setMp4DialogOpen(true), 50);
                 }}

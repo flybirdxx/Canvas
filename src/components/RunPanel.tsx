@@ -11,16 +11,16 @@ import {
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { dispatchToast } from './Toast';
 import { appendLog, clearLogs, subscribeLogs, type LogEntry } from '@/services/executionLogs';
-import { cancelExecution, retryNode, retryRun, restartRun } from '@/services/executionEngine';
+import { cancelExecution, retryNode, restartRun } from '@/services/executionEngine';
 
 const STATUS_LABEL: Record<ExecutionNodeStatus, string> = {
-  idle: '空闲', queued: '排队中', running: '执行中', success: '成功', failed: '失败',
+  idle: '空闲', queued: '排队中', running: '执行中', pending: '等待中', success: '成功', failed: '失败',
 };
 const STATUS_COLOR: Record<ExecutionNodeStatus, string> = {
-  idle: '#999', queued: '#E6A23C', running: '#409EFF', success: '#67C23A', failed: '#F56C6C',
+  idle: '#999', queued: '#E6A23C', running: '#409EFF', pending: '#909399', success: '#67C23A', failed: '#F56C6C',
 };
 const STATUS_ICON: Record<ExecutionNodeStatus, string> = {
-  idle: '○', queued: '◷', running: '◉', success: '✓', failed: '✗',
+  idle: '○', queued: '◷', running: '◉', pending: '◌', success: '✓', failed: '✗',
 };
 
 /* -------------------------------------------------------------------- */
@@ -210,12 +210,6 @@ export function RunPanel() {
     cancelExecution(activeExecId);
     appendLog(activeExecId, 'warn', '用户取消执行');
     dispatchToast('已取消', 'info');
-  };
-
-  // Story 1.4: retry all failed nodes.
-  const handleRetryAll = async () => {
-    if (!activeExecId) return;
-    await retryRun(activeExecId);
   };
 
   // Story 1.4: restart entire run from scratch.

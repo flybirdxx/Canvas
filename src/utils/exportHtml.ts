@@ -56,10 +56,8 @@ function connectionPath(conn: Connection, elements: CanvasElement[]): string {
 }
 
 function renderNodeCard(el: CanvasElement): string {
-  const id = escapeHtml(el.id);
   const w = el.width;
   const h = el.height;
-  const bg = '#FFFFFF';
   const border = '1px solid var(--line-1,#e5e7eb)';
 
   switch (el.type) {
@@ -70,8 +68,6 @@ function renderNodeCard(el: CanvasElement): string {
     }
     case 'circle': {
       const s = el as ShapeElement;
-      const rx = w / 2, ry = h / 2;
-      const cx = el.x + rx, cy = el.y + ry;
       const style = `width:${w}px;height:${h}px;border-radius:50%;background:${s.fill};border:${s.stroke ? `${s.strokeWidth ?? 1}px solid ${s.stroke}` : 'none'};`;
       return `<div class="node node-circle" style="position:absolute;left:${el.x}px;top:${el.y}px;${style}"></div>`;
     }
@@ -137,8 +133,6 @@ export async function exportAsStandaloneHtml(): Promise<boolean> {
   minX -= pad; minY -= pad; maxX += pad; maxY += pad;
   const canvasW = maxX - minX;
   const canvasH = maxY - minY;
-
-  const nodeCards = elements.map(renderNodeCard).join('\n');
 
   const svgConns = relConns
     .map(c => {

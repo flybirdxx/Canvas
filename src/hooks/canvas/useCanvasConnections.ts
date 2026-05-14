@@ -16,7 +16,7 @@ export interface QuickAddMenuState {
 }
 
 export function useCanvasConnections() {
-  const { elements, addElement, setSelection, setActiveTool, addConnection } = useCanvasStore();
+  const { addElement, setSelection, setActiveTool } = useCanvasStore();
   const [quickAddMenu, setQuickAddMenu] = useState<QuickAddMenuState | null>(null);
 
   function findPortUnderMouse(els: CanvasElement[], x: number, y: number, isDrawingFromOutput: boolean, fromPortType: string) {

@@ -9,7 +9,7 @@ import { POLAROID_STYLE, useExecutionBorder } from './shared';
 import { MarkdownRenderer } from './sceneNodeRenderer';
 
 export function ScriptNode({
-  el, width, height, isSelected, autoEdit,
+  el, width, height, isSelected,
 }: {
   el: ScriptElement;
   width: number;
