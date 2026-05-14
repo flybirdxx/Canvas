@@ -73,7 +73,6 @@ function AppStoryboardViewLazy({
  */
 export default function App() {
   const elements = useCanvasStore(s => s.elements);
-  const selectedIds = useCanvasStore(s => s.selectedIds);
   const activeTool = useCanvasStore(s => s.activeTool);
   const setActiveTool = useCanvasStore(s => s.setActiveTool);
   const stageConfig = useCanvasStore(s => s.stageConfig);
@@ -82,13 +81,9 @@ export default function App() {
   const viewMode = useCanvasStore(s => s.viewMode);
   const setViewMode = useCanvasStore(s => s.setViewMode);
 
-  const selectedSceneId =
-    selectedIds.length === 1 &&
-    elements.find(e => e.id === selectedIds[0])?.type === 'scene'
-      ? selectedIds[0]
-      : null;
-  const selectedScene = selectedSceneId
-    ? elements.find(e => e.id === selectedSceneId) as SceneElement | undefined
+  const [sceneOverlayId, setSceneOverlayId] = useState<string | null>(null);
+  const selectedScene = sceneOverlayId
+    ? elements.find(e => e.id === sceneOverlayId && e.type === 'scene') as SceneElement | undefined
     : undefined;
 
   // Storyboard execution: IDs and count of scene cards selected in StoryboardView
@@ -121,6 +116,21 @@ export default function App() {
     window.addEventListener('open-settings', open);
     return () => window.removeEventListener('open-settings', open);
   }, []);
+
+  useEffect(() => {
+    const openScene = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string }>).detail;
+      if (detail?.id) setSceneOverlayId(detail.id);
+    };
+    window.addEventListener('scene:edit', openScene);
+    return () => window.removeEventListener('scene:edit', openScene);
+  }, []);
+
+  useEffect(() => {
+    if (sceneOverlayId && !elements.some(e => e.id === sceneOverlayId && e.type === 'scene')) {
+      setSceneOverlayId(null);
+    }
+  }, [elements, sceneOverlayId]);
 
   // 启动时立即扫一次异步 provider 遗留的 pending 任务（RH 之类），之后每 3 分钟
   // 再扫一次。原因：
@@ -332,7 +342,7 @@ export default function App() {
       {viewMode === 'canvas' && selectedScene && (
         <SceneDetailOverlay
           scene={selectedScene}
-          onClose={() => setSelection([])}
+          onClose={() => setSceneOverlayId(null)}
         />
       )}
 

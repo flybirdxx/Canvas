@@ -64,6 +64,7 @@ export function SceneNode({
       onMouseLeave={() => setHovered(false)}
       onDblClick={() => {
         setSelection([el.id]);
+        window.dispatchEvent(new CustomEvent('scene:edit', { detail: { id: el.id } }));
       }}
     >
       <Rect width={width} height={height} fill="transparent" />
