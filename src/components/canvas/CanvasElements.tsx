@@ -3,14 +3,12 @@ import { Group, Rect, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import type { GuideLine } from '@/utils/alignmentUtils';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { ScriptElement, SceneElement } from '@/types/canvas';
 import {
   ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
-  AIGeneratingNode, FileNode, ScriptNode, SceneNode,
+  AIGeneratingNode, FileNode, OmniScriptNode,
   PortOverlay, SelectionHandles, SnapCallbacks, RunningPulse
 } from './nodes';
 import { INK_1 } from './nodes/shared';
-import { useStoryboardSync } from '@/hooks/canvas/useStoryboardSync';
 import { setDragOffset, clearDragOffset, setGroupDragOffsets, clearGroupDragOffsets } from './dragOffsets';
 
 
@@ -27,8 +25,6 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
 
   const isDraggingOrResizingRef = useRef(false);
   const dragStartPosRef = useRef<Record<string, { x: number; y: number }>>({});
-
-  const { flushSync } = useStoryboardSync(isDraggingOrResizingRef);
 
   // 预计算选中编组成员 ID 集合，避免渲染循环中 O(N*G) 的嵌套查找
   const selectedGroupMemberIds = useMemo(() => {
@@ -130,7 +126,6 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           },
           onDragEnd: (e: any) => {
             isDraggingOrResizingRef.current = false;
-            flushSync();
             if (e.target.id() === id) {
               // 从 Konva 节点直接读取最终位置（含 dragBoundFunc 的 snap 偏移），
               // 避免从 store 重新计算导致的 snap 偏移丢失。
@@ -175,10 +170,8 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           nodeContent = <MediaNode el={el} />;
         } else if (el.type === 'file') {
           nodeContent = <FileNode el={el} />;
-        } else if (el.type === 'script') {
-          nodeContent = <ScriptNode el={el as ScriptElement} width={width} height={height} isSelected={isSelected} autoEdit={!!(el as ScriptElement).isNew} />;
-        } else if (el.type === 'scene') {
-          nodeContent = <SceneNode el={el as SceneElement} width={width} height={height} isSelected={isSelected} />;
+        } else if (el.type === 'omniscript') {
+          nodeContent = <OmniScriptNode el={el} width={width} height={height} />;
         }
 
         // FR1 grouping: if node belongs to a selected group, render a dashed border overlay

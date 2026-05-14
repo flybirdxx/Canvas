@@ -561,14 +561,24 @@ export const RunningHubProvider: GatewayProvider = {
       return { ok: false, kind: 'missingKey', message: '请先在设置中配置 RunningHub 的 API 密钥' };
     }
 
+    if (req.videoFileRef && !req.videoUrl && !req.videoDataUrl) {
+      return {
+        ok: false,
+        kind: 'empty',
+        message: '视频文件尚未加载，请重新连接上游 video/file 节点后再分析。',
+      };
+    }
+
     const LLM_BASE = 'https://llm.runninghub.ai';
     const endpoint = `${LLM_BASE}/v1/chat/completions`;
 
     const body = {
       model: req.model,
-      messages: req.messages,
+      messages: buildTextMessages(req),
       max_tokens: req.maxTokens ?? 4096,
       temperature: req.temperature ?? 0.7,
+      top_p: 1,
+      reasoning_effort: 'none',
     };
 
     let resp: Response;
@@ -605,7 +615,7 @@ export const RunningHubProvider: GatewayProvider = {
 
     // OpenAI Chat Completion response shape
     const d = data as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
       error?: { message?: string; code?: string };
     };
 
@@ -618,7 +628,10 @@ export const RunningHubProvider: GatewayProvider = {
       };
     }
 
-    const content = d.choices?.[0]?.message?.content;
+    const rawContent = d.choices?.[0]?.message?.content;
+    const content = Array.isArray(rawContent)
+      ? rawContent.map(item => item.text).filter(Boolean).join('\n')
+      : rawContent;
     if (!content) {
       return {
         ok: false,
@@ -631,6 +644,50 @@ export const RunningHubProvider: GatewayProvider = {
     return { ok: true, text: content };
   },
 };
+
+function buildTextMessages(req: TextGenRequest): TextGenRequest['messages'] {
+  const videoSource = req.videoDataUrl || req.videoUrl;
+  if (!videoSource) return req.messages;
+
+  const messages = req.messages.map(message => ({ ...message }));
+  const lastUserIndex = findLastUserMessageIndex(messages);
+  if (lastUserIndex === -1) {
+    return [
+      ...messages,
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '' },
+          { type: 'video_url', video_url: { url: videoSource } },
+        ],
+      },
+    ];
+  }
+
+  const userMessage = messages[lastUserIndex];
+  const text = typeof userMessage.content === 'string'
+    ? userMessage.content
+    : userMessage.content
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('\n');
+
+  messages[lastUserIndex] = {
+    ...userMessage,
+    content: [
+      { type: 'text', text },
+      { type: 'video_url', video_url: { url: videoSource } },
+    ],
+  };
+  return messages;
+}
+
+function findLastUserMessageIndex(messages: TextGenRequest['messages']): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === 'user') return i;
+  }
+  return -1;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 图像渠道辅助函数

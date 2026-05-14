@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Type, Image as ImageIcon, Video, Music, StickyNote, FileUp, Square, Sparkles, Plus, Search, Layers } from 'lucide-react';
+import { Type, Image as ImageIcon, Video, Music, StickyNote, FileUp, Square, Sparkles, Plus, Search, Layers, Clapperboard } from 'lucide-react';
 
 const MENU_CLOSE_MS = 180;
 
@@ -93,6 +93,7 @@ export function ToolDock({ onCreate, onUploadFiles }: { onCreate: (t: string) =>
               <Pick onClick={() => { onCreate('image'); closeMenu(); }} icon={<ImageIcon size={15} strokeWidth={1.6} />} label="Image" desc="Generate / upload" hotkey="I" />
               <Pick onClick={() => { onCreate('video'); closeMenu(); }} icon={<Video size={15} strokeWidth={1.6} />} label="Video" desc="Text/image to video" hotkey="V" />
               <Pick onClick={() => { onCreate('audio'); closeMenu(); }} icon={<Music size={15} strokeWidth={1.6} />} label="Audio" desc="Voice / BGM" hotkey="A" />
+              <Pick onClick={() => { onCreate('omniscript'); closeMenu(); }} icon={<Clapperboard size={15} strokeWidth={1.6} />} label="OmniScript" desc="Video cover analysis" hotkey="O" />
               <Pick onClick={() => { onCreate('sticky'); closeMenu(); }} icon={<StickyNote size={15} strokeWidth={1.6} />} label="Sticky" desc="Quick note" hotkey="S" />
               <Pick onClick={() => { onCreate('rectangle'); closeMenu(); }} icon={<Square size={15} strokeWidth={1.6} />} label="Shape" desc="Rectangle / circle" hotkey="R" />
               <Pick onClick={() => { ref.current?.click(); closeMenu(); }} icon={<FileUp size={15} strokeWidth={1.6} />} label="File" desc="Any format" hotkey="U" />

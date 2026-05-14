@@ -16,7 +16,7 @@ export interface UISlice {
   activeTool: CanvasState['activeTool'];
   drawingConnection: DrawingConnection | null;
   inpaintMask: InpaintMaskState | null;
-  viewMode: 'canvas' | 'storyboard';
+  viewMode: 'canvas';
   groups: GroupRecord[];
   lastSavedAt: number | null;
   setSelection: (ids: string[]) => void;
@@ -26,7 +26,7 @@ export interface UISlice {
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
   ungroupSelected: () => void;
-  setViewMode: (mode: 'canvas' | 'storyboard') => void;
+  setViewMode: (mode: 'canvas') => void;
 }
 
 export const createUISlice: StateCreator<CanvasState, [], [], UISlice> = (set) => ({

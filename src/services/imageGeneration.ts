@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+﻿import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAssetLibraryStore } from '@/store/useAssetLibraryStore';
 import { useGenerationHistoryStore } from '@/store/useGenerationHistoryStore';
@@ -9,7 +9,6 @@ import {
   ImageElement,
   NodeVersion,
   PendingGenerationTask,
-  isSceneElement,
 } from '@/types/canvas';
 import { generateImageByModelId } from './gateway';
 import type { GatewayErrorKind } from './gateway/types';
@@ -18,7 +17,7 @@ import { retryVideoGeneration } from './videoGeneration';
 /**
  * Request payload persisted on a placeholder's error state so that a retry
  * can replay the exact generation. `model` is the wire-level id resolvable by
- * the gateway registry (apiKey is never persisted — retry pulls fresh config).
+ * the gateway registry (apiKey is never persisted 鈥?retry pulls fresh config).
  */
 export interface GenRequest {
   model: string;
@@ -26,9 +25,9 @@ export interface GenRequest {
   /** "WxH" formatted for vendor body. */
   size: string;
   /**
-   * 归一化的宽高比，例如 '1:1' / '16:9' / '21:9'。
-   * RunningHub 之类只吃 aspectRatio 的 provider 直接用；其它按 size 下单的
-   * provider 会忽略这个字段。重放（retry）时一起带上以免 provider 拿不到。
+   * 褰掍竴鍖栫殑瀹介珮姣旓紝渚嬪 '1:1' / '16:9' / '21:9'銆?
+   * RunningHub 涔嬬被鍙悆 aspectRatio 鐨?provider 鐩存帴鐢紱鍏跺畠鎸?size 涓嬪崟鐨?
+   * provider 浼氬拷鐣ヨ繖涓瓧娈点€傞噸鏀撅紙retry锛夋椂涓€璧峰甫涓婁互鍏?provider 鎷夸笉鍒般€?
    */
   aspect?: string;
   /** Number of images requested in this batch. Retry always replays with n=1. */
@@ -47,14 +46,14 @@ export interface GenRequest {
    */
   maskImage?: string;
   /**
-   * 透传给 provider 的 UI 分辨率档位（'1K' / '2K' / '4K' / 'auto'）。
-   * 给 RH 官方稳定版之类把档位当 wire-level 必填字段的 provider 用；
-   * 其它 provider 走 `size` 路径，看不到这个值。retry 快照也一并保留。
+   * 閫忎紶缁?provider 鐨?UI 鍒嗚鲸鐜囨。浣嶏紙'1K' / '2K' / '4K' / 'auto'锛夈€?
+   * 缁?RH 瀹樻柟绋冲畾鐗堜箣绫绘妸妗ｄ綅褰?wire-level 蹇呭～瀛楁鐨?provider 鐢紱
+   * 鍏跺畠 provider 璧?`size` 璺緞锛岀湅涓嶅埌杩欎釜鍊笺€俽etry 蹇収涔熶竴骞朵繚鐣欍€?
    */
   resolution?: string;
   /**
-   * 透传给 provider 的 UI 生成质量档位（RH 官方稳定版的 low/medium/high）。
-   * 只有声明 supportedQualityLevels 的模型才会实际使用。
+   * 閫忎紶缁?provider 鐨?UI 鐢熸垚璐ㄩ噺妗ｄ綅锛圧H 瀹樻柟绋冲畾鐗堢殑 low/medium/high锛夈€?
+   * 鍙湁澹版槑 supportedQualityLevels 鐨勬ā鍨嬫墠浼氬疄闄呬娇鐢ㄣ€?
    */
   qualityLevel?: string;
   /**
@@ -89,10 +88,10 @@ function getStore() {
 }
 
 /**
- * 把失败信息写到 placeholder。同时清掉 pendingTask——这两个状态互斥：
- * 看到 error 就不该再尝试 resume 轮询。
+ * 鎶婂け璐ヤ俊鎭啓鍒?placeholder銆傚悓鏃舵竻鎺?pendingTask鈥斺€旇繖涓や釜鐘舵€佷簰鏂ワ細
+ * 鐪嬪埌 error 灏变笉璇ュ啀灏濊瘯 resume 杞銆?
  *
- * 导出供 `taskResume` 在 resume 扫描出错时复用，保证失败落盘格式统一。
+ * 瀵煎嚭渚?`taskResume` 鍦?resume 鎵弿鍑洪敊鏃跺鐢紝淇濊瘉澶辫触钀界洏鏍煎紡缁熶竴銆?
  */
 export function setPlaceholderError(id: string, error: GenError) {
   const store = getStore();
@@ -119,8 +118,8 @@ function clearPlaceholderError(id: string) {
 }
 
 /**
- * 把异步任务信息（taskId 等）写到 placeholder，供刷新后 resume 轮询使用。
- * 此操作**不会**把 placeholder 切到 error 态——它仍然展示 loading 骨架。
+ * 鎶婂紓姝ヤ换鍔′俊鎭紙taskId 绛夛級鍐欏埌 placeholder锛屼緵鍒锋柊鍚?resume 杞浣跨敤銆?
+ * 姝ゆ搷浣?*涓嶄細**鎶?placeholder 鍒囧埌 error 鎬佲€斺€斿畠浠嶇劧灞曠ず loading 楠ㄦ灦銆?
  */
 function attachPendingTask(id: string, pending: PendingGenerationTask) {
   const store = getStore();
@@ -131,17 +130,17 @@ function attachPendingTask(id: string, pending: PendingGenerationTask) {
   } as Partial<AIGeneratingElement>);
 }
 
-// 防止同一 placeholder 被两条路径（runOneSlot 的首轮 poll + taskResume 的
-// 定时重扫）同时拿到 SUCCESS 而各自 addElement 出两张图。谁先拿到"坑位"
-// 谁替换，后到的就 early-return。
+// 闃叉鍚屼竴 placeholder 琚袱鏉¤矾寰勶紙runOneSlot 鐨勯杞?poll + taskResume 鐨?
+// 瀹氭椂閲嶆壂锛夊悓鏃舵嬁鍒?SUCCESS 鑰屽悇鑷?addElement 鍑轰袱寮犲浘銆傝皝鍏堟嬁鍒?鍧戜綅"
+// 璋佹浛鎹紝鍚庡埌鐨勫氨 early-return銆?
 const materializing = new Set<string>();
 
 /**
- * 把 placeholder 替换成正式 image 节点。pendingTask 随 placeholder 一并消失，
- * 无需额外清理；asset library 也在这里顺手归档。
+ * 鎶?placeholder 鏇挎崲鎴愭寮?image 鑺傜偣銆俻endingTask 闅?placeholder 涓€骞舵秷澶憋紝
+ * 鏃犻渶棰濆娓呯悊锛沘sset library 涔熷湪杩欓噷椤烘墜褰掓。銆?
  *
- * 导出供 `taskResume` 复用。对同一 placeholderId 并发调用是幂等的——
- * 第二次会被 `materializing` 集合挡住，不会出现重复节点。
+ * 瀵煎嚭渚?`taskResume` 澶嶇敤銆傚鍚屼竴 placeholderId 骞跺彂璋冪敤鏄箓绛夌殑鈥斺€?
+ * 绗簩娆′細琚?`materializing` 闆嗗悎鎸′綇锛屼笉浼氬嚭鐜伴噸澶嶈妭鐐广€?
  *
  * Story 1.5: `onSuccess` callback is invoked after the node is replaced,
  * allowing the execution engine to update node status.
@@ -168,7 +167,7 @@ export function replacePlaceholderWithImage(
   // F2: if the placeholder inherited a versions history (from "regenerate in
   // place" mode), append the new generation to it and point activeVersionIndex
   // at the new tail. If no inherited history exists, leave versions undefined
-  // — the NodeVersionSwitcher won't render, preserving the "no history" look
+  // 鈥?the NodeVersionSwitcher won't render, preserving the "no history" look
   // for fresh / batch-spawned nodes.
   const aig = el as AIGeneratingElement;
   const newVersionEntry: NodeVersion = {
@@ -184,10 +183,10 @@ export function replacePlaceholderWithImage(
     activeVersionIndex = versions.length - 1;
   }
 
-  // 用 replaceElement 替换 placeholder → image，承继 placeholder 从锚点带来
-  // 的端口 id。这样"file(image) → 锚点图" 这根连线在锚点 → placeholder
-  // → 最终 image 的整条链路上都不会断，方便用户接着以同一张图再做 img2img
-  // 迭代。之前的 deleteElements + addElement 模式会把连线连带炸掉。
+  // 鐢?replaceElement 鏇挎崲 placeholder 鈫?image锛屾壙缁?placeholder 浠庨敋鐐瑰甫鏉?
+  // 鐨勭鍙?id銆傝繖鏍?file(image) 鈫?閿氱偣鍥? 杩欐牴杩炵嚎鍦ㄩ敋鐐?鈫?placeholder
+  // 鈫?鏈€缁?image 鐨勬暣鏉￠摼璺笂閮戒笉浼氭柇锛屾柟渚跨敤鎴锋帴鐫€浠ュ悓涓€寮犲浘鍐嶅仛 img2img
+  // 杩唬銆備箣鍓嶇殑 deleteElements + addElement 妯″紡浼氭妸杩炵嚎杩炲甫鐐告帀銆?
   const newElement: ImageElement = {
     id: uuidv4(),
     type: 'image',
@@ -199,30 +198,7 @@ export function replacePlaceholderWithImage(
     prompt,
     ...(versions ? { versions, activeVersionIndex } : {}),
   };
-  store.replaceElement(placeholderId, newElement as CanvasElement, '生成完成');
-
-  // E7 Story 6: auto-link the new image to any scene that has this placeholder
-  // as its linkedImageId, or any scene that has a connection to this placeholder.
-  // This closes the loop: scene → placeholder → image → scene.linkedImageId.
-  const updatedElements = store.elements;
-  const newImageId = newElement.id;
-
-  // Path 1: scene.linkedImageId === placeholderId
-  for (const el of updatedElements) {
-    if (isSceneElement(el) && el.linkedImageId === placeholderId) {
-      store.updateElement(el.id, { linkedImageId: newImageId });
-    }
-  }
-
-  // Path 2: scene outputs connect to this placeholder — update linkedImageId
-  for (const c of store.connections) {
-    if (c.toId === placeholderId) {
-      const src = updatedElements.find(e => e.id === c.fromId);
-      if (src && isSceneElement(src) && !src.linkedImageId) {
-        store.updateElement(src.id, { linkedImageId: newImageId });
-      }
-    }
-  }
+  store.replaceElement(placeholderId, newElement as CanvasElement, '鐢熸垚瀹屾垚');
 
   // Story 1.5: notify the execution engine so it can update node status.
   onSuccess?.(placeholderId);
@@ -236,7 +212,7 @@ export function replacePlaceholderWithImage(
   // Auto-archive every successful generation into the asset library so users
   // can re-find / re-use it without scrolling the canvas. Name defaults to
   // the first line of the prompt, capped for readability.
-  const name = prompt.trim().split(/\r?\n/)[0].slice(0, 40) || '生成图像';
+  const name = prompt.trim().split(/\r?\n/)[0].slice(0, 40) || '鐢熸垚鍥惧儚';
   useAssetLibraryStore.getState().addAsset({
     kind: 'image',
     src: imageUrl,
@@ -258,19 +234,19 @@ export function replacePlaceholderWithImage(
     modality: 'image',
   });
 
-  // 保留 claim 几秒再释放：虽然节点 id 已换新，后到者再跑时 store.elements
-  // 里也找不到原 placeholderId（early-return），不过显式清掉让集合不会
-  // 长期积压。
+  // 淇濈暀 claim 鍑犵鍐嶉噴鏀撅細铏界劧鑺傜偣 id 宸叉崲鏂帮紝鍚庡埌鑰呭啀璺戞椂 store.elements
+  // 閲屼篃鎵句笉鍒板師 placeholderId锛坋arly-return锛夛紝涓嶈繃鏄惧紡娓呮帀璁╅泦鍚堜笉浼?
+  // 闀挎湡绉帇銆?
   setTimeout(() => materializing.delete(placeholderId), 5000);
 }
 
 type OneSlotOutcome = 'success' | 'failure' | 'pending';
 
 /**
- * 单个 placeholder 的 n=1 调用。负责：
- *   - 透传 onTaskSubmitted，把 taskId 落到该 placeholder
- *   - 成功时写 image 节点，失败时写 error，pending 时啥也不干（pendingTask
- *     已在回调里落盘，由 taskResume 在下次启动时接回）
+ * 鍗曚釜 placeholder 鐨?n=1 璋冪敤銆傝礋璐ｏ細
+ *   - 閫忎紶 onTaskSubmitted锛屾妸 taskId 钀藉埌璇?placeholder
+ *   - 鎴愬姛鏃跺啓 image 鑺傜偣锛屽け璐ユ椂鍐?error锛宲ending 鏃跺暐涔熶笉骞诧紙pendingTask
+ *     宸插湪鍥炶皟閲岃惤鐩橈紝鐢?taskResume 鍦ㄤ笅娆″惎鍔ㄦ椂鎺ュ洖锛?
  */
 async function runOneSlot(placeholderId: string, request: GenRequest): Promise<OneSlotOutcome> {
   // F3 fix: pass signal through so providers can abort the fetch.
@@ -290,9 +266,9 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
         providerId,
         taskId,
         submittedAt: Date.now(),
-        // 持久化整个 request 快照：resume 如果最终失败，可以用它还原
-        // error.request 让 retry 路径跑得通；成本上异步 provider 的参考图
-        // 都是公网 URL，不会塞爆 localStorage。
+        // 鎸佷箙鍖栨暣涓?request 蹇収锛歳esume 濡傛灉鏈€缁堝け璐ワ紝鍙互鐢ㄥ畠杩樺師
+        // error.request 璁?retry 璺緞璺戝緱閫氾紱鎴愭湰涓婂紓姝?provider 鐨勫弬鑰冨浘
+        // 閮芥槸鍏綉 URL锛屼笉浼氬鐖?localStorage銆?
         request: {
           model: request.model,
           prompt: request.prompt,
@@ -335,8 +311,8 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
   }
 
   if (result.ok === 'pending') {
-    // taskId 已经在 onTaskSubmitted 里持久化，placeholder 继续转圈就好。
-    // 下次启动 taskResume 扫到 pendingTask 会继续查。
+    // taskId 宸茬粡鍦?onTaskSubmitted 閲屾寔涔呭寲锛宲laceholder 缁х画杞湀灏卞ソ銆?
+    // 涓嬫鍚姩 taskResume 鎵埌 pendingTask 浼氱户缁煡銆?
     return 'pending';
   }
 
@@ -350,15 +326,15 @@ async function runOneSlot(placeholderId: string, request: GenRequest): Promise<O
 }
 
 /**
- * 发起一批图像生成，每个 placeholder 独立调用一次 n=1 的 generateImage。
+ * 鍙戣捣涓€鎵瑰浘鍍忕敓鎴愶紝姣忎釜 placeholder 鐙珛璋冪敤涓€娆?n=1 鐨?generateImage銆?
  *
- * 为什么不再用 provider 级 n>1 批量：异步 provider（RunningHub）一次 submit
- * 对应一个 taskId，要做到 1 placeholder ↔ 1 taskId 的干净映射、以及"有的
- * 任务完成、有的还 pending"的部分成功语义，最简单的方式就是在 service 层
- * 扇出。对同步 provider（t8star）多几次 HTTP 握手成本可忽略。
+ * 涓轰粈涔堜笉鍐嶇敤 provider 绾?n>1 鎵归噺锛氬紓姝?provider锛圧unningHub锛変竴娆?submit
+ * 瀵瑰簲涓€涓?taskId锛岃鍋氬埌 1 placeholder 鈫?1 taskId 鐨勫共鍑€鏄犲皠銆佷互鍙?鏈夌殑
+ * 浠诲姟瀹屾垚銆佹湁鐨勮繕 pending"鐨勯儴鍒嗘垚鍔熻涔夛紝鏈€绠€鍗曠殑鏂瑰紡灏辨槸鍦?service 灞?
+ * 鎵囧嚭銆傚鍚屾 provider锛坱8star锛夊鍑犳 HTTP 鎻℃墜鎴愭湰鍙拷鐣ャ€?
  *
- * 所有失败 / pending 分支都不抛异常，UI 用 placeholder.error / pendingTask
- * 区分"红色失败" vs "仍在转圈"。
+ * 鎵€鏈夊け璐?/ pending 鍒嗘敮閮戒笉鎶涘紓甯革紝UI 鐢?placeholder.error / pendingTask
+ * 鍖哄垎"绾㈣壊澶辫触" vs "浠嶅湪杞湀"銆?
  */
 export async function runGeneration(
   placeholderIds: string[],
@@ -386,13 +362,13 @@ export async function runGeneration(
     placeholderIds.map(phId => runOneSlot(phId, request)),
   );
 
-  // Queue 状态汇总：
-  //   - 全部 failure         → failed（会固定在队列里等用户重试 / 清理）
-  //   - 至少一个 success/pending → success（kickoff 成功；pending 的交给
-  //                                        placeholder 自己继续转圈）
-  // queue 本来就不持久化，pending 不需要特意"挂起队列任务"。
+  // Queue 鐘舵€佹眹鎬伙細
+  //   - 鍏ㄩ儴 failure         鈫?failed锛堜細鍥哄畾鍦ㄩ槦鍒楅噷绛夌敤鎴烽噸璇?/ 娓呯悊锛?
+  //   - 鑷冲皯涓€涓?success/pending 鈫?success锛坘ickoff 鎴愬姛锛沺ending 鐨勪氦缁?
+  //                                        placeholder 鑷繁缁х画杞湀锛?
+  // queue 鏈潵灏变笉鎸佷箙鍖栵紝pending 涓嶉渶瑕佺壒鎰?鎸傝捣闃熷垪浠诲姟"銆?
   const allFailed = outcomes.every(o => o === 'failure');
-  const firstFailure = allFailed ? '全部任务失败' : undefined;
+  const firstFailure = allFailed ? '鍏ㄩ儴浠诲姟澶辫触' : undefined;
   useGenerationQueueStore
     .getState()
     .completeTask(taskId, allFailed ? 'failed' : 'success', firstFailure);

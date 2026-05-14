@@ -1,16 +1,8 @@
-/**
- * ElementSlice — element CRUD + clearCanvas.
- *
- * The largest slice in the store. All element mutations push a history
- * snapshot (except updateElementPosition which is per-frame and doesn't
- * create undo entries — the batched version does).
- */
 import type { StateCreator } from 'zustand';
-import { v4 as uuidv4 } from 'uuid';
 import type { CanvasElement } from '@/types/canvas';
 import type { CanvasState } from '@/store/types';
 import { snapshot, typeLabelMap, MAX_HISTORY, coalesceKey, COALESCE_WINDOW_MS } from '@/store/helpers';
-
+import { makePorts, PORT_DEFAULTS } from '@/store/portDefaults';
 
 export interface ElementSlice {
   elements: CanvasElement[];
@@ -27,65 +19,7 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
   elements: [],
 
   addElement: (element) => set((state) => {
-    const el = { ...element };
-    if (!el.inputs || el.inputs.length === 0) {
-      el.inputs = [];
-      if (el.type === 'image') {
-        el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
-        el.inputs.push({ id: uuidv4(), type: 'image', label: 'Ref' });
-      }
-      if (el.type === 'video') el.inputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-      if (el.type === 'audio') el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
-      if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
-        el.inputs.push({ id: uuidv4(), type: 'any', label: 'In' });
-      }
-      // E7 Story 1: scene as executable node — needs Prompt input
-      if (el.type === 'scene') {
-        el.inputs.push({ id: uuidv4(), type: 'text', label: 'Prompt' });
-      }
-    }
-
-    if (!el.outputs || el.outputs.length === 0) {
-      el.outputs = [];
-      if (el.type === 'text') el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
-      if (el.type === 'image') el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-      if (el.type === 'video') el.outputs.push({ id: uuidv4(), type: 'video', label: 'Video' });
-      if (el.type === 'audio') el.outputs.push({ id: uuidv4(), type: 'audio', label: 'Audio' });
-      if (el.type === 'rectangle' || el.type === 'circle' || el.type === 'sticky') {
-        el.outputs.push({ id: uuidv4(), type: 'any', label: 'Out' });
-      }
-      // E7 Story 1: scene as executable node — needs Image + Text outputs
-      if (el.type === 'scene') {
-        el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-        el.outputs.push({ id: uuidv4(), type: 'text', label: 'Text' });
-      }
-      // E7 Epic 6: script as "剧本容器" — outputs aggregated child scene text
-      if (el.type === 'script') {
-        el.outputs.push({ id: uuidv4(), type: 'text', label: '剧本' });
-      }
-      if (el.type === 'file') {
-        const mt = String((el as any).mimeType || '').toLowerCase();
-        if (mt.startsWith('image/')) {
-          el.outputs.push({ id: uuidv4(), type: 'image', label: 'Image' });
-        }
-      }
-    }
-
-    // CR-6: warn on duplicate sceneNum within the same script
-    if (el.type === 'scene' && (el as any).sceneNum !== undefined) {
-      const dup = state.elements.find(
-        e => e.type === 'scene' &&
-          (e as any).sceneNum === (el as any).sceneNum &&
-          (e as any).scriptId === (el as any).scriptId
-      );
-      if (dup) {
-        console.warn(
-          `[sceneNum] 场 ${(el as any).sceneNum} 的 scene 节点已存在 (id: ${dup.id})，` +
-          '重复添加可能导致 Storyboard 排序混乱'
-        );
-      }
-    }
-
+    const el = withDefaultPorts(element);
     const label = `添加${typeLabelMap[el.type] ?? el.type}`;
     return {
       past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
@@ -100,25 +34,9 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
 
   updateElement: (id, attrs, labelOverride) => set((state) => {
     const target = state.elements.find(el => el.id === id);
-
-    // CR-6: warn when updating sceneNum to a value already used by another scene
-    if (target?.type === 'scene' && (attrs as any).sceneNum !== undefined) {
-      const newSceneNum = (attrs as any).sceneNum as number;
-      const dup = state.elements.find(
-        e => e.type === 'scene' && e.id !== id &&
-          (e as any).sceneNum === newSceneNum &&
-          (e as any).scriptId === (target as any).scriptId
-      );
-      if (dup) {
-        console.warn(
-          `[sceneNum] 将场号更新为 ${newSceneNum} 时发现重复 (已有 id: ${dup.id})`
-        );
-      }
-    }
-
     const label = labelOverride ?? (target ? `修改${typeLabelMap[target.type] ?? target.type}` : '修改元素');
     const nextElements: CanvasElement[] = state.elements.map((el) =>
-      el.id === id ? ({ ...el, ...attrs } as CanvasElement) : el
+      el.id === id ? ({ ...el, ...attrs } as CanvasElement) : el,
     );
 
     const now = Date.now();
@@ -151,7 +69,7 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
 
   updateElementPosition: (id, x, y) => set((state) => ({
     elements: state.elements.map((el) =>
-      el.id === id ? ({ ...el, x, y } as CanvasElement) : el
+      el.id === id ? ({ ...el, x, y } as CanvasElement) : el,
     ),
   })),
 
@@ -201,7 +119,7 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
       return {
         past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
         future: [],
-        elements: [...state.elements, newElement],
+        elements: [...state.elements, withDefaultPorts(newElement)],
         currentLabel: label ?? `添加${typeLabelMap[newElement.type] ?? newElement.type}`,
         currentTimestamp: Date.now(),
         _coalesceKey: undefined,
@@ -209,35 +127,23 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
       };
     }
 
-    const inheritInputs = !newElement.inputs || newElement.inputs.length === 0;
-    const inheritOutputs = !newElement.outputs || newElement.outputs.length === 0;
+    const nextElement = withDefaultPorts(newElement);
     const finalEl: CanvasElement = {
-      ...newElement,
-      inputs: inheritInputs ? oldEl.inputs : newElement.inputs,
-      outputs: inheritOutputs ? oldEl.outputs : newElement.outputs,
+      ...nextElement,
+      inputs: nextElement.inputs?.length ? nextElement.inputs : oldEl.inputs,
+      outputs: nextElement.outputs?.length ? nextElement.outputs : oldEl.outputs,
     } as CanvasElement;
-
-    const nextElements = state.elements.map(e => (e.id === oldId ? finalEl : e));
-
-    const nextConnections = state.connections.map(c => {
-      if (c.fromId === oldId || c.toId === oldId) {
-        return {
-          ...c,
-          fromId: c.fromId === oldId ? finalEl.id : c.fromId,
-          toId: c.toId === oldId ? finalEl.id : c.toId,
-        };
-      }
-      return c;
-    });
-
-    const nextSelected = state.selectedIds.map(id => (id === oldId ? finalEl.id : id));
 
     return {
       past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
       future: [],
-      elements: nextElements,
-      connections: nextConnections,
-      selectedIds: nextSelected,
+      elements: state.elements.map(e => (e.id === oldId ? finalEl : e)),
+      connections: state.connections.map(c => ({
+        ...c,
+        fromId: c.fromId === oldId ? finalEl.id : c.fromId,
+        toId: c.toId === oldId ? finalEl.id : c.toId,
+      })),
+      selectedIds: state.selectedIds.map(id => (id === oldId ? finalEl.id : id)),
       currentLabel: label ?? `替换${typeLabelMap[finalEl.type] ?? finalEl.type}`,
       currentTimestamp: Date.now(),
       _coalesceKey: undefined,
@@ -257,3 +163,21 @@ export const createElementSlice: StateCreator<CanvasState, [], [], ElementSlice>
     _coalesceAt: undefined,
   })),
 });
+
+function withDefaultPorts(element: CanvasElement): CanvasElement {
+  const el = { ...element } as CanvasElement;
+  const defaults = PORT_DEFAULTS[el.type];
+  if ((!el.inputs || el.inputs.length === 0) && defaults.inputs.length > 0) {
+    el.inputs = makePorts(defaults.inputs);
+  }
+  if ((!el.outputs || el.outputs.length === 0) && defaults.outputs.length > 0) {
+    el.outputs = makePorts(defaults.outputs);
+  }
+  if (el.type === 'file' && (!el.outputs || el.outputs.length === 0)) {
+    const mt = String(el.mimeType || '').toLowerCase();
+    if (mt.startsWith('image/')) el.outputs = makePorts([{ type: 'image', label: 'Image' }]);
+    if (mt.startsWith('video/')) el.outputs = makePorts([{ type: 'video', label: 'Video' }]);
+    if (mt.startsWith('audio/')) el.outputs = makePorts([{ type: 'audio', label: 'Audio' }]);
+  }
+  return el;
+}
