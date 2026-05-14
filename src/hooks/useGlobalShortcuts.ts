@@ -1,99 +1,63 @@
 import { useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { CanvasElement } from '@/types/canvas';
+import type { CanvasElement, ElementType } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { exportSelection } from '@/utils/exportPng';
 
-/**
- * 全局快捷键 hook。
- *
- * 从 App.tsx 提取，集中管理所有画布级键盘快捷键：
- *   - Ctrl+Z / Ctrl+Shift+Z → undo / redo
- *   - Ctrl+Y → redo
- *   - Ctrl+Shift+V → 切换 canvas/storyboard 视图
- *   - Ctrl+Shift+E → 导出选区 PNG
- *   - E（无修饰键）→ 启动框选导出
- *   - Escape → 取消选择
- *   - Ctrl+A → 全选
- *   - Ctrl+D → 复制选中
- *   - Ctrl+G / Ctrl+Shift+G → 成组 / 解组
- *   - Delete / Backspace → 删除选中
- *   - V / H / T / R / I / S → 工具切换 / 创建节点
- *   - Home → 重置视图
- *
- * 返回 `handleCreateNode` 供 chrome 组件（TopBar、ToolDock 等）复用，
- * 保证快捷键创建节点和 UI 按钮创建节点走同一逻辑。
- */
 export function useGlobalShortcuts() {
   const addElement = useCanvasStore(s => s.addElement);
   const setSelection = useCanvasStore(s => s.setSelection);
   const setActiveTool = useCanvasStore(s => s.setActiveTool);
 
-  /**
-   * 在画布中心创建新节点。和原 App.tsx 中 handleCreateNode 语义一致：
-   * 根据 type 计算默认尺寸、填充、文本等，在视口中心放置并自动选中。
-   */
-  const handleCreateNode = useCallback((type: string) => {
+  const handleCreateNode = useCallback((type: ElementType) => {
     const { stageConfig } = useCanvasStore.getState();
-    const centerX =
-      (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
-    const centerY =
-      (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
+    const centerX = (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
+    const centerY = (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
 
-    let defaultWidth = 100;
-    let defaultHeight = 100;
-    if (type === 'sticky') { defaultWidth = 220; defaultHeight = 220; }
-    else if (type === 'text') { defaultWidth = 420; defaultHeight = 280; }
-    else if (type === 'image') { defaultWidth = 560; defaultHeight = 560; }
-    else if (type === 'video') { defaultWidth = 640; defaultHeight = 360; }
-    else if (type === 'audio') { defaultWidth = 360; defaultHeight = 96; }
-    else if (type === 'script') { defaultWidth = 480; defaultHeight = 280; }
-    else if (type === 'scene') { defaultWidth = 320; defaultHeight = 200; }
-
+    const { width, height } = getDefaultSize(type);
     const id = uuidv4();
-    const isMedia = ['image', 'video', 'audio'].includes(type);
+    const isMedia = type === 'image' || type === 'video' || type === 'audio';
 
-    addElement({
+    const element = {
       id,
-      type: type as any,
-      x: centerX - defaultWidth / 2,
-      y: centerY - defaultHeight / 2,
-      width: defaultWidth,
-      height: defaultHeight,
-      text:
-        type === 'sticky' ? '点击编辑便签内容…' :
-        type === 'text' ? '' :
-        undefined,
+      type,
+      x: centerX - width / 2,
+      y: centerY - height / 2,
+      width,
+      height,
+      text: type === 'sticky' ? '点击编辑便签内容...' : type === 'text' ? '' : undefined,
       fontSize: type === 'text' ? 14 : undefined,
       fontFamily: type === 'text' ? 'var(--font-serif)' : undefined,
       fill:
         type === 'rectangle' ? '#E1D7CB' :
         type === 'circle' ? '#DDD1C2' :
         type === 'sticky' ? '#F3E3A0' :
-        type === 'text' ? undefined :
+        type === 'text' ? '#26211c' :
         undefined,
       src: isMedia ? '' : undefined,
       cornerRadius: type === 'rectangle' ? 12 : undefined,
-      markdown: type === 'script' ? '' : undefined,
-      scenes: type === 'script' ? [] : undefined,
-      isNew: type === 'script' ? true : undefined,
-      sceneNum: type === 'scene' ? 1 : undefined,
-      title: type === 'scene' ? '' : undefined,
-      content: type === 'scene' ? '' : undefined,
-    });
+      title: type === 'omniscript' ? 'OmniScript' : undefined,
+      videoUrl: type === 'omniscript' ? '' : undefined,
+      notes: type === 'omniscript' ? '' : undefined,
+      analysisStatus: type === 'omniscript' ? 'idle' : undefined,
+      result: type === 'omniscript'
+        ? { segments: [], structuredScript: [], highlights: [] }
+        : undefined,
+    } as CanvasElement;
+
+    addElement(element);
     setSelection([id]);
     setActiveTool('select');
   }, [addElement, setSelection, setActiveTool]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 聚焦在输入框 / 文本域时跳过所有快捷键，让用户正常输入
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
       ) return;
 
-      // ── Ctrl/Meta 修饰复合键 ──
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         const { undo, redo } = useCanvasStore.getState();
@@ -107,20 +71,7 @@ export function useGlobalShortcuts() {
         return;
       }
 
-      if (
-        (e.ctrlKey || e.metaKey) && e.shiftKey &&
-        e.key.toLowerCase() === 'v'
-      ) {
-        e.preventDefault();
-        const { viewMode: vm, setViewMode: svm } = useCanvasStore.getState();
-        svm(vm === 'canvas' ? 'storyboard' : 'canvas');
-        return;
-      }
-
-      if (
-        (e.ctrlKey || e.metaKey) && e.shiftKey &&
-        e.key.toLowerCase() === 'e'
-      ) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         exportSelection();
         return;
@@ -136,11 +87,9 @@ export function useGlobalShortcuts() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         const { elements, selectedIds, addElement: ae } = useCanvasStore.getState();
-        const sel = elements.filter(el => selectedIds.includes(el.id));
-        sel.forEach(el => {
-          const nid = uuidv4();
-          ae({ ...el, id: nid, x: el.x + 24, y: el.y + 24 } as CanvasElement);
-        });
+        elements
+          .filter(el => selectedIds.includes(el.id))
+          .forEach(el => ae({ ...el, id: uuidv4(), x: el.x + 24, y: el.y + 24 } as CanvasElement));
         return;
       }
 
@@ -151,7 +100,6 @@ export function useGlobalShortcuts() {
         return;
       }
 
-      // ── 无修饰单键 ──
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         const k = e.key.toLowerCase();
 
@@ -168,10 +116,10 @@ export function useGlobalShortcuts() {
         }
 
         if (e.key === 'Delete' || e.key === 'Backspace') {
-          const { selectedIds: sids, deleteElements: de } = useCanvasStore.getState();
-          if (sids.length > 0) {
+          const { selectedIds, deleteElements } = useCanvasStore.getState();
+          if (selectedIds.length > 0) {
             e.preventDefault();
-            de(sids);
+            deleteElements(selectedIds);
           }
           return;
         }
@@ -182,11 +130,11 @@ export function useGlobalShortcuts() {
         if (k === 'r') { e.preventDefault(); handleCreateNode('rectangle'); return; }
         if (k === 'i') { e.preventDefault(); handleCreateNode('image'); return; }
         if (k === 's') { e.preventDefault(); handleCreateNode('sticky'); return; }
+        if (k === 'o') { e.preventDefault(); handleCreateNode('omniscript'); return; }
 
         if (e.key === 'Home') {
           e.preventDefault();
           useCanvasStore.getState().setStageConfig({ scale: 1, x: 0, y: 0 });
-          return;
         }
       }
     };
@@ -196,4 +144,14 @@ export function useGlobalShortcuts() {
   }, [handleCreateNode]);
 
   return { handleCreateNode };
+}
+
+function getDefaultSize(type: ElementType): { width: number; height: number } {
+  if (type === 'sticky') return { width: 220, height: 220 };
+  if (type === 'text') return { width: 420, height: 280 };
+  if (type === 'image') return { width: 560, height: 560 };
+  if (type === 'video') return { width: 640, height: 360 };
+  if (type === 'audio') return { width: 360, height: 96 };
+  if (type === 'omniscript') return { width: 640, height: 440 };
+  return { width: 100, height: 100 };
 }

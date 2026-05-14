@@ -12,8 +12,13 @@ function collectText(elements: ReturnType<typeof useCanvasStore.getState>['eleme
     .map(el => {
       if (el.type === 'text') return (el as any).text ?? '';
       if (el.type === 'sticky') return (el as any).text ?? '';
-      if (el.type === 'script') return (el as any).markdown ?? '';
-      if (el.type === 'scene') return ((el as any).title ?? '') + ' ' + ((el as any).content ?? '');
+      if (el.type === 'omniscript') {
+        return [
+          ...((el.result?.segments ?? []).map(item => item.summary)),
+          ...((el.result?.structuredScript ?? []).map(item => item.copy)),
+          ...((el.result?.highlights ?? []).map(item => item.reason)),
+        ].join(' ');
+      }
       return '';
     })
     .join(' ');

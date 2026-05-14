@@ -55,8 +55,8 @@ export interface CanvasState {
   currentTimestamp: number;
   selectedIds: string[];
   stageConfig: { scale: number; x: number; y: number };
-  activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio';
-  viewMode: 'canvas' | 'storyboard';
+  activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'omniscript';
+  viewMode: 'canvas';
   groups: GroupRecord[];
   lastSavedAt: number | null;
   _coalesceKey?: string;
@@ -78,7 +78,7 @@ export interface CanvasState {
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
   ungroupSelected: () => void;
-  setViewMode: (mode: 'canvas' | 'storyboard') => void;
+  setViewMode: (mode: 'canvas') => void;
   undo: () => void;
   redo: () => void;
   jumpToHistory: (index: number) => void;

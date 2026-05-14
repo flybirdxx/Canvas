@@ -242,11 +242,24 @@ export type VideoGenResult = VideoGenSuccess | VideoGenFailure | VideoGenPending
  * The caller composes the conversation context from upstream connections
  * and the node's local prompt into the `messages` array.
  */
+export type TextMessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'video_url'; video_url: { url: string } };
+
+export type TextMessageContent = string | TextMessageContentPart[];
+
 export interface TextGenRequest {
   /** Wire-level model id (e.g. "google/gemini-3.1-pro-preview"). */
   model: string;
   /** OpenAI-format messages array. */
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: TextMessageContent }>;
+  /** Optional multimodal video URL for providers that support video understanding. */
+  videoUrl?: string;
+  /** Optional inline video data URL. Providers may reject this if unsupported. */
+  videoDataUrl?: string;
+  /** Optional persisted file/blob reference for provider-specific upload paths. */
+  videoFileRef?: string;
   /** Maximum tokens to generate (default provider-specific). */
   maxTokens?: number;
   /** Temperature for sampling (0-2, default ~0.7). */
