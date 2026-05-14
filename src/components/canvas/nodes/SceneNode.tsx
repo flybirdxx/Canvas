@@ -87,7 +87,7 @@ export function SceneNode({
             flexDirection: 'column',
             gap: 5,
             overflow: 'hidden',
-            pointerEvents: 'auto',
+            pointerEvents: 'none',
           }}
         >
           {/* Header row */}
