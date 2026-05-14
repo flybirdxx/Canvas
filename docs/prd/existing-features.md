@@ -8,13 +8,13 @@
 
 **目标用户**：AI 创意工作者——设计师、视频创作者、概念艺术家、AI 提示词工程师。
 
-**项目状态**：MVP 已交付，以下功能全部实现。
+**项目状态**：核心 MVP 可运行，以下为当前代码中已经落地的功能与已知边界。部分 V1 能力仍处于可用但未完全产品化状态，具体限制在对应章节说明。
 
 ---
 
 ## 功能清单
 
-### 1. 节点系统（7 种节点类型）
+### 1. 节点系统（11 种节点类型）
 
 每种节点都是画布上的独立实体，支持拖拽定位、8 点缩放、旋转、锁定、注释(note)。
 
@@ -26,7 +26,11 @@
 | `audio` | 波形图+播放浮层 | text(prompt) ×1 | audio ×1 | AI 语音生成、音频播放 |
 | `sticky` | 便签卡片（鹅黄色背景） | any ×1 | any ×1 | 自由备注、数据中转 |
 | `rectangle` | 圆角矩形 | any ×1 | any ×1 | 视觉分隔、形状占位 |
+| `circle` | 圆形/椭圆 | any ×1 | any ×1 | 视觉分隔、形状占位 |
 | `file` | 按 MIME 智能预览 | — | image ×1（仅 image/*） | 文件附件、图片来源（img2img） |
+| `scene` | 分镜卡片/结构化台词预览 | text ×1 | image ×1, text ×1 | 单个分镜、关联生成图 |
+| `script` | 剧本容器 | — | text ×1 | 聚合并管理子分镜 |
+| `aigenerating` | 生成中/错误占位 | 继承被替换节点端口 | 继承被替换节点端口 | AI 生成过程中的临时占位 |
 
 **通用节点属性**：
 - 位置 (x, y)、尺寸 (w, h)、旋转角 (rotation)
@@ -74,7 +78,7 @@
 3. 点击生成 → 节点替换为 AIGeneratingElement（加载动画）
 4. 等待结果：
    - 成功 → 自动替换为 image/video 节点，显示结果
-   - 异步提交 (RunningHub) → 显示等待中，周期性轮询
+   - 异步提交 (RunningHub) → 显示等待中，周期性轮询；图像与视频 pending 任务可跨刷新恢复
    - 失败 → 显示错误面板 + 重试按钮
 
 #### 图生图 (Image-to-Image)
@@ -97,7 +101,7 @@
 #### 跨会话恢复
 
 - 刷新/关闭浏览器时，未完成的异步任务状态持久化在 placeholder 上
-- 重新打开 → `taskResume` 扫描所有 pending 任务 → 调用 `pollImageTask` 继续轮询
+- 重新打开 → `taskResume` 扫描所有 pending 任务 → 按任务类型调用 `pollImageTask` / `pollVideoTask` 继续轮询
 - 成功/失败后自动替换/标记
 
 ### 4. 节点版本历史
@@ -178,7 +182,8 @@
 
 - **选中导出** (Ctrl+Shift+E)：将选中节点渲染到离屏 Canvas → PNG 下载
 - **区域导出** (E)：拖拽虚框 → 确认工具栏 → PNG 下载
-- 导出包含节点 + 连线
+- 导出包含 Konva 可捕获的节点与连线；使用 `<Html>` overlay 渲染的文本/便签等 DOM 内容不会出现在 `stage.toDataURL()` 截图里
+- Storyboard MP4 导出按 `sceneNum` 顺序拼接，优先使用 `scene.linkedImageId` 图片，其次使用正文 markdown 图片，最后退回到 scene 截图/占位图；当前不支持混入音频轨道
 - 使用 `stageRegistry` 全局 Stage 引用，无需 prop drilling
 
 ### 12. 视觉风格

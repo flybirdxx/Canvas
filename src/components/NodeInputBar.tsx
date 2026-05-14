@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
   Loader2,
@@ -61,7 +61,7 @@ export interface NodeInputBarProps {
 }
 
 export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps) {
-  const { updateElement, deleteElements, addElement, replaceElement } = useCanvasStore();
+  const { updateElement, addElement, replaceElement } = useCanvasStore();
   const deleteConnections = useCanvasStore(s => s.deleteConnections);
   const elementsAll = useCanvasStore(s => s.elements);
   const connectionsAll = useCanvasStore(s => s.connections);
@@ -82,14 +82,17 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   );
 
   const prompt = element.prompt ?? '';
-  const gen = element.generation ?? {};
+  const gen = useMemo(() => element.generation ?? {}, [element.generation]);
   const model = gen.model ?? modelOptions[0]?.value ?? '';
   const aspect = gen.aspect ?? '1:1';
   const quality = gen.quality ?? (mode === 'video' ? '720P' : '1K');
   const qualityLevel = gen.qualityLevel ?? 'medium';
   const count = gen.count ?? '1';
   const duration = gen.duration ?? '5s';
-  const appliedPresets: AppliedPreset[] = gen.appliedPresets ?? [];
+  const appliedPresets = useMemo<AppliedPreset[]>(
+    () => gen.appliedPresets ?? [],
+    [gen.appliedPresets],
+  );
   const appliedIds = useMemo(() => appliedPresets.map(p => p.id), [appliedPresets]);
   const references: string[] = gen.references ?? [];
   const MAX_REFERENCES = 4;
@@ -153,8 +156,9 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   }, [prompt]);
 
   const updatePrompt = (v: string) => updateElement(element.id, { prompt: v });
-  const updateGen = (patch: Partial<typeof gen>) =>
+  const updateGen = useCallback((patch: Partial<typeof gen>) => {
     updateElement(element.id, { generation: { ...gen, ...patch } });
+  }, [element.id, gen, updateElement]);
 
   const applyPreset = (preset: PromptPreset) => {
     if (appliedIds.includes(preset.id)) return;
@@ -322,20 +326,20 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     if (aspectOpts.length > 0 && !aspectOpts.some(o => o.value === aspect)) {
       updateGen({ aspect: aspectOpts[0].value });
     }
-  }, [aspectOpts, aspect, mode]);
+  }, [aspectOpts, aspect, mode, updateGen]);
   useEffect(() => {
     if (mode !== 'image') return;
     if (imageResolutionOpts.length > 0 && !imageResolutionOpts.some(o => o.value === quality)) {
       updateGen({ quality: imageResolutionOpts[0].value });
     }
-  }, [imageResolutionOpts, quality, mode]);
+  }, [imageResolutionOpts, quality, mode, updateGen]);
   useEffect(() => {
     if (mode !== 'image') return;
     if (!qualityLevelOpts) return;
     if (!qualityLevelOpts.some(o => o.value === qualityLevel)) {
       updateGen({ qualityLevel: qualityLevelOpts[0].value });
     }
-  }, [qualityLevelOpts, qualityLevel, mode]);
+  }, [qualityLevelOpts, qualityLevel, mode, updateGen]);
 
   const showResolutionDropdown =
     mode === 'video' ||

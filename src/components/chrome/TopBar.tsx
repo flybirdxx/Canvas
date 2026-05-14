@@ -1,7 +1,7 @@
 import {
   ChevronDown, FileText, Download, Settings, MessageCircle,
-  Play, BookOpen, LayoutGrid, LayoutPanelLeft, ArrowLeft,
-  Eye, PlayCircle,
+  Play, BookOpen, LayoutGrid, LayoutPanelLeft,
+  PlayCircle,
 } from 'lucide-react';
 import type { SceneExecutionProgress } from '@/hooks/canvas/useSceneExecution';
 
@@ -38,7 +38,7 @@ export function TopBar({
   onExecuteSelected,
 }: TopBarProps) {
   const isStoryboard = viewMode === 'storyboard';
-  const { done, total, current, isRunning } = executionProgress ?? {
+  const { done, total, isRunning } = executionProgress ?? {
     done: 0, total: 0, current: null, isRunning: false,
   };
 

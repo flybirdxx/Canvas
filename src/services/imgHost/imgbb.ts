@@ -108,7 +108,7 @@ export async function uploadToImgbb(
   let response: Response;
   try {
     response = await fetch(IMGBB_ENDPOINT, { method: 'POST', body: form });
-  } catch (e: any) {
+  } catch {
     return {
       ok: false,
       reason: 'network',

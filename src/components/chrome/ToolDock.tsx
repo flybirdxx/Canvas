@@ -3,7 +3,7 @@ import { Type, Image as ImageIcon, Video, Music, StickyNote, FileUp, Square, Spa
 
 const MENU_CLOSE_MS = 180;
 
-export function ToolDock({ onCreate, onUploadFiles, activeTool, onSetActiveTool }: { onCreate: (t: string) => void; onUploadFiles?: (f: File[]) => void; activeTool?: string; onSetActiveTool?: (t: string) => void }) {
+export function ToolDock({ onCreate, onUploadFiles }: { onCreate: (t: string) => void; onUploadFiles?: (f: File[]) => void; activeTool?: string; onSetActiveTool?: (t: string) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);

@@ -8,7 +8,7 @@
  *      Merges connection-sourced images with user-uploaded references (dedup, cap 4).
  */
 import { v4 as uuidv4 } from 'uuid';
-import type { CanvasElement, NodeVersion, GenerationConfig } from '@/types/canvas';
+import type { CanvasElement, GenerationConfig } from '@/types/canvas';
 import type { UpstreamImageContribution } from '@/utils/flowResolver';
 import type { GenRequest } from '@/services/imageGeneration';
 import { createRectMaskPng, loadImageNaturalSize } from '@/utils/mask';

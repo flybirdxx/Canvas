@@ -42,7 +42,7 @@ export function SceneNode({
 
   const renderedPreviewLines = useMemo(
     () => previewLines?.map(line => renderSceneLine(line)) ?? null,
-    [el.lines],
+    [previewLines],
   );
 
   const handleOpenStoryboard = (e: React.MouseEvent) => {

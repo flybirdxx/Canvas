@@ -1,9 +1,9 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Group, Rect, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import type { GuideLine } from '@/utils/alignmentUtils';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { CanvasElement, ScriptElement, SceneElement } from '@/types/canvas';
+import type { ScriptElement, SceneElement } from '@/types/canvas';
 import {
   ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
   AIGeneratingNode, FileNode, ScriptNode, SceneNode,
@@ -21,7 +21,7 @@ export interface CanvasElementsProps {
 
 export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProps) {
   const {
-    elements, selectedIds, setSelection, deleteElements, activeTool, drawingConnection, groups,
+    elements, selectedIds, setSelection, activeTool, drawingConnection, groups,
   } = useCanvasStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -153,7 +153,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
             if (el.type !== 'video' && el.type !== 'audio') setHoveredId(id);
           },
           onMouseLeave: () => { setHoveredId(null); },
-          onDblClick: (e: any) => {
+          onDblClick: () => {
             if (el.type === 'text') {
               window.dispatchEvent(new CustomEvent('text:edit', { detail: { id: el.id } }));
             }

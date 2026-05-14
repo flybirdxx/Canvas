@@ -58,7 +58,7 @@ export function SelectionHandles({
   snapCallbacks?: SnapCallbacks; 
   dragGuardRef?: React.MutableRefObject<boolean> 
 }) {
-  const { x, y, width, height, id } = el;
+  const { x, y, width, height } = el;
   const lockRatio = shouldLockAspectRatio(el);
   const dragStartRef = useRef<DragStartState | null>(null);
   const liveResizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);

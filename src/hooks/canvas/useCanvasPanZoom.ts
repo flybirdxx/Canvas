@@ -3,7 +3,7 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function useCanvasPanZoom() {
-  const { stageConfig, setStageConfig } = useCanvasStore();
+  const { setStageConfig } = useCanvasStore();
   const isPanningRef = useRef(false);
   const lastPanPositionRef = useRef({ x: 0, y: 0 });
 

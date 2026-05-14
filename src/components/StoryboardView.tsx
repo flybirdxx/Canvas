@@ -10,7 +10,7 @@
  *   - E7 Story 8: 执行控件已移至 TopBar（方案一单行合并）
  */
 import { useCanvasStore } from '@/store/useCanvasStore';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { BookOpen, GripVertical, Eye, ImageUp } from 'lucide-react';
 import type { SceneElement, ScriptElement, ImageElement } from '@/types/canvas';
 import { SceneDetailOverlay } from '@/components/canvas/SceneDetailOverlay';
@@ -26,6 +26,7 @@ interface SceneCardProps {
   onDragStart: (e: React.DragEvent, scene: SceneElement) => void;
   onDragOver: (e: React.DragEvent, sceneId: string) => void;
   onDrop: (e: React.DragEvent) => void;
+  onImageDrop: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   isDragOver: boolean;
   isDragging: boolean;
@@ -34,7 +35,7 @@ interface SceneCardProps {
 function SceneCard({
   scene, isSelected, scriptTitle, thumbnailSrc, groupColor,
   onSelect, onViewOnCanvas,
-  onDragStart, onDragOver, onDrop, onDragEnd,
+  onDragStart, onDragOver, onDrop, onImageDrop, onDragEnd,
   isDragOver, isDragging,
 }: SceneCardProps) {
   const title = scene.title || `场 ${scene.sceneNum}`;
@@ -104,7 +105,7 @@ function SceneCard({
         onDrop={e => {
           e.stopPropagation();
           const imageId = e.dataTransfer.getData('text/plain');
-          if (imageId) onDrop(e);
+          if (imageId) onImageDrop(e);
         }}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
@@ -201,6 +202,7 @@ export function StoryboardView({
   onSceneSelectionIdsChange,
 }: StoryboardViewProps) {
   const elements = useCanvasStore(s => s.elements);
+  const selectedIds = useCanvasStore(s => s.selectedIds);
   const setSelection = useCanvasStore(s => s.setSelection);
   const updateElement = useCanvasStore(s => s.updateElement);
   const setViewMode = useCanvasStore(s => s.setViewMode);
@@ -213,10 +215,10 @@ export function StoryboardView({
   const dragItemRef = useRef<SceneElement | null>(null);
 
   // Derived collections
-  const scenes = elements.filter((el): el is SceneElement => el.type === 'scene');
-  const scripts = elements.filter((el): el is ScriptElement => el.type === 'script');
-  const images = elements.filter((el): el is ImageElement => el.type === 'image');
-  const sceneIds = new Set(scenes.map(s => s.id));
+  const scenes = useMemo(() => elements.filter((el): el is SceneElement => el.type === 'scene'), [elements]);
+  const scripts = useMemo(() => elements.filter((el): el is ScriptElement => el.type === 'script'), [elements]);
+  const images = useMemo(() => elements.filter((el): el is ImageElement => el.type === 'image'), [elements]);
+  const sceneIds = useMemo(() => new Set(scenes.map(s => s.id)), [scenes]);
 
   // Single-selection for detail overlay
   const selectedSceneId = sceneSelectedIds.length === 1 ? sceneSelectedIds[0] : null;
@@ -226,6 +228,14 @@ export function StoryboardView({
   useEffect(() => {
     onSceneSelectionIdsChange(sceneSelectedIds);
   }, [sceneSelectedIds, onSceneSelectionIdsChange]);
+
+  useEffect(() => {
+    const nextSceneSelectedIds = selectedIds.filter(id => sceneIds.has(id));
+    const same =
+      nextSceneSelectedIds.length === sceneSelectedIds.length &&
+      nextSceneSelectedIds.every((id, index) => id === sceneSelectedIds[index]);
+    if (!same) setSceneSelectedIds(nextSceneSelectedIds);
+  }, [selectedIds, sceneIds, sceneSelectedIds]);
 
   const getScriptTitle = useCallback((scriptId?: string) => {
     if (!scriptId) return '';
@@ -241,11 +251,12 @@ export function StoryboardView({
 
   // ── Selection (E7 Story 7: multi-select) ────────────────────────────
   const handleSelect = useCallback((id: string, e?: React.MouseEvent) => {
+    let nextSelection = [id];
     if (e?.ctrlKey || e?.metaKey) {
       if (sceneSelectedIds.includes(id)) {
-        setSceneSelectedIds(sceneSelectedIds.filter(sid => sid !== id));
+        nextSelection = sceneSelectedIds.filter(sid => sid !== id);
       } else {
-        setSceneSelectedIds([...sceneSelectedIds, id]);
+        nextSelection = [...sceneSelectedIds, id];
       }
     } else if (e?.shiftKey && sceneSelectedIds.length > 0) {
       const sorted = [...scenes].sort((a, b) => a.sceneNum - b.sceneNum);
@@ -257,22 +268,24 @@ export function StoryboardView({
           s => s.sceneNum >= Math.min(lastScene.sceneNum, currentScene.sceneNum) &&
                s.sceneNum <= Math.max(lastScene.sceneNum, currentScene.sceneNum)
         );
-        setSceneSelectedIds([...new Set([...sceneSelectedIds, ...inRange.map(s => s.id)])]);
+        nextSelection = [...new Set([...sceneSelectedIds, ...inRange.map(s => s.id)])];
       }
-    } else {
-      setSceneSelectedIds([id]);
     }
-  }, [sceneSelectedIds, scenes]);
+    setSceneSelectedIds(nextSelection);
+    setSelection(nextSelection);
+  }, [sceneSelectedIds, scenes, setSelection]);
 
   const handleCloseOverlay = useCallback(() => {
     setSceneSelectedIds([]);
-  }, []);
+    setSelection([]);
+  }, [setSelection]);
 
   // ── Drag reorder ───────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.DragEvent, scene: SceneElement) => {
     dragItemRef.current = scene;
     setDraggingId(scene.id);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-canvas-scene-id', scene.id);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, sceneId: string) => {
@@ -282,7 +295,8 @@ export function StoryboardView({
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const dragged = dragItemRef.current;
+    const draggedId = e.dataTransfer.getData('application/x-canvas-scene-id');
+    const dragged = dragItemRef.current ?? scenes.find(s => s.id === draggedId) ?? null;
     const targetId = dragOverId;
     if (!dragged || !targetId || dragged.id === targetId) { setDragOverId(null); setDraggingId(null); dragItemRef.current = null; return; }
     const target = scenes.find(s => s.id === targetId);
@@ -343,11 +357,14 @@ export function StoryboardView({
   // ── Escape key — deselect ─────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedSceneId) setSceneSelectedIds([]);
+      if (e.key === 'Escape' && selectedSceneId) {
+        setSceneSelectedIds([]);
+        setSelection([]);
+      }
     };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [selectedSceneId]);
+  }, [selectedSceneId, setSelection]);
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-1)', overflowY: 'auto' }}>
@@ -373,7 +390,8 @@ export function StoryboardView({
               onViewOnCanvas={handleViewOnCanvas}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
-              onDrop={(e) => handleImageDropOnCard(scene.id, e)}
+              onDrop={handleDrop}
+              onImageDrop={(e) => handleImageDropOnCard(scene.id, e)}
               onDragEnd={handleDragEnd}
               isDragOver={dragOverId === scene.id}
               isDragging={draggingId === scene.id}

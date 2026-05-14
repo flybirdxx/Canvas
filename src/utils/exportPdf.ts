@@ -32,7 +32,7 @@ function buildPdfImage(stage: any, x: number, y: number, w: number, h: number): 
     return stage.toDataURL({ x, y, width: w, height: h, pixelRatio: 2, mimeType: 'image/png' });
   } catch (e) {
     console.error('PDF rasterize failed', e);
-    throw new Error('导出失败：素材可能存在跨域限制，请尝试导出为 SVG 格式。');
+    throw new Error('导出失败：素材可能存在跨域限制，请尝试导出为 SVG 格式。', { cause: e });
   }
 }
 
@@ -147,13 +147,6 @@ export async function exportAsCustomPdf(size: PageSize = 'a4'): Promise<boolean>
     return false;
   }
 }
-
-const CHINESE_FONT_CSS = `
-@font-face {
-  font-family: 'NotoSansCJKsc';
-  src: url('https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf') format('opentype');
-}
-`;
 
 async function embedChineseFont(pdf: jsPDF): Promise<void> {
   const fontUrl = 'https://cdn.jsdelivr.net/npm/jspdf-font-noto-cjk@1.0.0/NotoSansCJKsc-Regular.ttf';

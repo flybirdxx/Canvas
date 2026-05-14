@@ -17,9 +17,6 @@ export interface ImgHostConfig {
   apiKey: string;
 }
 
-/** imgbb 默认 key，来源于用户在接入该服务时提供。保持可编辑以便将来换号。 */
-const DEFAULT_IMGBB_KEY = '494e16ff85d39feb860a43b491ce1517';
-
 interface SettingsState {
   providers: Record<string, ApiProvider>;
   imgHost: ImgHostConfig;
@@ -41,8 +38,8 @@ export const useSettingsStore = create<SettingsState>()(
         },
       },
       imgHost: {
-        enabled: true,
-        apiKey: DEFAULT_IMGBB_KEY,
+        enabled: false,
+        apiKey: '',
       },
       updateProvider: (providerId, settings) =>
         set((state) => ({
@@ -61,12 +58,12 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'canvas-api-settings', // unique name for localStorage key
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, version: number) => {
         // v1 -> v2: 引入 imgHost 配置。既有用户没有这个字段，补齐默认值。
         if (version < 2 && persistedState && typeof persistedState === 'object') {
           if (!persistedState.imgHost) {
-            persistedState.imgHost = { enabled: true, apiKey: DEFAULT_IMGBB_KEY };
+            persistedState.imgHost = { enabled: false, apiKey: '' };
           }
         }
         // v2 -> v3: 新增 runninghub provider，给老用户补默认 baseUrl 和空 key。
@@ -87,6 +84,10 @@ export const useSettingsStore = create<SettingsState>()(
             delete persistedState.providers.openai;
             delete persistedState.providers.anthropic;
           }
+        }
+        // v4 -> v5: 不再内置或默认启用第三方图床 key。
+        if (version < 5 && persistedState && typeof persistedState === 'object') {
+          persistedState.imgHost = { enabled: false, apiKey: '' };
         }
         return persistedState;
       },

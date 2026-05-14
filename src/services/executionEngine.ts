@@ -19,7 +19,7 @@ import type { ExecutionErrorKind } from '@/store/useExecutionStore';
 import { dispatchToast } from '@/components/Toast';
 import { appendLog } from './executionLogs';
 import { isRunComplete } from '@/store/useExecutionStore';
-import { getController, setController, getExecId, setExecId, getSignal, isAborted, abortSession, phIdToNodeId } from './executionSession';
+import { getController, setController, getExecId, setExecId, getSignal, isAborted, phIdToNodeId } from './executionSession';
 
 /** A2: sceneId → imageId 映射，用于场景节点终态回写。
  *  当 scene 触发 image 生成时记录关联，_handleGenerationSuccess 和
@@ -110,7 +110,7 @@ export function cancelExecution(execId: string): void {
   const execState = useExecutionStore.getState().getRun(execId);
   if (execState) {
     const cancelledNodeIds = Object.values(execState.nodeStates)
-      .filter((ns) => ns.status === 'running' || ns.status === 'queued')
+      .filter((ns) => ns.status === 'running' || ns.status === 'queued' || ns.status === 'pending')
       .map((ns) => ns.nodeId);
     const idsToRemove = new Set<string>();
 
@@ -268,13 +268,19 @@ export async function runExecution(selectedIds: string[]): Promise<string | null
       );
       await Promise.all(pending);
     }
-    // Step 4: mark run complete and log summary.
-    useExecutionStore.getState().completeRun(execId);
+    // Step 4: mark run complete only when no async provider task is still pending.
     const stats = useExecutionStore.getState().getActiveRun();
     if (stats) {
       const s = Object.values(stats.nodeStates);
       const success = s.filter((n) => n.status === 'success').length;
       const failed = s.filter((n) => n.status === 'failed').length;
+      const pendingCount = s.filter((n) => n.status === 'pending').length;
+      if (!isRunComplete(stats)) {
+        appendLog(execId, 'info', `执行已挂起：${pendingCount} 个节点仍在异步生成`);
+        dispatchToast(`${pendingCount} 个节点仍在异步生成`, 'info');
+        return execId;
+      }
+      useExecutionStore.getState().completeRun(execId);
       appendLog(execId, 'info', `执行完成：${success} 成功，${failed} 失败`);
       if (failed > 0) {
         dispatchToast(`${failed} 个节点失败`, 'danger');
@@ -339,7 +345,7 @@ export async function executeNode(
 
     // Strategy: find or create a linked image node, then execute that
     let imageId = scene.linkedImageId;
-    let imageEl = imageId ? canvasState.elements.find(e => e.id === imageId) : undefined;
+    const imageEl = imageId ? canvasState.elements.find(e => e.id === imageId) : undefined;
 
     if (!imageEl) {
       // No linked image — create one at scene's right side
@@ -373,7 +379,6 @@ export async function executeNode(
       // Update scene.linkedImageId
       canvasState.updateElement(el.id, { linkedImageId: newImageId });
       imageId = newImageId;
-      imageEl = newImage;
 
       appendLog(execId, 'info', `${nodeId} 自动创建图像节点 ${newImageId}`, nodeId);
 
@@ -390,7 +395,8 @@ export async function executeNode(
     // Scene's own status mirrors the image node's final status
     const finalImage = useCanvasStore.getState().elements.find(e => e.id === imageId);
     if (finalImage?.type === 'aigenerating') {
-      // Still pending — leave scene as running
+      store.updateNodeStatus(nodeId, 'pending');
+      // Still pending — mark scene as pending too
       return;
     }
     const imageState = store.getRun(execId)?.nodeStates[imageId];
@@ -456,6 +462,7 @@ export async function executeNode(
       h: el.height ?? 560,
       durationSec: (el as any).generation?.durationSec ?? 5,
       seedImage: (el as any).references?.[0],
+      execId,
     };
     try {
       appendLog(execId, 'info', `${nodeId} 调用 AI 生成…`, nodeId);
@@ -463,6 +470,7 @@ export async function executeNode(
       if (isAborted()) return;
       const updatedEl = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
       if (updatedEl?.type === 'aigenerating') {
+        store.updateNodeStatus(nodeId, 'pending');
         appendLog(execId, 'info', `${nodeId} 生成中（异步）`, nodeId);
         return;
       }
@@ -517,6 +525,15 @@ export async function executeNode(
       return;
     }
 
+    // P1-A: onSuccess callback may have already set status to 'success'
+    // via replacePlaceholderWithImage (which assigns a new element id).
+    // Check before falling into the "节点已被删除" false-positive path.
+    const currentStatus = store.getRun(execId)?.nodeStates[nodeId]?.status;
+    if (currentStatus === 'success') {
+      phIdToNodeId.delete(nodeId);
+      return;
+    }
+
     const updated = useCanvasStore.getState().elements.find((e) => e.id === nodeId);
     if (!updated) {
       phIdToNodeId.delete(nodeId);
@@ -542,6 +559,7 @@ export async function executeNode(
         return;
       }
       if (ag.pendingTask) {
+        store.updateNodeStatus(nodeId, 'pending');
         // 异步生成仍在进行中 — 保留 phIdToNodeId 映射供回调使用
         appendLog(execId, 'info', `${nodeId} 生成中（异步）`, nodeId);
         return;
@@ -633,7 +651,7 @@ export async function retryNode(execId: string, nodeId: string): Promise<void> {
   try {
     appendLog(execId, 'info', `重试节点 ${nodeId}`, nodeId);
 
-    // executeNode will transition failed → queued → running.
+    store.retryNode(execId, nodeId);
     await executeNode(nodeId, execId, elements, connections);
 
     // Check if run is complete after this node.
@@ -683,6 +701,7 @@ export async function retryRun(execId: string): Promise<void> {
 
   try {
     appendLog(execId, 'info', `重新运行 ${failedIds.length} 个失败节点`);
+    store.retryRun(execId);
 
     // Topological sort over the failed subset.
     const levels = topologicalSort(failedIds, connections);
@@ -699,7 +718,7 @@ export async function retryRun(execId: string): Promise<void> {
     }
 
     const updated = store.getRun(execId);
-    if (updated) {
+    if (updated && isRunComplete(updated)) {
       store.completeRun(execId);
       const s = Object.values(updated.nodeStates);
       const success = s.filter((n) => n.status === 'success').length;
@@ -765,7 +784,7 @@ export async function restartRun(execId: string): Promise<void> {
     }
 
     const updated = store.getRun(execId);
-    if (updated) {
+    if (updated && isRunComplete(updated)) {
       store.completeRun(execId);
       const s = Object.values(updated.nodeStates);
       const success = s.filter((n) => n.status === 'success').length;

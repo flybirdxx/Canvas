@@ -549,6 +549,13 @@ export const RunningHubProvider: GatewayProvider = {
     return { ok: false, kind: 'unknown', message: `未知视频模型：${req.model}` };
   },
 
+  async pollVideoTask(taskId: string, config: ProviderRuntimeConfig): Promise<VideoGenResult> {
+    if (!config.apiKey) {
+      return { ok: false, kind: 'missingKey', message: '请先在设置中配置 RunningHub 的 API 密钥' };
+    }
+    return pollVideoUntilDone(config, taskId, VIDEO_POLL_MAX_WAIT_MS);
+  },
+
   async generateText(req: TextGenRequest, config: ProviderRuntimeConfig): Promise<TextGenResult> {
     if (!config.apiKey) {
       return { ok: false, kind: 'missingKey', message: '请先在设置中配置 RunningHub 的 API 密钥' };
@@ -1142,7 +1149,7 @@ async function submitTask(endpoint: string, body: Record<string, unknown>, apiKe
       body: JSON.stringify(body),
     });
   } catch (e: unknown) {
-    throw new Error(`RunningHub 任务提交失败：${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`RunningHub 任务提交失败：${e instanceof Error ? e.message : String(e)}`, { cause: e });
   }
   if (!resp.ok) {
     const parsed = await parseErrorBody(resp);

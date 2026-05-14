@@ -77,7 +77,7 @@ export function SceneDetailOverlay({ scene, scriptTitle, onClose }: SceneDetailO
     setConfirmDelete(false);
     setActiveTab('script');
     setDidInit(false);
-  }, [scene.id]);
+  }, [scene.id, scene.analysisNote, scene.title]);
 
   // Auto-save on any change
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

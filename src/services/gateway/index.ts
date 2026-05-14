@@ -188,21 +188,29 @@ export async function generateVideoByModelId(
   return found.provider.generateVideo(req, config);
 }
 
+export async function pollVideoTaskByProviderId(
+  providerId: string,
+  taskId: string,
+): Promise<VideoGenResult> {
+  const provider = getProvider(providerId);
+  if (!provider) {
+    return { ok: false, kind: 'unknown', message: `未知 provider：${providerId}` };
+  }
+  if (!provider.pollVideoTask) {
+    return {
+      ok: false,
+      kind: 'unknown',
+      message: `${provider.name} 不支持异步视频任务恢复（缺少 pollVideoTask 实现）`,
+    };
+  }
+  const config = readProviderConfig(providerId);
+  return provider.pollVideoTask(taskId, config);
+}
+
 /**
  * Text counterpart of {@link generateImageByModelId}. Same contract: never
  * throws, surfaces structured failures for missing model / capability / key.
  */
-/**
- * TODO(A4): 异步视频任务查询（pollVideoTaskByProviderId）。
- * 模式对齐 pollImageTaskByProviderId — 按 providerId + taskId 查询，
- * 返回 VideoGenResult，含 'pending' 变体表示任务仍在跑。
- * 接入异步视频 provider 时取消注释并实现。
- * export async function pollVideoTaskByProviderId(
- *   providerId: string,
- *   taskId: string,
- * ): Promise<VideoGenResult> { ... }
- */
-
 export async function generateTextByModelId(
   req: TextGenRequest,
 ): Promise<TextGenResult> {

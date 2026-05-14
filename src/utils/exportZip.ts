@@ -71,11 +71,14 @@ function canvasToJson(
   opts: ExportZipOptions,
 ) {
   const stripAiFields = (el: any): any => {
-    const {
-      prompt, generation, error, pendingTask,
-      inheritedVersions, inheritedPrompt, versions,
-      ...rest
-    } = el;
+    const rest = { ...el };
+    delete rest.prompt;
+    delete rest.generation;
+    delete rest.error;
+    delete rest.pendingTask;
+    delete rest.inheritedVersions;
+    delete rest.inheritedPrompt;
+    delete rest.versions;
     return rest;
   };
 

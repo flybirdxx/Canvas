@@ -10,28 +10,6 @@ function hasChinese(text: string): boolean {
   return /[\u4e00-\u9fa5]/.test(text);
 }
 
-function toDataUrl(imgSrc: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(imgSrc); return; }
-      ctx.drawImage(img, 0, 0);
-      try {
-        resolve(canvas.toDataURL('image/png'));
-      } catch {
-        resolve(imgSrc);
-      }
-    };
-    img.onerror = () => resolve(imgSrc);
-    img.src = imgSrc;
-  });
-}
-
 function bezierPath(
   x1: number, y1: number, x2: number, y2: number,
   fromPortX: number, fromPortY: number,
@@ -46,9 +24,6 @@ function connectionPath(conn: Connection, elements: CanvasElement[]): string {
   const fromEl = elements.find(e => e.id === conn.fromId);
   const toEl = elements.find(e => e.id === conn.toId);
   if (!fromEl || !toEl) return '';
-
-  const fromPort = fromEl.outputs?.find(p => p.id === conn.fromPortId);
-  const toPort = toEl.inputs?.find(p => p.id === conn.toPortId);
 
   const fx = fromEl.x + fromEl.width;
   const fy = fromEl.y + fromEl.height / 2;

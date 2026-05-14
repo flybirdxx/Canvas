@@ -28,8 +28,6 @@ export function useGlobalShortcuts() {
   const addElement = useCanvasStore(s => s.addElement);
   const setSelection = useCanvasStore(s => s.setSelection);
   const setActiveTool = useCanvasStore(s => s.setActiveTool);
-  const viewMode = useCanvasStore(s => s.viewMode);
-  const setViewMode = useCanvasStore(s => s.setViewMode);
 
   /**
    * 在画布中心创建新节点。和原 App.tsx 中 handleCreateNode 语义一致：

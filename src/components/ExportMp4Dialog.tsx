@@ -57,7 +57,7 @@ export function ExportMp4Dialog({ sceneCount, onClose }: ExportMp4DialogProps) {
         audioDuration: audioDuration || undefined,
       };
 
-      await exportMp4(opts);
+      await exportMp4(opts, setProgress);
       setProgress(100);
       setTimeout(onClose, 1500);
     } catch (err: any) {
