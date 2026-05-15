@@ -8,6 +8,7 @@ export function ThumbChip({
   title,
   onRemove,
 }: {
+  key?: React.Key;
   src: string;
   alt: string;
   tone: 'accent' | 'muted';
