@@ -144,9 +144,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               }
             }
           },
-          onMouseEnter: () => {
-            if (el.type !== 'video' && el.type !== 'audio') setHoveredId(id);
-          },
+          onMouseEnter: () => { setHoveredId(id); },
           onMouseLeave: () => { setHoveredId(null); },
           onDblClick: () => {
             if (el.type === 'text') {
@@ -193,17 +191,20 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
 
         return (
           <Group key={id} {...outerGroupProps} rotation={rotOverride}>
-            {isSelected && activeTool === 'select' && (
-              <SelectionHandles
-                el={el}
-                snapCallbacks={snapCallbacks}
-                dragGuardRef={isDraggingOrResizingRef}
-              />
-            )}
             <PortOverlay el={el} isSelected={isSelected} hoveredId={hoveredId} />
             {groupBorder}
             {nodeContent}
             <RunningPulse el={el} />
+            {activeTool === 'select' && !drawingConnection && (
+              <SelectionHandles
+                el={el}
+                isSelected={isSelected}
+                isHovered={hoveredId === id}
+                selectedCount={selectedIds.length}
+                snapCallbacks={snapCallbacks}
+                dragGuardRef={isDraggingOrResizingRef}
+              />
+            )}
           </Group>
         );
       })}
