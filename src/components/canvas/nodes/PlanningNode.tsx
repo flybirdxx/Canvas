@@ -10,6 +10,7 @@ import {
   buildPlanningNodesFromResponse,
   convertTaskToExecutionNode,
   createTaskFromRequirement,
+  detectPropVisualConflict,
   makePlanningConnection,
 } from '@/services/planningGraph';
 import { useExecutionBorder } from './shared';
@@ -60,6 +61,17 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
       } as Partial<PlanningElement>,
       label,
     );
+  };
+
+  const hasPropVisualConflict = (requirement: PlanningRequirement) => {
+    if (requirement.materialType !== 'prop') return false;
+
+    const taskDescription = [el.title, el.body, el.acceptanceCriteria].filter(Boolean).join('\n');
+    const propDefinition = [requirement.title, requirement.description, requirement.necessity]
+      .filter(Boolean)
+      .join('\n');
+
+    return detectPropVisualConflict(taskDescription, propDefinition).conflict;
   };
 
   const stopInteraction = (event: React.SyntheticEvent) => {
@@ -322,6 +334,11 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
                     >
                       {MATERIAL_LABELS[requirement.materialType]} · 待确认
                     </div>
+                    {hasPropVisualConflict(requirement) && (
+                      <div style={conflictHintStyle}>
+                        视觉设定可能不一致，由用户自行分辨
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 5 }}>
                     <button
@@ -383,6 +400,11 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
                     >
                       {MATERIAL_LABELS[requirement.materialType]} · 已确认
                     </div>
+                    {hasPropVisualConflict(requirement) && (
+                      <div style={conflictHintStyle}>
+                        视觉设定可能不一致，由用户自行分辨
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -444,6 +466,13 @@ const actionButtonStyle: React.CSSProperties = {
   lineHeight: 1.2,
   padding: '4px 7px',
   cursor: 'pointer',
+};
+
+const conflictHintStyle: React.CSSProperties = {
+  marginTop: 3,
+  color: 'var(--ink-2)',
+  fontSize: 10,
+  lineHeight: 1.35,
 };
 
 function taskTypeLabel(type: NonNullable<PlanningElement['recommendedTaskType']>): string {

@@ -86,6 +86,66 @@ describe('PlanningNode', () => {
     expect(screen.getAllByText(/待确认/).length).toBeGreaterThan(0);
   });
 
+  it('shows a restrained prompt for conflicting prop visuals', () => {
+    const node = makePlanningNode({
+      title: '红色怀表线索',
+      body: '主角必须看见红色怀表上的家族标识。',
+      requirements: [
+        {
+          id: 'req-pocket-watch',
+          title: '银色怀表特写',
+          materialType: 'prop',
+          description: '银色旧怀表，带蓝宝石标记。',
+          status: 'pending',
+        },
+      ],
+    });
+    useCanvasStore.setState({ elements: [node] });
+
+    render(<PlanningNode el={node} />);
+
+    expect(screen.getByText('视觉设定可能不一致，由用户自行分辨')).toBeInTheDocument();
+  });
+
+  it('does not show the prop visual prompt for non-conflicting props or non-prop requirements', () => {
+    const prompt = '视觉设定可能不一致，由用户自行分辨';
+
+    const nonConflictingProp = makePlanningNode({
+      title: '红色怀表线索',
+      body: '主角必须看见红色怀表。',
+      requirements: [
+        {
+          id: 'req-red-watch',
+          title: '红色怀表特写',
+          materialType: 'prop',
+          description: '红色旧怀表近景。',
+          status: 'pending',
+        },
+      ],
+    });
+    const { unmount } = render(<PlanningNode el={nonConflictingProp} />);
+
+    expect(screen.queryByText(prompt)).not.toBeInTheDocument();
+    unmount();
+
+    const nonProp = makePlanningNode({
+      title: '红色仓库线索',
+      body: '主角必须看见红色仓库门。',
+      requirements: [
+        {
+          id: 'req-silver-scene',
+          title: '银色仓库门',
+          materialType: 'scene',
+          description: '银色仓库门远景。',
+          status: 'pending',
+        },
+      ],
+    });
+    render(<PlanningNode el={nonProp} />);
+
+    expect(screen.queryByText(prompt)).not.toBeInTheDocument();
+  });
+
   it('confirms a pending requirement in the store', () => {
     const node = makePlanningNode();
     useCanvasStore.setState({ elements: [node] });
@@ -98,6 +158,32 @@ describe('PlanningNode', () => {
     if (updated.type !== 'planning') throw new Error('expected planning node');
     expect(updated.requirements?.[0]?.status).toBe('confirmed');
     expect(useCanvasStore.getState().currentLabel).toBe('确认素材需求');
+  });
+
+  it('keeps confirmation available when a prop visual prompt is shown', () => {
+    const node = makePlanningNode({
+      title: '红色怀表线索',
+      body: '主角必须看见红色怀表。',
+      requirements: [
+        {
+          id: 'req-pocket-watch',
+          title: '银色怀表特写',
+          materialType: 'prop',
+          description: '银色旧怀表近景。',
+          status: 'pending',
+        },
+      ],
+    });
+    useCanvasStore.setState({ elements: [node] });
+
+    render(<PlanningNode el={node} />);
+    expect(screen.getByText('视觉设定可能不一致，由用户自行分辨')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+
+    const updated = useCanvasStore.getState().elements[0];
+    expect(updated.type).toBe('planning');
+    if (updated.type !== 'planning') throw new Error('expected planning node');
+    expect(updated.requirements?.[0]?.status).toBe('confirmed');
   });
 
   it('creates one production task from a confirmed plot requirement and prevents duplicates', () => {
