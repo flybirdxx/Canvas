@@ -324,7 +324,7 @@ const CAP_META: Record<Capability, { label: string; fg: string; bg: string; Icon
   text:  { label: '文本', fg: 'var(--port-text)',  bg: 'color-mix(in oklch, var(--port-text)  14%, var(--bg-1))',  Icon: TextIcon },
 };
 
-function CapabilityBadge({ cap, count }: { cap: Capability; count: number }) {
+function CapabilityBadge({ cap, count }: { key?: React.Key; cap: Capability; count: number }) {
   const meta = CAP_META[cap];
   const Icon = meta.Icon;
   return (
