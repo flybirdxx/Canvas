@@ -181,6 +181,10 @@ describe('planningGraph', () => {
   it('makes planning connections with explicit port ids', () => {
     const connection = makePlanningConnection('seed', 'seedOut', 'bible', 'bibleIn');
 
+    expect(connection.fromId).toBe('seed');
+    expect(connection.fromPortId).toBe('seedOut');
+    expect(connection.toId).toBe('bible');
+    expect(connection.toPortId).toBe('bibleIn');
     expect(connection).toMatchObject({
       fromId: 'seed',
       fromPortId: 'seedOut',

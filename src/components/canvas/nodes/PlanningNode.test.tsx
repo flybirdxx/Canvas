@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlanningElement } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import { listModels } from '@/services/gateway';
+import { generateShortDramaPlanning } from '@/services/planning';
 import { PlanningNode } from './PlanningNode';
 
 vi.mock('react-konva', () => ({
@@ -12,6 +14,14 @@ vi.mock('react-konva', () => ({
 
 vi.mock('react-konva-utils', () => ({
   Html: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/services/gateway', () => ({
+  listModels: vi.fn(),
+}));
+
+vi.mock('@/services/planning', () => ({
+  generateShortDramaPlanning: vi.fn(),
 }));
 
 function makePlanningNode(overrides: Partial<PlanningElement> = {}): PlanningElement {
@@ -40,6 +50,7 @@ function makePlanningNode(overrides: Partial<PlanningElement> = {}): PlanningEle
 
 describe('PlanningNode', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useCanvasStore.setState({
       elements: [],
       selectedIds: [],
@@ -49,7 +60,19 @@ describe('PlanningNode', () => {
       currentTimestamp: 0,
       _coalesceKey: undefined,
       _coalesceAt: undefined,
+      connections: [],
     } as Partial<ReturnType<typeof useCanvasStore.getState>>);
+    vi.mocked(listModels).mockReturnValue([{
+      id: 'text-model-1',
+      providerId: 'test-provider',
+      label: 'Text Model',
+      capability: 'text',
+    }]);
+    vi.mocked(generateShortDramaPlanning).mockResolvedValue({
+      storyBible: { id: 'story-bible-source', title: '故事圣经', body: '主线设定' },
+      characters: [],
+      plots: [],
+    });
   });
 
   it('renders the Chinese kind label and pending requirement', () => {
@@ -95,5 +118,69 @@ describe('PlanningNode', () => {
     });
 
     window.removeEventListener('planning:convert-task', listener);
+  });
+
+  it('renders a story bible generation button for project seeds', () => {
+    const node = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      title: '短剧项目种子',
+      body: '一句短剧想法',
+      requirements: [],
+    });
+
+    render(<PlanningNode el={node} />);
+
+    expect(screen.getByRole('button', { name: '生成故事圣经' })).toBeInTheDocument();
+  });
+
+  it('generates planning nodes and connections from a project seed', async () => {
+    const node = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      title: '短剧项目种子',
+      body: '一句短剧想法',
+      requirements: [],
+      outputs: [{ id: 'seed-output-1', type: 'text', label: 'Plan' }],
+    });
+    useCanvasStore.setState({ elements: [node], connections: [] });
+
+    render(<PlanningNode el={node} />);
+    fireEvent.click(screen.getByRole('button', { name: '生成故事圣经' }));
+
+    await waitFor(() => {
+      expect(generateShortDramaPlanning).toHaveBeenCalledWith('一句短剧想法', 'text-model-1');
+      expect(useCanvasStore.getState().elements).toHaveLength(2);
+    });
+
+    const generated = useCanvasStore.getState().elements[1];
+    expect(generated.type).toBe('planning');
+    if (generated.type !== 'planning') throw new Error('expected generated planning node');
+    expect(generated.kind).toBe('storyBible');
+    expect(generated.title).toBe('故事圣经');
+    expect(useCanvasStore.getState().connections).toHaveLength(1);
+    expect(useCanvasStore.getState().connections[0]).toMatchObject({
+      fromId: 'project-seed-1',
+      fromPortId: 'seed-output-1',
+      toId: generated.id,
+      toPortId: generated.inputs?.[0]?.id,
+    });
+  });
+
+  it('shows a visible error when no text model is available', async () => {
+    vi.mocked(listModels).mockReturnValue([]);
+    const node = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      title: '短剧项目种子',
+      body: '一句短剧想法',
+      requirements: [],
+    });
+
+    render(<PlanningNode el={node} />);
+    fireEvent.click(screen.getByRole('button', { name: '生成故事圣经' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('没有可用的文本模型');
+    expect(generateShortDramaPlanning).not.toHaveBeenCalled();
   });
 });

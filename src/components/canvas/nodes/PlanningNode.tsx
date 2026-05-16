@@ -1,8 +1,12 @@
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
+import { useState } from 'react';
 import type React from 'react';
 import type { PlanningElement, PlanningNodeKind, PlanningRequirement } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import { listModels } from '@/services/gateway';
+import { generateShortDramaPlanning } from '@/services/planning';
+import { buildPlanningNodesFromResponse } from '@/services/planningGraph';
 import { useExecutionBorder } from './shared';
 
 const KIND_LABELS: Record<PlanningNodeKind, string> = {
@@ -27,6 +31,8 @@ const MATERIAL_LABELS: Record<PlanningRequirement['materialType'], string> = {
 export function PlanningNode({ el }: { el: PlanningElement }) {
   const executionBorder = useExecutionBorder(el.id);
   const updateElement = useCanvasStore((s) => s.updateElement);
+  const [isGeneratingStoryBible, setIsGeneratingStoryBible] = useState(false);
+  const [storyBibleError, setStoryBibleError] = useState<string | null>(null);
   const requirements = el.requirements ?? [];
   const pendingRequirements = requirements.filter(req => req.status === 'pending');
   const confirmed = requirements.filter(req => req.status === 'confirmed').length;
@@ -55,6 +61,44 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
   const handleConvertTask = (event: React.SyntheticEvent) => {
     event.stopPropagation();
     window.dispatchEvent(new CustomEvent('planning:convert-task', { detail: { id: el.id } }));
+  };
+
+  const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+    if (isGeneratingStoryBible) return;
+
+    setStoryBibleError(null);
+    const model = listModels('text')[0]?.id;
+    if (!model) {
+      setStoryBibleError('没有可用的文本模型');
+      return;
+    }
+
+    setIsGeneratingStoryBible(true);
+    try {
+      const response = await generateShortDramaPlanning(el.body, model);
+      const { nodes, connections } = buildPlanningNodesFromResponse(el, response);
+      const store = useCanvasStore.getState();
+
+      nodes.forEach(node => store.addElement(node));
+
+      if (typeof store.addConnection === 'function') {
+        connections
+          .filter(connection =>
+            connection.id &&
+            connection.fromPortId &&
+            connection.toPortId,
+          )
+          .forEach(connection => store.addConnection(connection));
+      }
+      setStoryBibleError(null);
+    } catch (error) {
+      setStoryBibleError(error instanceof Error && error.message
+        ? error.message
+        : '生成故事圣经失败');
+    } finally {
+      setIsGeneratingStoryBible(false);
+    }
   };
 
   return (
@@ -141,6 +185,43 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
               padding: 12,
             }}
           />
+          {el.kind === 'projectSeed' && (
+            <section
+              style={{
+                padding: '8px 10px',
+                borderTop: '1px solid var(--line-1)',
+                background: 'color-mix(in oklch, var(--bg-2) 88%, var(--accent) 12%)',
+              }}
+            >
+              <button
+                type="button"
+                className="pointer-events-auto"
+                disabled={isGeneratingStoryBible}
+                onPointerDown={stopInteraction}
+                onClick={handleGenerateStoryBible}
+                style={{
+                  ...actionButtonStyle,
+                  color: 'var(--accent)',
+                  opacity: isGeneratingStoryBible ? 0.65 : 1,
+                }}
+              >
+                生成故事圣经
+              </button>
+              {storyBibleError && (
+                <div
+                  role="alert"
+                  style={{
+                    marginTop: 6,
+                    color: 'var(--ink-2)',
+                    fontSize: 10.5,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {storyBibleError}
+                </div>
+              )}
+            </section>
+          )}
           {(pendingRequirements.length > 0 || el.kind === 'productionTask') && (
             <section
               style={{
