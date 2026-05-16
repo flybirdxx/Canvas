@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Type, Image as ImageIcon, Video, Music, StickyNote, FileUp, Square, Sparkles, Plus, Search, Layers, Clapperboard } from 'lucide-react';
+import { Type, Image as ImageIcon, Video, Music, StickyNote, FileUp, Square, Sparkles, Plus, Search, Layers, Clapperboard, Network } from 'lucide-react';
 
 const MENU_CLOSE_MS = 180;
 
@@ -94,6 +94,7 @@ export function ToolDock({ onCreate, onUploadFiles }: { onCreate: (t: string) =>
               <Pick onClick={() => { onCreate('video'); closeMenu(); }} icon={<Video size={15} strokeWidth={1.6} />} label="Video" desc="Text/image to video" hotkey="V" />
               <Pick onClick={() => { onCreate('audio'); closeMenu(); }} icon={<Music size={15} strokeWidth={1.6} />} label="Audio" desc="Voice / BGM" hotkey="A" />
               <Pick onClick={() => { onCreate('omniscript'); closeMenu(); }} icon={<Clapperboard size={15} strokeWidth={1.6} />} label="OmniScript" desc="Video cover analysis" hotkey="O" />
+              <Pick onClick={() => { onCreate('planning'); closeMenu(); }} icon={<Network size={15} strokeWidth={1.6} />} label="企划节点" desc="种子 / 圣经 / 任务" hotkey="P" />
               <Pick onClick={() => { onCreate('sticky'); closeMenu(); }} icon={<StickyNote size={15} strokeWidth={1.6} />} label="Sticky" desc="Quick note" hotkey="S" />
               <Pick onClick={() => { onCreate('rectangle'); closeMenu(); }} icon={<Square size={15} strokeWidth={1.6} />} label="Shape" desc="Rectangle / circle" hotkey="R" />
               <Pick onClick={() => { ref.current?.click(); closeMenu(); }} icon={<FileUp size={15} strokeWidth={1.6} />} label="File" desc="Any format" hotkey="U" />

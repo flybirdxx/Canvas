@@ -4,6 +4,14 @@ import type { CanvasElement, ElementType } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { exportSelection } from '@/utils/exportPng';
 
+const DEFAULT_PLANNING_BODY = [
+  '一句想法：',
+  '',
+  '题材 / 基调：',
+  '',
+  '短剧方向：',
+].join('\n');
+
 export function useGlobalShortcuts() {
   const addElement = useCanvasStore(s => s.addElement);
   const setSelection = useCanvasStore(s => s.setSelection);
@@ -36,13 +44,19 @@ export function useGlobalShortcuts() {
         undefined,
       src: isMedia ? '' : undefined,
       cornerRadius: type === 'rectangle' ? 12 : undefined,
-      title: type === 'omniscript' ? 'OmniScript' : undefined,
+      title:
+        type === 'omniscript' ? 'OmniScript' :
+        type === 'planning' ? '项目种子' :
+        undefined,
       videoUrl: type === 'omniscript' ? '' : undefined,
       notes: type === 'omniscript' ? '' : undefined,
       analysisStatus: type === 'omniscript' ? 'idle' : undefined,
       result: type === 'omniscript'
         ? { segments: [], structuredScript: [], highlights: [] }
         : undefined,
+      kind: type === 'planning' ? 'projectSeed' : undefined,
+      body: type === 'planning' ? DEFAULT_PLANNING_BODY : undefined,
+      template: type === 'planning' ? 'shortDrama' : undefined,
     } as CanvasElement;
 
     addElement(element);
@@ -131,6 +145,7 @@ export function useGlobalShortcuts() {
         if (k === 'i') { e.preventDefault(); handleCreateNode('image'); return; }
         if (k === 's') { e.preventDefault(); handleCreateNode('sticky'); return; }
         if (k === 'o') { e.preventDefault(); handleCreateNode('omniscript'); return; }
+        if (k === 'p') { e.preventDefault(); handleCreateNode('planning'); return; }
 
         if (e.key === 'Home') {
           e.preventDefault();
@@ -153,5 +168,6 @@ function getDefaultSize(type: ElementType): { width: number; height: number } {
   if (type === 'video') return { width: 640, height: 360 };
   if (type === 'audio') return { width: 360, height: 96 };
   if (type === 'omniscript') return { width: 640, height: 440 };
+  if (type === 'planning') return { width: 340, height: 260 };
   return { width: 100, height: 100 };
 }

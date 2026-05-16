@@ -12,4 +12,14 @@ describe('ToolDock', () => {
 
     expect(onCreate).toHaveBeenCalledWith('omniscript');
   });
+
+  it('creates a planning node from the add menu', () => {
+    const onCreate = vi.fn();
+    render(<ToolDock onCreate={onCreate} />);
+
+    fireEvent.click(screen.getByTitle('Add'));
+    fireEvent.click(screen.getByText('企划节点'));
+
+    expect(onCreate).toHaveBeenCalledWith('planning');
+  });
 });
