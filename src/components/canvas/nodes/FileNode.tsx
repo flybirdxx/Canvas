@@ -280,6 +280,38 @@ function FileVideoPlayBadge() {
   );
 }
 
+function FileVideoHtmlPreview({
+  el,
+  width,
+  height,
+}: {
+  el: any;
+  width: number;
+  height: number;
+}) {
+  const stopPropagation = (e: React.SyntheticEvent) => e.stopPropagation();
+  return (
+    <video
+      controls
+      preload="metadata"
+      src={el.src}
+      poster={el.thumbnailDataUrl || undefined}
+      style={{
+        width,
+        height,
+        display: 'block',
+        objectFit: 'contain',
+        background: '#000',
+        borderRadius: 12,
+        pointerEvents: 'auto',
+      }}
+      onPointerDown={stopPropagation}
+      onClick={stopPropagation}
+      onDoubleClick={stopPropagation}
+    />
+  );
+}
+
 function FileImageKonvaBody({
   el, src, width, height,
 }: {
@@ -470,6 +502,28 @@ export function FileNode({ el }: { el: any }) {
 
   if (hasThumb) {
     const thumbSrc = fileKind === 'image' ? hydratedEl.src : el.thumbnailDataUrl;
+    if (fileKind === 'video' && hydratedEl.src) {
+      return (
+        <Group>
+          <Rect width={width} height={height} fill="transparent" />
+          <FileImageKonvaBody el={hydratedEl} src={thumbSrc} width={width} height={height} />
+          <Html divProps={{ style: { pointerEvents: 'none' } }}>
+            <div className="relative" style={{ width, height, pointerEvents: 'none' }}>
+              <FileVideoHtmlPreview el={hydratedEl} width={width} height={height} />
+              <FileNodeOverlayChips
+                el={hydratedEl}
+                width={width}
+                height={height}
+                kind={fileKind}
+                absoluteInCard
+              />
+              <FileNodeInfoBand el={hydratedEl} />
+            </div>
+          </Html>
+        </Group>
+      );
+    }
+
     return (
       <Group>
         <Rect width={width} height={height} fill="transparent" />
