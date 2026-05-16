@@ -1,6 +1,30 @@
 import { Layers, Settings2, Trash2, Upload } from 'lucide-react';
 import type React from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import type { PlanningElement, PlanningNodeKind, PropVisibility } from '@/types/canvas';
+
+const PLANNING_KIND_OPTIONS: { value: PlanningNodeKind; label: string }[] = [
+  { value: 'projectSeed', label: '项目种子' },
+  { value: 'storyBible', label: '故事圣经' },
+  { value: 'characterPackage', label: '角色生产包' },
+  { value: 'plot', label: '剧情节点' },
+  { value: 'reference', label: '引用对象' },
+  { value: 'productionTask', label: '生产任务' },
+];
+
+const TASK_TYPE_OPTIONS: { value: NonNullable<PlanningElement['recommendedTaskType']>; label: string }[] = [
+  { value: 'image', label: '图片' },
+  { value: 'text', label: '文本' },
+  { value: 'video', label: '视频' },
+  { value: 'audio', label: '音频' },
+];
+
+const PROP_VISIBILITY_OPTIONS: { value: PropVisibility; label: string }[] = [
+  { value: 'full', label: '完整可见' },
+  { value: 'partial', label: '局部可见' },
+  { value: 'obscured', label: '被遮挡' },
+  { value: 'markOnly', label: '只露标识' },
+];
 
 export function PropertiesPanel() {
   const { elements, selectedIds, updateElement, deleteElements } = useCanvasStore();
@@ -12,6 +36,7 @@ export function PropertiesPanel() {
   const hasSize = el.type !== 'aigenerating';
   const isMedia = el.type === 'image' || el.type === 'video' || el.type === 'audio';
   const isTextLike = el.type === 'text' || el.type === 'sticky';
+  const isPlanning = el.type === 'planning';
 
   return (
     <aside
@@ -73,6 +98,93 @@ export function PropertiesPanel() {
               <Field label="内容">
                 <textarea value={el.text} onChange={e => updateElement(el.id, { text: e.target.value })} className="input-paper" style={{ fontSize: 12, minHeight: 64, lineHeight: 1.55 }} />
               </Field>
+            </section>
+          </>
+        )}
+
+        {isPlanning && (
+          <>
+            <hr className="rule-ink" />
+            <section className="flex flex-col gap-2.5">
+              <SectionHead icon={<Layers className="w-3 h-3" strokeWidth={1.8} />}>企划</SectionHead>
+              <Field label="类型">
+                <select
+                  value={el.kind}
+                  onChange={e => updateElement(el.id, { kind: e.target.value as PlanningNodeKind } as Partial<PlanningElement>)}
+                  className="input-paper"
+                  style={{ fontSize: 11.5 }}
+                >
+                  {PLANNING_KIND_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="标题">
+                <input
+                  type="text"
+                  value={el.title}
+                  onChange={e => updateElement(el.id, { title: e.target.value } as Partial<PlanningElement>)}
+                  className="input-paper"
+                  style={{ fontSize: 11.5 }}
+                />
+              </Field>
+              <Field label="内容">
+                <textarea
+                  value={el.body}
+                  onChange={e => updateElement(el.id, { body: e.target.value } as Partial<PlanningElement>)}
+                  className="input-paper"
+                  style={{ fontSize: 12, minHeight: 110, lineHeight: 1.55 }}
+                />
+              </Field>
+              {el.kind === 'productionTask' && (
+                <>
+                  <Field label="任务类型">
+                    <select
+                      value={el.recommendedTaskType ?? ''}
+                      onChange={e => {
+                        const value = e.target.value as PlanningElement['recommendedTaskType'] | '';
+                        updateElement(el.id, { recommendedTaskType: value || undefined } as Partial<PlanningElement>);
+                      }}
+                      className="input-paper"
+                      style={{ fontSize: 11.5 }}
+                    >
+                      <option value="">空</option>
+                      {TASK_TYPE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="道具可见程度">
+                    <select
+                      value={el.propStates?.[0]?.visibility ?? ''}
+                      onChange={e => {
+                        const value = e.target.value as PropVisibility | '';
+                        const [, ...rest] = el.propStates ?? [];
+                        updateElement(el.id, {
+                          propStates: value
+                            ? [{ ...(el.propStates?.[0] ?? {}), visibility: value, userConfirmed: true }, ...rest]
+                            : rest,
+                        } as Partial<PlanningElement>);
+                      }}
+                      className="input-paper"
+                      style={{ fontSize: 11.5 }}
+                    >
+                      <option value="">空</option>
+                      {PROP_VISIBILITY_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="验收标准">
+                    <textarea
+                      value={el.acceptanceCriteria ?? ''}
+                      onChange={e => updateElement(el.id, { acceptanceCriteria: e.target.value } as Partial<PlanningElement>)}
+                      className="input-paper"
+                      style={{ fontSize: 12, minHeight: 72, lineHeight: 1.55 }}
+                    />
+                  </Field>
+                </>
+              )}
             </section>
           </>
         )}
