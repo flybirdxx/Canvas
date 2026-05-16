@@ -194,10 +194,23 @@ describe('planningGraph', () => {
     expect(node.prompt).toContain('必须包含破损霓虹灯');
   });
 
-  it('copy-converts text, video, and audio tasks to matching execution nodes', () => {
-    expect(convertTaskToExecutionNode({ ...seed, kind: 'productionTask', recommendedTaskType: 'text' }).type).toBe('text');
-    expect(convertTaskToExecutionNode({ ...seed, kind: 'productionTask', recommendedTaskType: 'video' }).type).toBe('video');
-    expect(convertTaskToExecutionNode({ ...seed, kind: 'productionTask', recommendedTaskType: 'audio' }).type).toBe('audio');
+  it.each([
+    ['image', 'image'],
+    ['text', 'text'],
+    ['video', 'video'],
+    ['audio', 'audio'],
+  ] as const)('converts %s planning tasks to %s nodes', (taskType, expectedType) => {
+    const node = convertTaskToExecutionNode({
+      ...seed,
+      kind: 'productionTask',
+      recommendedTaskType: taskType,
+    });
+
+    expect(node.type).toBe(expectedType);
+    expect(node.x).toBe(seed.x + seed.width + 80);
+  });
+
+  it('copy-converts tasks without a recommendation to image nodes', () => {
     expect(convertTaskToExecutionNode({ ...seed, kind: 'productionTask' }).type).toBe('image');
   });
 

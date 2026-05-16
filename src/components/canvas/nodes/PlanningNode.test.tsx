@@ -139,24 +139,102 @@ describe('PlanningNode', () => {
     });
   });
 
-  it('dispatches a conversion event for production tasks', () => {
+  function convertProductionTask(recommendedTaskType: NonNullable<PlanningElement['recommendedTaskType']>) {
     const node = makePlanningNode({
-      id: 'production-task-1',
+      id: `production-task-${recommendedTaskType}`,
       kind: 'productionTask',
-      recommendedTaskType: 'image',
+      recommendedTaskType,
+      outputs: [{ id: 'task-output-1', type: 'text', label: 'Plan' }],
     });
-    const listener = vi.fn();
-    window.addEventListener('planning:convert-task', listener);
+    useCanvasStore.setState({ elements: [node], connections: [] });
 
     render(<PlanningNode el={node} />);
     fireEvent.click(screen.getByRole('button', { name: '转换为生成节点' }));
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0][0]).toMatchObject({
-      detail: { id: 'production-task-1' },
-    });
+    const state = useCanvasStore.getState();
+    const originalTask = state.elements.find(element => element.id === node.id);
+    const executionNode = state.elements.find(element => element.id !== node.id);
 
-    window.removeEventListener('planning:convert-task', listener);
+    return { executionNode, node, originalTask, state };
+  }
+
+  it('copy-converts image production tasks into selected execution nodes and connects text-compatible inputs', () => {
+    const { executionNode, node, originalTask, state } = convertProductionTask('image');
+
+    expect(originalTask).toMatchObject({
+      id: 'production-task-image',
+      type: 'planning',
+      kind: 'productionTask',
+    });
+    expect(executionNode).toMatchObject({
+      type: 'image',
+      x: node.x + node.width + 80,
+      y: node.y,
+    });
+    expect(state.selectedIds).toEqual([executionNode?.id]);
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0]).toMatchObject({
+      fromId: node.id,
+      fromPortId: 'task-output-1',
+      toId: executionNode?.id,
+      toPortId: executionNode?.inputs?.[0]?.id,
+    });
+    expect(state.connections[0].fromPortId).not.toBe('');
+    expect(state.connections[0].toPortId).not.toBe('');
+  });
+
+  it('does not connect video production tasks to image-only execution inputs', () => {
+    const { executionNode, node, originalTask, state } = convertProductionTask('video');
+
+    expect(originalTask).toMatchObject({
+      id: 'production-task-video',
+      type: 'planning',
+      kind: 'productionTask',
+    });
+    expect(executionNode).toMatchObject({
+      type: 'video',
+      x: node.x + node.width + 80,
+      y: node.y,
+    });
+    expect(executionNode?.inputs?.[0]).toMatchObject({ type: 'image' });
+    expect(state.selectedIds).toEqual([executionNode?.id]);
+    expect(state.connections).toEqual([]);
+  });
+
+  it('connects audio production tasks to text-compatible execution inputs', () => {
+    const { executionNode, node, state } = convertProductionTask('audio');
+
+    expect(executionNode).toMatchObject({
+      type: 'audio',
+      x: node.x + node.width + 80,
+      y: node.y,
+    });
+    expect(state.selectedIds).toEqual([executionNode?.id]);
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0]).toMatchObject({
+      fromId: node.id,
+      fromPortId: 'task-output-1',
+      toId: executionNode?.id,
+      toPortId: executionNode?.inputs?.find(input => input.type === 'text')?.id,
+    });
+  });
+
+  it('copy-converts text production tasks without creating a connection when the execution node has no inputs', () => {
+    const { executionNode, node, originalTask, state } = convertProductionTask('text');
+
+    expect(originalTask).toMatchObject({
+      id: 'production-task-text',
+      type: 'planning',
+      kind: 'productionTask',
+    });
+    expect(executionNode).toMatchObject({
+      type: 'text',
+      x: node.x + node.width + 80,
+      y: node.y,
+    });
+    expect(executionNode?.inputs ?? []).toEqual([]);
+    expect(state.selectedIds).toEqual([executionNode?.id]);
+    expect(state.connections).toEqual([]);
   });
 
   it('renders a story bible generation button for project seeds', () => {

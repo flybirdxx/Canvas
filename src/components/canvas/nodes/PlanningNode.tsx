@@ -8,6 +8,7 @@ import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
 import {
   buildPlanningNodesFromResponse,
+  convertTaskToExecutionNode,
   createTaskFromRequirement,
   makePlanningConnection,
 } from '@/services/planningGraph';
@@ -67,7 +68,25 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
 
   const handleConvertTask = (event: React.SyntheticEvent) => {
     event.stopPropagation();
-    window.dispatchEvent(new CustomEvent('planning:convert-task', { detail: { id: el.id } }));
+    const executionNode = convertTaskToExecutionNode(el);
+    const store = useCanvasStore.getState();
+
+    store.addElement(executionNode);
+    store.setSelection([executionNode.id]);
+
+    const nextStore = useCanvasStore.getState();
+    const sourceTask = nextStore.elements.find(existing => existing.id === el.id);
+    const insertedExecutionNode = nextStore.elements.find(existing => existing.id === executionNode.id);
+    const sourceOutputId = sourceTask?.outputs?.[0]?.id;
+    const compatibleInput = insertedExecutionNode?.inputs?.find(input =>
+      input.type === 'text' || input.type === 'any',
+    );
+
+    if (sourceOutputId && compatibleInput?.id) {
+      nextStore.addConnection(
+        makePlanningConnection(el.id, sourceOutputId, insertedExecutionNode.id, compatibleInput.id),
+      );
+    }
   };
 
   const handleCreateTask = (
