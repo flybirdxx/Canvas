@@ -214,15 +214,15 @@ function FileNodeInfoBand({ el }: { el: any }) {
     <div
       className="absolute flex items-center chip-paper"
       style={{
-        left: 10,
-        bottom: 10,
+        left: 0,
+        top: -22,
         padding: '3px 8px',
         borderRadius: 'var(--r-full, 999px)',
         fontSize: 10,
         lineHeight: 1.2,
         color: 'var(--ink-1)',
         letterSpacing: '0.02em',
-        maxWidth: '70%',
+        maxWidth: '82%',
         pointerEvents: 'none',
         opacity: 0.92,
       }}
