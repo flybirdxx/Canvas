@@ -138,6 +138,30 @@ function FileNodeOverlayChips({
 
   const stopPropagation = (e: React.SyntheticEvent) => e.stopPropagation();
   const interactiveStyle = { pointerEvents: 'auto' as const };
+  const isVideo = kind === 'video';
+  const replaceButtonStyle: React.CSSProperties = isVideo
+    ? {
+        width: 28,
+        height: 28,
+        padding: 0,
+        borderRadius: '50%',
+        fontSize: 0,
+        color: 'rgba(255, 248, 235, 0.92)',
+        background: 'rgba(20, 16, 12, 0.46)',
+        border: '1px solid rgba(255, 248, 235, 0.2)',
+        backdropFilter: 'blur(3px)',
+        cursor: 'pointer',
+        lineHeight: 1,
+        boxShadow: 'none',
+      }
+    : {
+        padding: '4px 9px',
+        borderRadius: 'var(--r-full, 999px)',
+        fontSize: 10.5,
+        color: 'var(--ink-0)',
+        cursor: 'pointer',
+        lineHeight: 1,
+      };
 
   const chipBar = (
     <div
@@ -145,7 +169,7 @@ function FileNodeOverlayChips({
       style={{ top: 10, right: 10, ...interactiveStyle }}
       onPointerDown={stopPropagation}
     >
-      {kind !== 'image' && el.src && (
+      {kind !== 'image' && kind !== 'video' && el.src && (
         <a
           href={el.src}
           download={name}
@@ -171,21 +195,20 @@ function FileNodeOverlayChips({
       <button
         type="button"
         onClick={handleReplaceClick}
-        className="chip-paper flex items-center gap-1 transition-all"
-        style={{
-          padding: '4px 9px',
-          borderRadius: 'var(--r-full, 999px)',
-          fontSize: 10.5,
-          color: 'var(--ink-0)',
-          cursor: 'pointer',
-          lineHeight: 1,
-        }}
+        className={`${isVideo ? '' : 'chip-paper'} flex items-center justify-center gap-1 transition-all`}
+        style={replaceButtonStyle}
         title={`替换当前附件\n${tooltip}`}
-        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = 'var(--shadow-ink-2)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = isVideo ? '0 2px 10px rgba(0,0,0,0.25)' : 'var(--shadow-ink-2)';
+          if (isVideo) e.currentTarget.style.background = 'rgba(20, 16, 12, 0.62)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = isVideo ? 'none' : '';
+          if (isVideo) e.currentTarget.style.background = 'rgba(20, 16, 12, 0.46)';
+        }}
       >
         <Upload className="w-3 h-3" strokeWidth={1.8} />
-        <span className="serif-it" style={{ letterSpacing: '0.02em' }}>替换</span>
+        {!isVideo && <span className="serif-it" style={{ letterSpacing: '0.02em' }}>替换</span>}
       </button>
       <input
         ref={replaceInputRef}
