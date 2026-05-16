@@ -71,4 +71,24 @@ describe('elementSlice', () => {
     expect(el.outputs).toBeDefined();  
     expect(el.outputs!.some(p => p.type === 'image')).toBe(true);  
   });  
+
+  it('adds default ports to planning nodes', () => {
+    const store = createTestStore();
+
+    store.getState().addElement({
+      id: 'plan1',
+      type: 'planning',
+      kind: 'projectSeed',
+      title: '项目种子',
+      body: '一句想法',
+      x: 0,
+      y: 0,
+      width: 340,
+      height: 260,
+    });
+
+    const node = store.getState().elements.find(el => el.id === 'plan1');
+    expect(node?.inputs?.map(port => port.label)).toEqual(['Context']);
+    expect(node?.outputs?.map(port => port.label)).toEqual(['Plan']);
+  });
 }); 

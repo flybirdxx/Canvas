@@ -47,6 +47,10 @@ export const PORT_DEFAULTS: Record<ElementType, { inputs: PortTemplate[]; output
     inputs: [{ type: 'video', label: 'Video' }],
     outputs: [{ type: 'text', label: 'Report' }],
   },
+  planning: {
+    inputs: [{ type: 'any', label: 'Context' }],
+    outputs: [{ type: 'text', label: 'Plan' }],
+  },
 };
 
 export function makePorts(templates: PortTemplate[]): Port[] {

@@ -10,7 +10,8 @@ export type ElementType =
   | 'audio'
   | 'aigenerating'
   | 'file'
-  | 'omniscript';
+  | 'omniscript'
+  | 'planning';
 
 export type DataType = 'any' | 'text' | 'image' | 'video' | 'audio';
 
@@ -176,6 +177,48 @@ export interface OmniScriptElement extends BaseElement {
   error?: string;
 }
 
+export type PlanningNodeKind =
+  | 'projectSeed'
+  | 'storyBible'
+  | 'characterPackage'
+  | 'plot'
+  | 'reference'
+  | 'productionTask';
+
+export type PlanningRequirementStatus = 'pending' | 'confirmed' | 'dismissed';
+export type PlanningMaterialType = 'character' | 'scene' | 'prop' | 'image' | 'text' | 'video' | 'audio';
+export type PropVisibility = 'full' | 'partial' | 'obscured' | 'markOnly';
+
+export interface PlanningRequirement {
+  id: string;
+  title: string;
+  materialType: PlanningMaterialType;
+  description?: string;
+  status: PlanningRequirementStatus;
+  sourcePlotId?: string;
+  necessity?: string;
+}
+
+export interface PlanningPropState {
+  propId?: string;
+  visibility: PropVisibility;
+  note?: string;
+  userConfirmed?: boolean;
+}
+
+export interface PlanningElement extends BaseElement {
+  type: 'planning';
+  kind: PlanningNodeKind;
+  title: string;
+  body: string;
+  template?: 'shortDrama';
+  requirements?: PlanningRequirement[];
+  propStates?: PlanningPropState[];
+  recommendedTaskType?: Extract<PlanningMaterialType, 'image' | 'text' | 'video' | 'audio'>;
+  acceptanceCriteria?: string;
+  sourcePlanningId?: string;
+}
+
 export interface Connection {
   id: string;
   fromId: string;
@@ -192,7 +235,8 @@ export type CanvasElement =
   | MediaElement
   | AIGeneratingElement
   | FileElement
-  | OmniScriptElement;
+  | OmniScriptElement
+  | PlanningElement;
 
 export function isImageWithContent(el: CanvasElement): el is ImageElement {
   return el.type === 'image' && !!el.src;

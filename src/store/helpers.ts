@@ -11,6 +11,7 @@ export const typeLabelMap: Record<string, string> = {
   aigenerating: 'AI 生成',
   file: '文件',
   omniscript: 'OmniScript',
+  planning: '企划',
 };
 
 export const MAX_HISTORY = 50;
