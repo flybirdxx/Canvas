@@ -6,7 +6,11 @@ import type { PlanningElement, PlanningNodeKind, PlanningRequirement } from '@/t
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
-import { buildPlanningNodesFromResponse } from '@/services/planningGraph';
+import {
+  buildPlanningNodesFromResponse,
+  createTaskFromRequirement,
+  makePlanningConnection,
+} from '@/services/planningGraph';
 import { useExecutionBorder } from './shared';
 
 const KIND_LABELS: Record<PlanningNodeKind, string> = {
@@ -35,6 +39,9 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
   const [storyBibleError, setStoryBibleError] = useState<string | null>(null);
   const requirements = el.requirements ?? [];
   const pendingRequirements = requirements.filter(req => req.status === 'pending');
+  const confirmedRequirements = el.kind === 'plot'
+    ? requirements.filter(req => req.status === 'confirmed')
+    : [];
   const confirmed = requirements.filter(req => req.status === 'confirmed').length;
   const pending = pendingRequirements.length;
 
@@ -61,6 +68,37 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
   const handleConvertTask = (event: React.SyntheticEvent) => {
     event.stopPropagation();
     window.dispatchEvent(new CustomEvent('planning:convert-task', { detail: { id: el.id } }));
+  };
+
+  const handleCreateTask = (
+    event: React.SyntheticEvent,
+    requirement: PlanningRequirement,
+  ) => {
+    event.stopPropagation();
+    const store = useCanvasStore.getState();
+    const exists = store.elements.some(existing =>
+      existing.type === 'planning' &&
+      existing.kind === 'productionTask' &&
+      existing.sourcePlanningId === el.id &&
+      existing.title === requirement.title,
+    );
+    if (exists) return;
+
+    const task = createTaskFromRequirement(el, requirement);
+    store.addElement(task);
+
+    const sourceOutputId = el.outputs?.[0]?.id;
+    if (!sourceOutputId) return;
+
+    const insertedTask = useCanvasStore.getState().elements.find(existing => existing.id === task.id);
+    if (insertedTask?.type !== 'planning') return;
+
+    const taskInputId = insertedTask.inputs?.[0]?.id;
+    if (!taskInputId) return;
+
+    useCanvasStore.getState().addConnection(
+      makePlanningConnection(el.id, sourceOutputId, insertedTask.id, taskInputId),
+    );
   };
 
   const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
@@ -222,7 +260,7 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
               )}
             </section>
           )}
-          {(pendingRequirements.length > 0 || el.kind === 'productionTask') && (
+          {(pendingRequirements.length > 0 || confirmedRequirements.length > 0 || el.kind === 'productionTask') && (
             <section
               style={{
                 display: 'flex',
@@ -292,6 +330,50 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
                       忽略
                     </button>
                   </div>
+                </div>
+              ))}
+              {confirmedRequirements.map(requirement => (
+                <div
+                  key={requirement.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: 8,
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        color: 'var(--ink-0)',
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {requirement.title}
+                    </div>
+                    <div
+                      style={{
+                        color: 'var(--ink-2)',
+                        fontSize: 10,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {MATERIAL_LABELS[requirement.materialType]} · 已确认
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pointer-events-auto"
+                    onPointerDown={stopInteraction}
+                    onClick={(event) => handleCreateTask(event, requirement)}
+                    style={actionButtonStyle}
+                  >
+                    创建任务节点
+                  </button>
                 </div>
               ))}
               {el.kind === 'productionTask' && (

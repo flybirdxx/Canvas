@@ -126,6 +126,29 @@ describe('planningGraph', () => {
     expect(task.x).toBe(seed.x + seed.width + 80);
   });
 
+  it('places production tasks to the right of the source plot', () => {
+    const plot: PlanningElement = {
+      ...seed,
+      id: 'plot-1',
+      kind: 'plot',
+      x: 240,
+      y: 180,
+      width: 360,
+      height: 300,
+    };
+
+    const task = createTaskFromRequirement(plot, {
+      id: 'req-scene',
+      title: '雨夜仓库场景图',
+      materialType: 'scene',
+      status: 'confirmed',
+    });
+
+    expect(task.x).toBe(plot.x + plot.width + 80);
+    expect(task.y).toBe(plot.y);
+    expect(task.sourcePlanningId).toBe(plot.id);
+  });
+
   it.each([
     ['character', 'image'],
     ['scene', 'image'],
