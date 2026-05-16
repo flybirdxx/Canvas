@@ -4,6 +4,7 @@ import {
   useExecutionStore,
   type ExecutionRun,
   type ExecutionNodeStatus,
+  type ExecutionNodeState,
   getRunElapsedMs,
   getRunStats,
   isRunComplete,
@@ -193,7 +194,7 @@ export function RunPanel() {
   // Story 1.4: is there a node in running or queued state?
   const hasRunningOrQueued = activeRun
     ? Object.values(activeRun.nodeStates).some(
-        (ns) => ns.status === 'running' || ns.status === 'queued',
+        (ns: ExecutionNodeState) => ns.status === 'running' || ns.status === 'queued',
       )
     : false;
 

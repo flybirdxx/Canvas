@@ -4,6 +4,7 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { CanvasElement } from '@/types/canvas';
 
 export interface NodeNoteIndicatorProps {
+  key?: React.Key;
   element: CanvasElement;
   /** Top-right anchor of the node in SCREEN coords (px). */
   x: number;
