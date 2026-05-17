@@ -2,12 +2,13 @@ import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { useState } from 'react';
 import type React from 'react';
-import type { PlanningElement, PlanningNodeKind, PlanningRequirement } from '@/types/canvas';
+import type { CanvasElement, Connection, PlanningElement, PlanningNodeKind, PlanningRequirement } from '@/types/canvas';
+import { snapshot, MAX_HISTORY } from '@/store/helpers';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
+import { materializePlanningResponse } from '@/services/planningMaterializer';
 import {
-  buildPlanningNodesFromResponse,
   convertTaskToExecutionNode,
   createTaskFromRequirement,
   detectPropVisualConflict,
@@ -146,25 +147,13 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
     setIsGeneratingStoryBible(true);
     try {
       const response = await generateShortDramaPlanning(el.body, model);
-      const { nodes, connections } = buildPlanningNodesFromResponse(el, response);
-      const store = useCanvasStore.getState();
-
-      nodes.forEach(node => store.addElement(node));
-
-      if (typeof store.addConnection === 'function') {
-        connections
-          .filter(connection =>
-            connection.id &&
-            connection.fromPortId &&
-            connection.toPortId,
-          )
-          .forEach(connection => store.addConnection(connection));
-      }
+      const project = materializePlanningResponse(el, response);
+      materializeProjectInStore(el.id, project);
       setStoryBibleError(null);
     } catch (error) {
       setStoryBibleError(error instanceof Error && error.message
         ? error.message
-        : '生成故事圣经失败');
+        : '生成规划结构失败');
     } finally {
       setIsGeneratingStoryBible(false);
     }
@@ -274,7 +263,7 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
                   opacity: isGeneratingStoryBible ? 0.65 : 1,
                 }}
               >
-                生成故事圣经
+                生成规划结构
               </button>
               {storyBibleError && (
                 <div
@@ -455,6 +444,115 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
       </Html>
     </Group>
   );
+}
+
+function materializeProjectInStore(
+  sourceId: string,
+  project: ReturnType<typeof materializePlanningResponse>,
+) {
+  useCanvasStore.setState((state) => {
+    const generatedNodeIds = project.nodes.map(node => node.id);
+    const nextElements: CanvasElement[] = [
+      ...state.elements.map(element =>
+        element.id === sourceId
+          ? ({
+            ...element,
+            projectId: project.projectId,
+            generatedNodeIds,
+          } as CanvasElement)
+          : element,
+      ),
+      ...project.nodes,
+    ];
+    const nextConnections = addValidMaterializedConnections(
+      state.connections,
+      project.connections,
+      nextElements,
+    );
+    const elementIds = new Set(nextElements.map(element => element.id));
+    const cleanChildIds = [...new Set(project.projectGroup.childIds)]
+      .filter(childId => elementIds.has(childId));
+    const survivingGroups = state.groups
+      .filter(group => group.id !== project.projectGroup.id)
+      .map(group => ({
+        ...group,
+        childIds: group.childIds.filter(childId => !cleanChildIds.includes(childId)),
+      }))
+      .filter(group => group.childIds.length >= 2);
+    const nextGroup = cleanChildIds.length >= 2
+      ? [{
+        id: project.projectGroup.id,
+        childIds: cleanChildIds,
+        ...(project.projectGroup.label ? { label: project.projectGroup.label } : {}),
+      }]
+      : [];
+
+    return {
+      past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+      future: [],
+      elements: nextElements,
+      connections: nextConnections,
+      groups: [...survivingGroups, ...nextGroup],
+      currentLabel: '更新企划控制台',
+      currentTimestamp: Date.now(),
+      _coalesceKey: undefined,
+      _coalesceAt: undefined,
+    };
+  });
+}
+
+function addValidMaterializedConnections(
+  existingConnections: Connection[],
+  materializedConnections: Connection[],
+  elements: CanvasElement[],
+): Connection[] {
+  const elementById = new Map(elements.map(element => [element.id, element]));
+
+  return materializedConnections
+    .filter(connection => isConnectionUsable(connection, elementById))
+    .reduce((connections, connection) => {
+      const candidateConnections = [
+        ...connections.filter(existing => existing.toPortId !== connection.toPortId),
+        connection,
+      ];
+      return createsConnectionCycle(candidateConnections, connection)
+        ? connections
+        : candidateConnections;
+    }, existingConnections);
+}
+
+function isConnectionUsable(
+  connection: Connection,
+  elementById: Map<string, CanvasElement>,
+): boolean {
+  const fromElement = elementById.get(connection.fromId);
+  const toElement = elementById.get(connection.toId);
+
+  return Boolean(
+    connection.id &&
+    connection.fromPortId &&
+    connection.toPortId &&
+    fromElement?.outputs?.some(port => port.id === connection.fromPortId) &&
+    toElement?.inputs?.some(port => port.id === connection.toPortId),
+  );
+}
+
+function createsConnectionCycle(connections: Connection[], connection: Connection): boolean {
+  const visited = new Set<string>();
+  const stack = [connection.toId];
+  while (stack.length > 0) {
+    const currentId = stack.pop()!;
+    if (currentId === connection.fromId) return true;
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+    for (const existing of connections) {
+      if (existing.fromId === currentId && !visited.has(existing.toId)) {
+        stack.push(existing.toId);
+      }
+    }
+  }
+
+  return false;
 }
 
 const actionButtonStyle: React.CSSProperties = {

@@ -61,6 +61,7 @@ describe('PlanningNode', () => {
       _coalesceKey: undefined,
       _coalesceAt: undefined,
       connections: [],
+      groups: [],
     } as Partial<ReturnType<typeof useCanvasStore.getState>>);
     vi.mocked(listModels).mockReturnValue([{
       id: 'text-model-1',
@@ -71,7 +72,14 @@ describe('PlanningNode', () => {
     vi.mocked(generateShortDramaPlanning).mockResolvedValue({
       storyBible: { id: 'story-bible-source', title: '故事圣经', body: '主线设定' },
       characters: [],
-      plots: [],
+      plots: [
+        {
+          id: 'plot-source-1',
+          title: '第一幕反转',
+          body: '主角发现新线索',
+          requirements: [],
+        },
+      ],
     });
   });
 
@@ -323,7 +331,7 @@ describe('PlanningNode', () => {
     expect(state.connections).toEqual([]);
   });
 
-  it('renders a story bible generation button for project seeds', () => {
+  it('renders a planning structure generation button for project seeds', () => {
     const node = makePlanningNode({
       id: 'project-seed-1',
       kind: 'projectSeed',
@@ -334,10 +342,10 @@ describe('PlanningNode', () => {
 
     render(<PlanningNode el={node} />);
 
-    expect(screen.getByRole('button', { name: '生成故事圣经' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成规划结构' })).toBeInTheDocument();
   });
 
-  it('generates planning nodes and connections from a project seed', async () => {
+  it('generates existing text nodes, connections, and a project group from a project seed', async () => {
     const node = makePlanningNode({
       id: 'project-seed-1',
       kind: 'projectSeed',
@@ -349,24 +357,96 @@ describe('PlanningNode', () => {
     useCanvasStore.setState({ elements: [node], connections: [] });
 
     render(<PlanningNode el={node} />);
-    fireEvent.click(screen.getByRole('button', { name: '生成故事圣经' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成规划结构' }));
 
     await waitFor(() => {
       expect(generateShortDramaPlanning).toHaveBeenCalledWith('一句短剧想法', 'text-model-1');
-      expect(useCanvasStore.getState().elements).toHaveLength(2);
+      expect(useCanvasStore.getState().elements).toHaveLength(3);
     });
 
-    const generated = useCanvasStore.getState().elements[1];
-    expect(generated.type).toBe('planning');
-    if (generated.type !== 'planning') throw new Error('expected generated planning node');
-    expect(generated.kind).toBe('storyBible');
-    expect(generated.title).toBe('故事圣经');
-    expect(useCanvasStore.getState().connections).toHaveLength(1);
-    expect(useCanvasStore.getState().connections[0]).toMatchObject({
-      fromId: 'project-seed-1',
-      fromPortId: 'seed-output-1',
-      toId: generated.id,
-      toPortId: generated.inputs?.[0]?.id,
+    const state = useCanvasStore.getState();
+    const generated = state.elements.slice(1);
+    expect(generated).toHaveLength(2);
+    expect(generated.every(element => element.type === 'text')).toBe(true);
+    expect(generated.some(element => element.type === 'planning')).toBe(false);
+    expect(state.connections).toHaveLength(2);
+    expect(state.connections.every(connection =>
+      connection.id &&
+      connection.fromId === 'project-seed-1' &&
+      connection.fromPortId &&
+      connection.toPortId,
+    )).toBe(true);
+
+    const updatedConsole = state.elements.find(element => element.id === node.id);
+    expect(updatedConsole).toMatchObject({
+      type: 'planning',
+      projectId: expect.any(String),
+      generatedNodeIds: generated.map(element => element.id),
+    });
+    if (updatedConsole?.type !== 'planning') throw new Error('expected updated planning node');
+
+    expect(state.groups).toEqual([
+      {
+        id: updatedConsole.projectId,
+        label: node.title,
+        childIds: [node.id, ...generated.map(element => element.id)],
+      },
+    ]);
+    expect(state.currentLabel).toBe('更新企划控制台');
+  });
+
+  it('undoes and redoes project seed materialization as one history entry', async () => {
+    const node = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      title: '短剧项目种子',
+      body: '一句短剧想法',
+      requirements: [],
+      outputs: [{ id: 'seed-output-1', type: 'text', label: 'Plan' }],
+    });
+    useCanvasStore.setState({ elements: [node], connections: [], groups: [] });
+
+    render(<PlanningNode el={node} />);
+    fireEvent.click(screen.getByRole('button', { name: '生成规划结构' }));
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().elements).toHaveLength(3);
+    });
+
+    const generatedState = useCanvasStore.getState();
+    const generatedIds = generatedState.elements
+      .filter(element => element.id !== node.id)
+      .map(element => element.id);
+    const projectId = generatedState.groups[0]?.id;
+    expect(generatedIds).toHaveLength(2);
+    expect(generatedState.connections).toHaveLength(2);
+    expect(generatedState.groups).toHaveLength(1);
+
+    useCanvasStore.getState().undo();
+
+    const undoneState = useCanvasStore.getState();
+    expect(undoneState.elements).toEqual([node]);
+    expect(undoneState.connections).toEqual([]);
+    expect(undoneState.groups).toEqual([]);
+    expect(undoneState.elements[0]).not.toHaveProperty('projectId');
+    expect(undoneState.elements[0]).not.toHaveProperty('generatedNodeIds');
+
+    useCanvasStore.getState().redo();
+
+    const redoneState = useCanvasStore.getState();
+    expect(redoneState.elements.map(element => element.id)).toEqual([node.id, ...generatedIds]);
+    expect(redoneState.connections).toHaveLength(2);
+    expect(redoneState.groups).toEqual([
+      {
+        id: projectId,
+        label: node.title,
+        childIds: [node.id, ...generatedIds],
+      },
+    ]);
+    expect(redoneState.elements[0]).toMatchObject({
+      type: 'planning',
+      projectId,
+      generatedNodeIds: generatedIds,
     });
   });
 
@@ -381,7 +461,7 @@ describe('PlanningNode', () => {
     });
 
     render(<PlanningNode el={node} />);
-    fireEvent.click(screen.getByRole('button', { name: '生成故事圣经' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成规划结构' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('没有可用的文本模型');
     expect(generateShortDramaPlanning).not.toHaveBeenCalled();
