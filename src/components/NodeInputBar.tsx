@@ -14,6 +14,7 @@ import {
   X,
   Link2,
   Brush,
+  CheckCircle2,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
@@ -125,6 +126,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     inpaintMask.elementId === element.id;
   const inpaintRect =
     isInpaintMode && inpaintMask ? inpaintMask.rect : null;
+  const isPlanningDraftPending = element.planningDraft?.status === 'pendingReview';
 
   useEffect(() => {
     if (!inpaintMask) return;
@@ -159,6 +161,14 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   const updateGen = useCallback((patch: Partial<typeof gen>) => {
     updateElement(element.id, { generation: { ...gen, ...patch } });
   }, [element.id, gen, updateElement]);
+  const approvePlanningDraft = useCallback(() => {
+    if (!element.planningDraft) return;
+    updateElement(
+      element.id,
+      { planningDraft: { ...element.planningDraft, status: 'approved' } },
+      '确认规划执行节点',
+    );
+  }, [element.id, element.planningDraft, updateElement]);
 
   const applyPreset = (preset: PromptPreset) => {
     if (appliedIds.includes(preset.id)) return;
@@ -260,6 +270,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (isGenerating) return;
+    if (isPlanningDraftPending) return;
     if (!effectivePrompt.trim()) return;
 
     if (mode === 'video') {
@@ -368,6 +379,11 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     if (!unit) return undefined;
     return { unit, total: { amount: unit.amount * cnt, currency: unit.currency }, count: cnt };
   }, [element.generation?.model, element.generation?.quality, element.generation?.qualityLevel, element.generation?.count]);
+  const submitDisabled =
+    isGenerating ||
+    !effectivePrompt.trim() ||
+    (isInpaintMode && !inpaintRect) ||
+    isPlanningDraftPending;
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -443,6 +459,20 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
             </>
           )}
         </div>
+        {isPlanningDraftPending && (
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pt-1 pb-1">
+            <span className="chip-meta chip-meta--accent">
+              来自规划 · 待确认
+            </span>
+            <QuickChip
+              icon={<CheckCircle2 className="w-3 h-3" />}
+              label="确认可执行"
+              onClick={approvePlanningDraft}
+              disabled={isGenerating}
+              title="确认规划执行节点"
+            />
+          </div>
+        )}
         {upstream.length > 0 && (
           <div className="flex flex-wrap items-center gap-1 px-3 pt-1 pb-1">
             <span className="chip-meta chip-meta--signal"><Link2 className="w-2.5 h-2.5" strokeWidth={1.6} />连线输入 {upstream.length}</span>
@@ -593,15 +623,17 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
                 </span>
               )}
               <button type="submit"
-                disabled={isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect)}
+                aria-label="生成"
+                disabled={submitDisabled}
                 className="ml-1 flex items-center justify-center transition-colors"
                 style={{ width: 30, height: 30, borderRadius: 'var(--r-sm)',
-                  background: (isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect)) ? 'var(--bg-3)' : 'var(--accent)',
-                  color: (isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect)) ? 'var(--ink-3)' : 'var(--accent-fg)',
-                  boxShadow: (isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect)) ? 'none' : 'var(--shadow-ink-1)',
+                  background: submitDisabled ? 'var(--bg-3)' : 'var(--accent)',
+                  color: submitDisabled ? 'var(--ink-3)' : 'var(--accent-fg)',
+                  boxShadow: submitDisabled ? 'none' : 'var(--shadow-ink-1)',
                   border: 'none',
-                  cursor: (isGenerating || !effectivePrompt.trim() || (isInpaintMode && !inpaintRect)) ? 'not-allowed' : 'pointer' }}
+                  cursor: submitDisabled ? 'not-allowed' : 'pointer' }}
                 title={(() => {
+                  if (isPlanningDraftPending) return '请先确认规划执行节点';
                   if (isInpaintMode) {
                     if (!inpaintRect) return '请先在图上框选要重绘的区域';
                     return `局部重绘 (Enter) · 选区 ${Math.round(inpaintRect.w * inpaintRect.h * 100)}%`;
