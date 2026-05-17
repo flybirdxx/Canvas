@@ -7,7 +7,7 @@
 import React from 'react';
 import { NodeInputBar } from '@/components/NodeInputBar';
 import type { CanvasElement } from '@/types/canvas';
-import { getDragOffset } from '../dragOffsets';
+import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 
 const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
   text: 260,
@@ -26,6 +26,8 @@ interface NodeInputBarOverlayProps {
 }
 
 export function NodeInputBarOverlay({ elements, selectedIds, stageConfig }: NodeInputBarOverlayProps) {
+  useDragOffsetsVersion();
+
   const visible = elements.filter(el =>
     selectedIds.includes(el.id) &&
     (el.type === 'image' || el.type === 'video' || el.type === 'audio' || el.type === 'text' ||

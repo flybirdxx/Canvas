@@ -14,7 +14,7 @@ import React from 'react';
 import { Line, Group } from 'react-konva';
 import type { CanvasElement, Connection } from '@/types/canvas';
 import type { DrawingConnection } from '@/store/types';
-import { getDragOffset } from './dragOffsets';
+import { getDragOffset, useDragOffsetsVersion } from './dragOffsets';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -49,6 +49,8 @@ export const ConnectionLines = function ConnectionLines({
   elements,
   connections,
 }: ConnectionLinesProps) {
+  useDragOffsetsVersion();
+
   return (
     <>
       {connections.map(conn => {

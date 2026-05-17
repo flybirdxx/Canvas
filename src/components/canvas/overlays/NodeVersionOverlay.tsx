@@ -7,7 +7,7 @@
 import React from 'react';
 import { NodeVersionSwitcher } from '@/components/NodeVersionSwitcher';
 import type { CanvasElement } from '@/types/canvas';
-import { getDragOffset } from '../dragOffsets';
+import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 
 interface NodeVersionOverlayProps {
   elements: CanvasElement[];
@@ -16,6 +16,8 @@ interface NodeVersionOverlayProps {
 }
 
 export function NodeVersionOverlay({ elements, selectedIds, stageConfig }: NodeVersionOverlayProps) {
+  useDragOffsetsVersion();
+
   const visible = elements.filter(el =>
     selectedIds.includes(el.id) &&
     (el.type === 'image' || el.type === 'video') &&

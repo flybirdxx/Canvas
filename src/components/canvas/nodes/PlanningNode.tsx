@@ -1,9 +1,10 @@
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type React from 'react';
 import type { CanvasElement, Connection, PlanningElement, PlanningNodeKind, PlanningRequirement } from '@/types/canvas';
 import { snapshot, MAX_HISTORY } from '@/store/helpers';
+import { expandFrameToIncludeElement } from '@/utils/groupFrame';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
@@ -140,8 +141,7 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
     useCanvasStore.setState(state => insertDraftExecutionNode(state, el.id, draftNode));
   };
 
-  const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
-    event.stopPropagation();
+  const generateStoryBible = useCallback(async () => {
     if (isGeneratingStoryBible) return;
 
     setStoryBibleError(null);
@@ -164,7 +164,25 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
     } finally {
       setIsGeneratingStoryBible(false);
     }
+  }, [el, isGeneratingStoryBible]);
+
+  const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+    await generateStoryBible();
   };
+
+  useEffect(() => {
+    if (el.kind !== 'projectSeed') return;
+
+    const handleToolbarRun = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string }>).detail;
+      if (detail?.id !== el.id) return;
+      void generateStoryBible();
+    };
+
+    window.addEventListener('planning:run', handleToolbarRun);
+    return () => window.removeEventListener('planning:run', handleToolbarRun);
+  }, [el.id, el.kind, generateStoryBible]);
 
   return (
     <Group>
@@ -584,7 +602,11 @@ function insertDraftExecutionNode(
   const nextGroups = projectGroupIndex >= 0
     ? state.groups.map((group, index) =>
       index === projectGroupIndex
-        ? { ...group, childIds: appendUnique(group.childIds, draftNode.id) }
+        ? {
+          ...group,
+          childIds: appendUnique(group.childIds, draftNode.id),
+          ...(group.frame ? { frame: expandFrameToIncludeElement(group.frame, draftNode) } : {}),
+        }
         : group,
     )
     : state.groups;

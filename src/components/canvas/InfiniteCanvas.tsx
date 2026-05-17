@@ -51,6 +51,7 @@ import { SelectionBoxRect, MarqueeRect } from './SelectionRects';
 
 // HTML overlays
 import { NodeInputBarOverlay } from './overlays/NodeInputBarOverlay';
+import { NodeToolbarOverlay } from './overlays/NodeToolbarOverlay';
 import { InpaintOverlayLayer } from './overlays/InpaintOverlayLayer';
 import { NodeNoteOverlay } from './overlays/NodeNoteOverlay';
 import { NodeVersionOverlay } from './overlays/NodeVersionOverlay';
@@ -292,6 +293,11 @@ export function InfiniteCanvas() {
       </Stage>
 
       {/* HTML overlay layers */}
+      <NodeToolbarOverlay
+        elements={elements}
+        selectedIds={selectedIds}
+        stageConfig={stageConfig}
+      />
       {stageConfig.scale >= INPUT_BAR_VISIBLE_SCALE && (
         <NodeInputBarOverlay
           elements={elements}

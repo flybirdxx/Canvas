@@ -578,7 +578,6 @@ export const RunningHubProvider: GatewayProvider = {
       max_tokens: req.maxTokens ?? 4096,
       temperature: req.temperature ?? 0.7,
       top_p: 1,
-      reasoning_effort: 'none',
     };
 
     let resp: Response;

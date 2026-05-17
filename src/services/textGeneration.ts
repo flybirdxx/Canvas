@@ -16,6 +16,8 @@ export interface TextGenRequestPayload {
   elementId: string;
   /** The composed effective prompt (local prompt + upstream context). */
   prompt: string;
+  /** Optional system prompt sent before the user's composed prompt. */
+  systemPrompt?: string;
   /** Wire-level model id (e.g. "google/gemini-3.1-pro-preview"). */
   model: string;
   /** Callback to flip the generating spinner off. */
@@ -42,7 +44,7 @@ function getStore() {
  * user can diagnose (future: surface errors in a toast or error panel).
  */
 export async function runTextGeneration(payload: TextGenRequestPayload): Promise<void> {
-  const { elementId, prompt, model, setIsGenerating } = payload;
+  const { elementId, prompt, systemPrompt, model, setIsGenerating } = payload;
   const store = getStore();
   const el = store.elements.find(e => e.id === elementId);
   if (!el || el.type !== 'text') {
@@ -50,15 +52,17 @@ export async function runTextGeneration(payload: TextGenRequestPayload): Promise
     return;
   }
 
-  const result = await generateTextByModelId({
-    model,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
+  const trimmedSystemPrompt = systemPrompt?.trim();
+  const messages = trimmedSystemPrompt
+    ? [
+        { role: 'system' as const, content: trimmedSystemPrompt },
+        { role: 'user' as const, content: prompt },
+      ]
+    : [
+        { role: 'user' as const, content: prompt },
+      ];
+
+  const result = await generateTextByModelId({ model, messages });
 
   if (result.ok === true) {
     store.updateElement(

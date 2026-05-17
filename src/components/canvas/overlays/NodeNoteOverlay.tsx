@@ -7,7 +7,7 @@
 import React from 'react';
 import { NodeNoteIndicator } from '@/components/NodeNoteIndicator';
 import type { CanvasElement } from '@/types/canvas';
-import { getDragOffset } from '../dragOffsets';
+import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 
 interface NodeNoteOverlayProps {
   elements: CanvasElement[];
@@ -16,6 +16,8 @@ interface NodeNoteOverlayProps {
 }
 
 export function NodeNoteOverlay({ elements, selectedIds, stageConfig }: NodeNoteOverlayProps) {
+  useDragOffsetsVersion();
+
   const visible = elements.filter(el => {
     const hasNote =
       typeof (el as any).note === 'string' && (el as any).note.trim().length > 0;

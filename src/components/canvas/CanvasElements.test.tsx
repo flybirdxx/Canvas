@@ -5,10 +5,18 @@ import type { PlanningElement } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { CanvasElements } from './CanvasElements';
 
+const konvaMockState = vi.hoisted(() => ({
+  groups: [] as any[],
+}));
+
 vi.mock('react-konva', () => ({
-  Group: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Group: (props: any) => {
+    konvaMockState.groups.push(props);
+    return <div data-testid={props.id ? `konva-group-${props.id}` : undefined}>{props.children}</div>;
+  },
   Line: () => null,
   Rect: () => null,
+  Text: () => null,
 }));
 
 vi.mock('react-konva-utils', () => ({
@@ -56,8 +64,26 @@ function makePlanningNode(overrides: Partial<PlanningElement> = {}): PlanningEle
   };
 }
 
+function makeTextNode() {
+  return {
+    id: 'story-node-1',
+    type: 'text' as const,
+    title: 'Story',
+    text: 'Story',
+    fontSize: 14,
+    fontFamily: 'serif',
+    fill: '#1f1a17',
+    x: 260,
+    y: 80,
+    width: 200,
+    height: 120,
+  };
+}
+
 describe('CanvasElements', () => {
   beforeEach(() => {
+    konvaMockState.groups = [];
+    vi.clearAllMocks();
     useCanvasStore.setState({
       elements: [],
       connections: [],
@@ -77,5 +103,45 @@ describe('CanvasElements', () => {
     render(<CanvasElements guideLines={[]} snapCallbacks={snapCallbacks} />);
 
     expect(screen.getByTestId('planning-node')).toHaveTextContent('项目种子');
+  });
+
+  it('clamps grouped node drag positions inside the group frame', () => {
+    const planning = makePlanningNode();
+    const story = makeTextNode();
+    const position = vi.fn();
+    useCanvasStore.setState({
+      elements: [planning, story],
+      groups: [
+        {
+          id: 'project-1',
+          childIds: [planning.id, story.id],
+          frame: { x: 0, y: 0, width: 400, height: 300 },
+        },
+      ],
+      selectedIds: [planning.id],
+    });
+
+    render(<CanvasElements guideLines={[]} snapCallbacks={snapCallbacks} />);
+
+    const planningGroup = konvaMockState.groups.find(props => props.id === planning.id);
+    planningGroup.onDragMove({
+      target: {
+        id: () => planning.id,
+        x: () => 500,
+        y: () => 500,
+        position,
+      },
+    });
+
+    expect(position).toHaveBeenCalledWith({ x: 60, y: 40 });
+    expect(snapCallbacks.onDragMove).toHaveBeenCalledWith(
+      planning.id,
+      60,
+      40,
+      planning.x,
+      planning.y,
+      planning.width,
+      planning.height,
+    );
   });
 });

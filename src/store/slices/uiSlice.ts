@@ -26,6 +26,8 @@ export interface UISlice {
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
   createGroupFromIds: (id: string, childIds: string[], label?: string) => void;
+  moveGroupBy: (id: string, dx: number, dy: number) => void;
+  setGroupFrame: (id: string, frame: { x: number; y: number; width: number; height: number }, label?: string) => void;
   ungroupSelected: () => void;
   setViewMode: (mode: 'canvas') => void;
 }
@@ -115,6 +117,64 @@ export const createUISlice: StateCreator<CanvasState, [], [], UISlice> = (set) =
       future: [],
       groups: [...survivingGroups, newGroup],
       currentLabel: `成组 ${cleanIds.length} 个元素`,
+      currentTimestamp: Date.now(),
+      _coalesceKey: undefined,
+      _coalesceAt: undefined,
+    };
+  }),
+
+  moveGroupBy: (id, dx, dy) => set((state) => {
+    const group = state.groups.find(item => item.id === id);
+    if (!group || group.childIds.length === 0) return state;
+    const childIdSet = new Set(group.childIds);
+    return {
+      past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+      future: [],
+      elements: state.elements.map(element =>
+        childIdSet.has(element.id)
+          ? ({ ...element, x: element.x + dx, y: element.y + dy } as CanvasState['elements'][number])
+          : element,
+      ),
+      groups: state.groups.map(item =>
+        item.id === id && item.frame
+          ? {
+            ...item,
+            frame: { ...item.frame, x: item.frame.x + dx, y: item.frame.y + dy },
+          }
+          : item,
+      ),
+      currentLabel: '移动分组',
+      currentTimestamp: Date.now(),
+      _coalesceKey: undefined,
+      _coalesceAt: undefined,
+    };
+  }),
+
+  setGroupFrame: (id, frame, label) => set((state) => {
+    const group = state.groups.find(item => item.id === id);
+    if (!group) return state;
+    const nextFrame = {
+      x: frame.x,
+      y: frame.y,
+      width: Math.max(80, frame.width),
+      height: Math.max(60, frame.height),
+    };
+    if (
+      group.frame &&
+      group.frame.x === nextFrame.x &&
+      group.frame.y === nextFrame.y &&
+      group.frame.width === nextFrame.width &&
+      group.frame.height === nextFrame.height
+    ) {
+      return state;
+    }
+    return {
+      past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+      future: [],
+      groups: state.groups.map(item =>
+        item.id === id ? { ...item, frame: nextFrame } : item,
+      ),
+      currentLabel: label ?? '调整分组边界',
       currentTimestamp: Date.now(),
       _coalesceKey: undefined,
       _coalesceAt: undefined,

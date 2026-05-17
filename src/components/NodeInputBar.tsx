@@ -26,6 +26,12 @@ import { PromptLibraryPanel } from './PromptLibraryPanel';
 import { runGeneration } from '@/services/imageGeneration';
 import { runVideoGeneration } from '@/services/videoGeneration';
 import { runTextGeneration } from '@/services/textGeneration';
+import {
+  SCREENWRITING_MASTER_SYSTEM_PROMPT,
+  SCREENWRITING_REWRITE_PRESET_ID,
+  SCREENWRITING_REWRITE_PRESET_SNIPPET,
+  isScreenwritingMasterTemplatePreset,
+} from '@/services/screenwriting';
 import { findModel, computeUnitPrice } from '@/services/gateway';
 import { submitVideo } from './input-bar/submitVideo';
 import { submitImage } from './input-bar/submitImage';
@@ -95,6 +101,10 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     [gen.appliedPresets],
   );
   const appliedIds = useMemo(() => appliedPresets.map(p => p.id), [appliedPresets]);
+  const hasScreenwritingMasterTemplate = useMemo(
+    () => mode === 'text' && appliedIds.some(isScreenwritingMasterTemplatePreset),
+    [mode, appliedIds],
+  );
   const references: string[] = gen.references ?? [];
   const MAX_REFERENCES = 4;
 
@@ -170,7 +180,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     );
   }, [element.id, element.planningDraft, updateElement]);
 
-  const applyPreset = (preset: PromptPreset) => {
+  const applyPreset = useCallback((preset: PromptPreset) => {
     if (appliedIds.includes(preset.id)) return;
     const nextPrompt =
       prompt.trim().length === 0
@@ -185,7 +195,31 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
     });
     pushRecent(preset.id);
     textareaRef.current?.focus();
-  };
+  }, [appliedIds, prompt, gen, appliedPresets, updateElement, element.id, pushRecent]);
+
+  const applyScreenwritingRewritePreset = useCallback(() => {
+    applyPreset({
+      id: SCREENWRITING_REWRITE_PRESET_ID,
+      category: 'writing',
+      title: '剧本优化续写',
+      snippet: SCREENWRITING_REWRITE_PRESET_SNIPPET,
+      modes: ['text'],
+      tags: ['剧本', '续写', '编剧', '场景'],
+    });
+  }, [applyPreset]);
+
+  useEffect(() => {
+    if (mode !== 'text') return;
+
+    const handleToolbarScreenwriting = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string }>).detail;
+      if (detail?.id !== element.id) return;
+      applyScreenwritingRewritePreset();
+    };
+
+    window.addEventListener('node-toolbar:screenwriting', handleToolbarScreenwriting);
+    return () => window.removeEventListener('node-toolbar:screenwriting', handleToolbarScreenwriting);
+  }, [mode, element.id, applyScreenwritingRewritePreset]);
 
   const removePreset = (id: string) => {
     const target = appliedPresets.find(p => p.id === id);
@@ -286,6 +320,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       runTextGeneration({
         elementId: element.id,
         prompt: effectivePrompt,
+        systemPrompt: hasScreenwritingMasterTemplate ? SCREENWRITING_MASTER_SYSTEM_PROMPT : undefined,
         model,
         setIsGenerating: (v) => setIsGenerating(v),
       });
@@ -392,6 +427,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
       style={{
         left: x, top: y, width,
         transform: `scale(${scale})`, transformOrigin: 'top left', filter: 'none',
+        zIndex: libraryOpen ? 45 : 10,
       }}
       onMouseDown={e => e.stopPropagation()}
       onWheel={e => e.stopPropagation()}
@@ -415,7 +451,13 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
         onDragLeave={() => { if (isDragOverRef) setIsDragOverRef(false); }}
         onDrop={handleRefDrop}
       >
-        <div style={{ maxHeight: expanded ? '600px' : '0', overflow: 'hidden', transition: 'max-height 300ms ease' }}>
+        <div
+          style={{
+            maxHeight: expanded ? '600px' : '0',
+            overflow: libraryOpen ? 'visible' : 'hidden',
+            transition: 'max-height 300ms ease',
+          }}
+        >
         <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
           <div className="relative">
             <QuickChip icon={<BookMarked className="w-3 h-3" />} label="提示词库"
@@ -425,6 +467,16 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
                 onApply={applyPreset} onDismiss={() => setLibraryOpen(false)} />
             )}
           </div>
+          {mode === 'text' && (
+            <QuickChip
+              icon={<Sparkles className="w-3 h-3" />}
+              label="剧本优化续写"
+              onClick={applyScreenwritingRewritePreset}
+              active={appliedIds.includes(SCREENWRITING_REWRITE_PRESET_ID)}
+              disabled={isGenerating || appliedIds.includes(SCREENWRITING_REWRITE_PRESET_ID)}
+              title="套用场景化剧本续写约束"
+            />
+          )}
           {mode !== 'text' && (
             <>
               <QuickChip icon={<Target className="w-3 h-3" />} label="聚焦" onClick={() => insertTag('[聚焦]')} />

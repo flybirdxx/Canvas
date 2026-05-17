@@ -299,4 +299,35 @@ describe('elementSlice', () => {
       { id: 'project-1', childIds: ['plan', 'img'], label: 'Project' },
     ]);
   });
+
+  it('moves grouped elements without resizing them when moving a group frame', () => {
+    const store = createTestStore();
+    store.getState().addElement(makePlanning('plan', 10, 20));
+    store.getState().addElement(makeText('story', 360, 80));
+    store.getState().createGroupFromIds('project-1', ['plan', 'story'], 'Project');
+    store.getState().setGroupFrame('project-1', { x: 0, y: 0, width: 760, height: 320 });
+
+    store.getState().moveGroupBy('project-1', 50, 30);
+
+    const plan = store.getState().elements.find((element: CanvasElement) => element.id === 'plan');
+    const story = store.getState().elements.find((element: CanvasElement) => element.id === 'story');
+    expect(plan).toMatchObject({ x: 60, y: 50, width: 340, height: 260 });
+    expect(story).toMatchObject({ x: 410, y: 110, width: 320, height: 180 });
+    expect(store.getState().groups[0].frame).toEqual({ x: 50, y: 30, width: 760, height: 320 });
+  });
+
+  it('resizes only the group frame and leaves child node sizes unchanged', () => {
+    const store = createTestStore();
+    store.getState().addElement(makePlanning('plan', 10, 20));
+    store.getState().addElement(makeText('story', 360, 80));
+    store.getState().createGroupFromIds('project-1', ['plan', 'story'], 'Project');
+
+    store.getState().setGroupFrame('project-1', { x: 0, y: 0, width: 920, height: 520 });
+
+    const plan = store.getState().elements.find((element: CanvasElement) => element.id === 'plan');
+    const story = store.getState().elements.find((element: CanvasElement) => element.id === 'story');
+    expect(plan).toMatchObject({ width: 340, height: 260 });
+    expect(story).toMatchObject({ width: 320, height: 180 });
+    expect(store.getState().groups[0].frame).toEqual({ x: 0, y: 0, width: 920, height: 520 });
+  });
 }); 

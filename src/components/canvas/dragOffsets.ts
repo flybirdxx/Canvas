@@ -9,12 +9,38 @@
  *       ConnectionLines 在渲染时叠加偏移量 → 连线实时跟随。
  *       onDragEnd 时清除，此后回退到纯 store 位置。
  */
+import { useSyncExternalStore } from 'react';
 
 /** { nodeId → { dx, dy } } — 拖拽中的节点相对于其 store 位置的偏移 */
 const _offsets = new Map<string, { dx: number; dy: number }>();
+const _listeners = new Set<() => void>();
+let _version = 0;
+
+export function useDragOffsetsVersion() {
+  return useSyncExternalStore(
+    subscribeDragOffsets,
+    getDragOffsetsSnapshot,
+    getDragOffsetsSnapshot,
+  );
+}
+
+function notifyDragOffsetsChanged() {
+  _version += 1;
+  for (const listener of _listeners) listener();
+}
+
+export function subscribeDragOffsets(listener: () => void) {
+  _listeners.add(listener);
+  return () => _listeners.delete(listener);
+}
+
+export function getDragOffsetsSnapshot() {
+  return _version;
+}
 
 export function setDragOffset(nodeId: string, dx: number, dy: number) {
   _offsets.set(nodeId, { dx, dy });
+  notifyDragOffsetsChanged();
 }
 
 export function getDragOffset(nodeId: string): { dx: number; dy: number } | undefined {
@@ -22,7 +48,7 @@ export function getDragOffset(nodeId: string): { dx: number; dy: number } | unde
 }
 
 export function clearDragOffset(nodeId: string) {
-  _offsets.delete(nodeId);
+  if (_offsets.delete(nodeId)) notifyDragOffsetsChanged();
 }
 
 /** 拖拽编组时批量写入 */
@@ -30,11 +56,14 @@ export function setGroupDragOffsets(updates: { id: string; dx: number; dy: numbe
   for (const u of updates) {
     _offsets.set(u.id, { dx: u.dx, dy: u.dy });
   }
+  if (updates.length > 0) notifyDragOffsetsChanged();
 }
 
 /** 拖拽编组结束时批量清除 */
 export function clearGroupDragOffsets(ids: string[]) {
+  let changed = false;
   for (const id of ids) {
-    _offsets.delete(id);
+    changed = _offsets.delete(id) || changed;
   }
+  if (changed) notifyDragOffsetsChanged();
 }

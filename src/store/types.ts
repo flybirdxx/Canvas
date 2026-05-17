@@ -41,6 +41,7 @@ export interface GroupRecord {
   id: string;
   childIds: string[];
   label?: string;
+  frame?: { x: number; y: number; width: number; height: number };
 }
 
 // ── Full store interface ──────────────────────────────────────────────
@@ -79,6 +80,8 @@ export interface CanvasState {
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
   createGroupFromIds: (id: string, childIds: string[], label?: string) => void;
+  moveGroupBy: (id: string, dx: number, dy: number) => void;
+  setGroupFrame: (id: string, frame: { x: number; y: number; width: number; height: number }, label?: string) => void;
   ungroupSelected: () => void;
   setViewMode: (mode: 'canvas') => void;
   undo: () => void;

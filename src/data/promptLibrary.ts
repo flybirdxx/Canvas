@@ -5,6 +5,13 @@
  * `modes` 缺省时视为全模式可用；指定后只在对应 NodeInputBar 模式下出现。
  */
 
+import {
+  SCREENWRITING_MASTER_TEMPLATE_PRESET_ID,
+  SCREENWRITING_MASTER_TEMPLATE_PRESET_SNIPPET,
+  SCREENWRITING_REWRITE_PRESET_ID,
+  SCREENWRITING_REWRITE_PRESET_SNIPPET,
+} from '@/services/screenwriting';
+
 export type PromptMode = 'image' | 'video' | 'text';
 
 export type PromptCategoryId =
@@ -13,7 +20,8 @@ export type PromptCategoryId =
   | 'product'
   | 'cnStyle'
   | '3d'
-  | 'texture';
+  | 'texture'
+  | 'writing';
 
 export interface PromptCategory {
   id: PromptCategoryId;
@@ -27,6 +35,7 @@ export const PROMPT_CATEGORIES: PromptCategory[] = [
   { id: 'cnStyle', label: '国风' },
   { id: '3d', label: '3D' },
   { id: 'texture', label: '质感' },
+  { id: 'writing', label: '编剧' },
 ];
 
 export interface PromptPreset {
@@ -42,6 +51,23 @@ export interface PromptPreset {
 }
 
 export const BUILTIN_PRESETS: PromptPreset[] = [
+  {
+    id: SCREENWRITING_REWRITE_PRESET_ID,
+    category: 'writing',
+    title: '剧本优化续写',
+    snippet: SCREENWRITING_REWRITE_PRESET_SNIPPET,
+    modes: ['text'],
+    tags: ['剧本', '续写', '编剧', '场景'],
+  },
+  {
+    id: SCREENWRITING_MASTER_TEMPLATE_PRESET_ID,
+    category: 'writing',
+    title: '完整编剧模板',
+    snippet: SCREENWRITING_MASTER_TEMPLATE_PRESET_SNIPPET,
+    modes: ['text'],
+    tags: ['剧本', '完整模板', '编剧', '剧本医生'],
+  },
+
   // ============ 摄影 (10) ============
   {
     id: 'photo-cinematic',

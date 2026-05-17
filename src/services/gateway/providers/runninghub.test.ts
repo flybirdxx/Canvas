@@ -33,7 +33,23 @@ describe('RunningHubProvider.generateText', () => {
       { type: 'video_url', video_url: { url: 'data:video/mp4;base64,AAAA' } },
     ]);
     expect(body.top_p).toBe(1);
-    expect(body.reasoning_effort).toBe('none');
+    expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('does not send invalid none reasoning effort to OpenAI-compatible text APIs', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await RunningHubProvider.generateText?.({
+      model: 'deepseek/deepseek-v4-flash',
+      messages: [{ role: 'user', content: 'write' }],
+    }, config);
+
+    expect(result).toEqual({ ok: true, text: 'ok' });
+    const body = getLastRequestBody(fetchMock);
+    expect(body).not.toHaveProperty('reasoning_effort');
   });
 
   it('sends remote video URLs as video_url content parts without rejecting locally', async () => {

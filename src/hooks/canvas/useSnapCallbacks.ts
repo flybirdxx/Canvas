@@ -29,21 +29,9 @@ export function useSnapCallbacks(isAltRef: React.MutableRefObject<boolean>) {
 
   const snapOnDragEnd = useCallback((id: string, finalX: number, finalY: number) => {
     const allElements = useCanvasStore.getState().elements;
-    const groups = useCanvasStore.getState().groups;
     const el = allElements.find(n => n.id === id);
 
-    const group = groups.find(g => g.childIds.includes(id));
-    if (group && el) {
-      const finalDx = finalX - el.x;
-      const finalDy = finalY - el.y;
-      const allUpdates = group.childIds.map(sid => {
-        const sibling = allElements.find(e => e.id === sid);
-        return sibling ? { id: sid, x: sibling.x + finalDx, y: sibling.y + finalDy } : null;
-      }).filter((u): u is { id: string; x: number; y: number } => u !== null);
-      if (allUpdates.length > 0) {
-        useCanvasStore.getState().batchUpdatePositions(allUpdates);
-      }
-    } else if (el) {
+    if (el) {
       useCanvasStore.getState().batchUpdatePositions([{ id, x: finalX, y: finalY }]);
     }
 

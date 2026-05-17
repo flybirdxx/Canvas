@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
@@ -20,7 +20,7 @@ export function OmniScriptNode({ el, width, height }: { el: OmniScriptElement; w
   const upstreamVideo = useMemo(() => resolveUpstreamVideo(el.id, elements, connections), [el.id, elements, connections]);
   const result = el.result ?? { segments: [], structuredScript: [], highlights: [] };
 
-  const run = async () => {
+  const run = useCallback(async () => {
     setIsBusy(true);
     updateElement(el.id, { analysisStatus: 'running', error: undefined, model: selectedModel }, '分析 OmniScript');
     let videoDataUrl = upstreamVideo?.dataUrl;
@@ -57,7 +57,19 @@ export function OmniScriptNode({ el, width, height }: { el: OmniScriptElement; w
         error: (outcome as { ok: false; message: string }).message,
       }, 'OmniScript 分析失败');
     }
-  };
+  }, [el.id, el.videoUrl, el.notes, selectedModel, upstreamVideo, updateElement]);
+
+  useEffect(() => {
+    const handleToolbarRun = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string }>).detail;
+      if (detail?.id !== el.id) return;
+      if (isBusy || !selectedModel) return;
+      void run();
+    };
+
+    window.addEventListener('omniscript:run', handleToolbarRun);
+    return () => window.removeEventListener('omniscript:run', handleToolbarRun);
+  }, [el.id, isBusy, run, selectedModel]);
 
   return (
     <Group>

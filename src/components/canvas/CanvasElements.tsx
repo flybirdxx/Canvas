@@ -1,5 +1,5 @@
-import React, { useRef, useState, useMemo } from 'react';
-import { Group, Rect, Line } from 'react-konva';
+import React, { useRef, useState } from 'react';
+import { Group, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import type { GuideLine } from '@/utils/alignmentUtils';
 import { useCanvasStore } from '@/store/useCanvasStore';
@@ -8,8 +8,14 @@ import {
   AIGeneratingNode, FileNode, OmniScriptNode, PlanningNode,
   PortOverlay, SelectionHandles, SnapCallbacks, RunningPulse
 } from './nodes';
-import { INK_1 } from './nodes/shared';
-import { setDragOffset, clearDragOffset, setGroupDragOffsets, clearGroupDragOffsets } from './dragOffsets';
+import { GroupFrameLayer } from './GroupFrameLayer';
+import { setDragOffset, clearDragOffset } from './dragOffsets';
+import { resolveGroupFrame } from '@/utils/groupFrame';
+import {
+  getNodeDragDelta,
+  resolveNodeDragBound,
+  resolveNodeVisualPosition,
+} from './dragController';
 
 
 export interface CanvasElementsProps {
@@ -19,21 +25,16 @@ export interface CanvasElementsProps {
 
 export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProps) {
   const {
-    elements, selectedIds, setSelection, activeTool, drawingConnection, groups,
+    elements, selectedIds, setSelection, activeTool, drawingConnection,
   } = useCanvasStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const isDraggingOrResizingRef = useRef(false);
   const dragStartPosRef = useRef<Record<string, { x: number; y: number }>>({});
 
-  // 预计算选中编组成员 ID 集合，避免渲染循环中 O(N*G) 的嵌套查找
-  const selectedGroupMemberIds = useMemo(() => {
-    const selectedGroups = groups.filter(g => g.childIds.some(id => selectedIds.includes(id)));
-    return new Set(selectedGroups.flatMap(g => g.childIds));
-  }, [groups, selectedIds]);
-
   return (
     <>
+      <GroupFrameLayer dragGuardRef={isDraggingOrResizingRef} />
       {elements.map((el) => {
         const isSelected = selectedIds.includes(el.id);
         const { id, x, y, rotation, width, height } = el;
@@ -47,15 +48,16 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           rotation: rotation || 0,
           draggable: activeTool === 'select' && !el.isLocked && !drawingConnection,
           dragBoundFunc: (pos: { x: number; y: number }) => {
-            if (useCanvasStore.getState().drawingConnection) return { x, y };
-            // FR1 吸附：Konva 层 snap，不更新 store → 消除 React props 覆盖拖拽态的闪烁
+            const state = useCanvasStore.getState();
+            const currentElement = state.elements.find(item => item.id === id) ?? el;
             const origin = dragStartPosRef.current[id];
-            if (snapCallbacks?.computeDragSnap && origin) {
-              return snapCallbacks.computeDragSnap(
-                id, pos.x, pos.y, origin.x, origin.y, width, height,
-              );
-            }
-            return pos;
+            return resolveNodeDragBound({
+              element: currentElement,
+              proposed: pos,
+              origin,
+              drawingConnection: !!state.drawingConnection,
+              computeSnap: snapCallbacks?.computeDragSnap,
+            });
           },
           onPointerDown: (e: any) => {
             if (activeTool === 'select') {
@@ -72,15 +74,6 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           onDragStart: () => {
             isDraggingOrResizingRef.current = true;
             dragStartPosRef.current[id] = { x: el.x, y: el.y };
-            // FR1 编组节点：同时捕获所有兄弟节点的起始位置。
-            const group = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
-            if (group && group.childIds.length <= 50) {
-              for (const sid of group.childIds) {
-                if (sid === id) continue;
-                const sibling = useCanvasStore.getState().elements.find(e => e.id === sid);
-                if (sibling) dragStartPosRef.current[sid] = { x: sibling.x, y: sibling.y };
-              }
-            }
           },
           onDragMove: (e: any) => {
             if (e.target.id() === id) {
@@ -89,39 +82,26 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
               const visualY = e.target.y();
               const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
               if (!currentEl) return;
-              const dx = visualX - currentEl.x;
-              const dy = visualY - currentEl.y;
+              const state = useCanvasStore.getState();
+              const group = state.groups.find(item => item.childIds.includes(id));
+              const groupFrame = group ? resolveGroupFrame(group, state.elements) : null;
+              const visualPosition = resolveNodeVisualPosition({
+                element: currentEl,
+                visualPosition: { x: visualX, y: visualY },
+                groupFrame,
+              });
+              if (visualPosition.x !== visualX || visualPosition.y !== visualY) {
+                e.target.position(visualPosition);
+              }
+              const delta = getNodeDragDelta(currentEl, visualPosition);
 
               // snapCallbacks.onDragMove handles snapping + updates + guideLines
               //   store 位置仅通过 onDragEnd 的 batchUpdatePositions 一次性同步
-              snapCallbacks.onDragMove(id, dx, dy, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
+              snapCallbacks.onDragMove(id, delta.x, delta.y, currentEl.x, currentEl.y, currentEl.width, currentEl.height);
 
               // 实时写入拖拽偏移量 → ConnectionLines 可读取以实时跟随
-              setDragOffset(id, dx, dy);
+              setDragOffset(id, delta.x, delta.y);
 
-              const stage = e.target.getStage();
-              if (stage) {
-                // FR1 编组节点：兄弟节点通过 Konva API 直接移动，不经过 store。
-                const group = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
-                // 防御：编组超过 50 个成员时不移动兄弟节点（防止误操作把全画布分组后
-                // 拖任意节点都带着全部元素跑）。
-                if (group && group.childIds.length <= 50) {
-                  const groupDeltas: { id: string; dx: number; dy: number }[] = [];
-                  for (const sid of group.childIds) {
-                    if (sid === id) continue;
-                    const siblingNode = stage.findOne('#' + sid);
-                    if (siblingNode) {
-                      const sibOrigin = dragStartPosRef.current[sid];
-                      if (sibOrigin) {
-                        siblingNode.position({ x: sibOrigin.x + dx, y: sibOrigin.y + dy });
-                        groupDeltas.push({ id: sid, dx, dy });
-                      }
-                    }
-                  }
-                  // 批量写入编组兄弟偏移量
-                  if (groupDeltas.length > 0) setGroupDragOffsets(groupDeltas);
-                }
-              }
             }
           },
           onDragEnd: (e: any) => {
@@ -129,19 +109,26 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
             if (e.target.id() === id) {
               // 从 Konva 节点直接读取最终位置（含 dragBoundFunc 的 snap 偏移），
               // 避免从 store 重新计算导致的 snap 偏移丢失。
-              const finalX = e.target.x();
-              const finalY = e.target.y();
-              snapCallbacks.onDragEnd(id, finalX, finalY);
+              const currentEl = useCanvasStore.getState().elements.find(n => n.id === id);
+              let finalPosition = { x: e.target.x(), y: e.target.y() };
+              if (currentEl) {
+                const state = useCanvasStore.getState();
+                const group = state.groups.find(item => item.childIds.includes(id));
+                const groupFrame = group ? resolveGroupFrame(group, state.elements) : null;
+                finalPosition = resolveNodeVisualPosition({
+                  element: currentEl,
+                  visualPosition: finalPosition,
+                  groupFrame,
+                });
+                if (finalPosition.x !== e.target.x() || finalPosition.y !== e.target.y()) {
+                  e.target.position(finalPosition);
+                }
+              }
+              snapCallbacks.onDragEnd(id, finalPosition.x, finalPosition.y);
               // Clean up ref
               delete dragStartPosRef.current[id];
               // 清除拖拽偏移量 — store 已更新，连线回退到纯 store 位置
               clearDragOffset(id);
-              // FR1: 清理编组兄弟节点在 dragStartPosRef 中的条目。
-              const cleanupGroup = useCanvasStore.getState().groups.find(g => g.childIds.includes(id));
-              if (cleanupGroup) {
-                clearGroupDragOffsets(cleanupGroup.childIds);
-                for (const sid of cleanupGroup.childIds) delete dragStartPosRef.current[sid];
-              }
             }
           },
           onMouseEnter: () => { setHoveredId(id); },
@@ -174,27 +161,11 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           nodeContent = <PlanningNode el={el} />;
         }
 
-        // FR1 grouping: if node belongs to a selected group, render a dashed border overlay
-        const inSelectedGroup = selectedGroupMemberIds.has(id);
-        const groupBorder = inSelectedGroup ? (
-          <Rect
-            x={-3} y={-3}
-            width={width + 6} height={height + 6}
-            stroke={isSelected ? 'var(--accent)' : INK_1}
-            strokeWidth={1.5}
-            dash={[6, 4]}
-            cornerRadius={12}
-            fill="transparent"
-            listening={false}
-          />
-        ) : null;
-
         const rotOverride = rotation || 0;
 
         return (
           <Group key={id} {...outerGroupProps} rotation={rotOverride}>
             <PortOverlay el={el} isSelected={isSelected} hoveredId={hoveredId} />
-            {groupBorder}
             {nodeContent}
             <RunningPulse el={el} />
             {activeTool === 'select' && !drawingConnection && (
