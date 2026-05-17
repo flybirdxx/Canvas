@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
-import { PropertiesPanel } from './components/properties/PropertiesPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HistoryPanel } from './components/HistoryPanel';
 import { AssetLibraryPanel } from './components/AssetLibraryPanel';
@@ -134,7 +133,6 @@ export default function App() {
 
       <ToolDock onCreate={handleCreateNode} onUploadFiles={handleUploadFiles} activeTool={activeTool} onSetActiveTool={setActiveTool} />
       <FloatingActions onOpenTemplates={() => setIsTemplatesOpen(true)} onOpenChat={() => setIsTemplatesOpen(true)} />
-      <PropertiesPanel />
       <HistoryPanel />
       <AlignmentToolbar />
       <AssetLibraryPanel />

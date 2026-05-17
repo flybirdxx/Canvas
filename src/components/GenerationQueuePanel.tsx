@@ -56,7 +56,7 @@ export function GenerationQueuePanel() {
       style={{
         position: 'absolute',
         top: 72,
-        right: 312,              // offset so it doesn't collide with PropertiesPanel
+        right: 16,
         width: 300,
       }}
     >
