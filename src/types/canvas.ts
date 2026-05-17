@@ -37,6 +37,13 @@ export interface GenerationConfig {
   references?: string[];
 }
 
+export interface PlanningDraft {
+  sourcePlanningId: string;
+  sourceRequirementId?: string;
+  projectId?: string;
+  status: 'pendingReview' | 'approved';
+}
+
 export interface BaseElement {
   id: string;
   type: ElementType;
@@ -51,6 +58,7 @@ export interface BaseElement {
   prompt?: string;
   generation?: GenerationConfig;
   note?: string;
+  planningDraft?: PlanningDraft;
 }
 
 export interface ShapeElement extends BaseElement {
@@ -211,12 +219,14 @@ export interface PlanningElement extends BaseElement {
   kind: PlanningNodeKind;
   title: string;
   body: string;
+  projectId?: string;
   template?: 'shortDrama';
   requirements?: PlanningRequirement[];
   propStates?: PlanningPropState[];
   recommendedTaskType?: Extract<PlanningMaterialType, 'image' | 'text' | 'video' | 'audio'>;
   acceptanceCriteria?: string;
   sourcePlanningId?: string;
+  generatedNodeIds?: string[];
 }
 
 export interface Connection {

@@ -72,6 +72,35 @@ describe('elementSlice', () => {
     expect(el.outputs!.some(p => p.type === 'image')).toBe(true);  
   });  
 
+  it('preserves planning draft metadata when adding image elements', () => {
+    const store = createTestStore();
+    const draftImage: CanvasElement = {
+      id: 'img-draft-1',
+      type: 'image',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 400,
+      src: '',
+      planningDraft: {
+        sourcePlanningId: 'plan1',
+        sourceRequirementId: 'req1',
+        projectId: 'project1',
+        status: 'pendingReview',
+      },
+    };
+
+    store.getState().addElement(draftImage);
+
+    const el = store.getState().elements[0];
+    expect(el.planningDraft).toEqual({
+      sourcePlanningId: 'plan1',
+      sourceRequirementId: 'req1',
+      projectId: 'project1',
+      status: 'pendingReview',
+    });
+  });
+
   it('adds default ports to planning nodes', () => {
     const store = createTestStore();
 
