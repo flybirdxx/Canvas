@@ -252,6 +252,70 @@ describe('PlanningNode', () => {
     });
   });
 
+  it('adds manually created drafts to the project summary and undoes draft plus connection atomically', () => {
+    const consoleNode = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      projectId: 'project-1',
+      generatedNodeIds: ['planning-plot-1'],
+      title: 'project seed',
+      requirements: [],
+    });
+    const node = makePlanningNode({
+      id: 'planning-plot-1',
+      projectId: 'project-1',
+      outputs: [{ id: 'plot-output-1', type: 'text', label: 'Plan' }],
+      requirements: [
+        {
+          id: 'req-prop',
+          title: 'blood watch closeup',
+          materialType: 'prop',
+          description: 'visible prompt',
+          status: 'confirmed',
+        },
+      ],
+    });
+    const initialGroup = {
+      id: 'project-1',
+      label: 'project seed',
+      childIds: ['project-seed-1', 'planning-plot-1'],
+    };
+    useCanvasStore.setState({
+      elements: [consoleNode, node],
+      connections: [],
+      groups: [initialGroup],
+    });
+
+    render(<PlanningNode el={node} />);
+    fireEvent.click(screen.getByRole('button', { name: '创建执行节点' }));
+
+    const createdState = useCanvasStore.getState();
+    const draftNode = createdState.elements.find(element =>
+      element.planningDraft?.sourcePlanningId === node.id &&
+      element.planningDraft?.sourceRequirementId === 'req-prop',
+    );
+    expect(draftNode).toBeDefined();
+    if (!draftNode) throw new Error('expected draft node');
+    expect(createdState.connections).toHaveLength(1);
+    expect(createdState.groups).toEqual([
+      {
+        ...initialGroup,
+        childIds: ['project-seed-1', 'planning-plot-1', draftNode.id],
+      },
+    ]);
+    expect(createdState.elements.find(element => element.id === consoleNode.id)).toMatchObject({
+      type: 'planning',
+      generatedNodeIds: ['planning-plot-1', draftNode.id],
+    });
+
+    useCanvasStore.getState().undo();
+
+    const undoneState = useCanvasStore.getState();
+    expect(undoneState.elements).toEqual([consoleNode, node]);
+    expect(undoneState.connections).toEqual([]);
+    expect(undoneState.groups).toEqual([initialGroup]);
+  });
+
   function convertProductionTask(recommendedTaskType: NonNullable<PlanningElement['recommendedTaskType']>) {
     const node = makePlanningNode({
       id: `production-task-${recommendedTaskType}`,

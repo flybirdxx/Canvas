@@ -118,6 +118,12 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
   ) => {
     event.stopPropagation();
     const store = useCanvasStore.getState();
+    const projectSeed = store.elements.find((existing): existing is PlanningElement =>
+      existing.type === 'planning' &&
+      existing.kind === 'projectSeed' &&
+      existing.generatedNodeIds?.includes(el.id),
+    );
+    const sourceProjectId = el.projectId ?? projectSeed?.projectId ?? store.groups.find(group => group.childIds.includes(el.id))?.id;
     const exists = store.elements.some(existing =>
       existing.planningDraft?.sourcePlanningId === el.id &&
       existing.planningDraft?.sourceRequirementId === requirement.id,
@@ -125,30 +131,13 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
     if (exists) return;
 
     const draftNode = createDraftExecutionNodeFromRequirement({
-      source: el,
+      source: sourceProjectId ? { ...el, projectId: sourceProjectId } : el,
       requirement,
-      projectId: el.projectId,
+      projectId: sourceProjectId,
       x: el.x + el.width + 80,
       y: el.y,
     });
-    store.addElement(draftNode);
-    store.setSelection([draftNode.id]);
-
-    const nextStore = useCanvasStore.getState();
-    const sourceNode = nextStore.elements.find(existing => existing.id === el.id);
-    const insertedDraftNode = nextStore.elements.find(existing => existing.id === draftNode.id);
-    const sourceOutput = sourceNode?.outputs?.find(output =>
-      output.type === 'text' || output.type === 'any',
-    );
-    const compatibleInput = insertedDraftNode?.inputs?.find(input =>
-      input.type === 'text' || input.type === 'any',
-    );
-
-    if (sourceOutput?.id && compatibleInput?.id && insertedDraftNode) {
-      nextStore.addConnection(
-        makePlanningConnection(el.id, sourceOutput.id, insertedDraftNode.id, compatibleInput.id),
-      );
-    }
+    useCanvasStore.setState(state => insertDraftExecutionNode(state, el.id, draftNode));
   };
 
   const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
@@ -552,6 +541,84 @@ function materializeProjectInStore(
       _coalesceAt: undefined,
     };
   });
+}
+
+function insertDraftExecutionNode(
+  state: ReturnType<typeof useCanvasStore.getState>,
+  sourceId: string,
+  draftNode: CanvasElement,
+) {
+  const exists = state.elements.some(existing =>
+    existing.planningDraft?.sourcePlanningId === sourceId &&
+    existing.planningDraft?.sourceRequirementId === draftNode.planningDraft?.sourceRequirementId,
+  );
+  const sourceNode = state.elements.find(existing => existing.id === sourceId);
+  if (exists || !sourceNode) return state;
+
+  const sourceOutput = sourceNode.outputs?.find(output =>
+    output.type === 'text' || output.type === 'any',
+  );
+  const compatibleInput = draftNode.inputs?.find(input =>
+    input.type === 'text' || input.type === 'any',
+  );
+  const draftConnection = sourceOutput?.id && compatibleInput?.id
+    ? makePlanningConnection(sourceId, sourceOutput.id, draftNode.id, compatibleInput.id)
+    : undefined;
+  const projectId = draftNode.planningDraft?.projectId;
+  const nextElementsWithDraft = [
+    ...state.elements.map(element => {
+      if (!shouldAttachDraftToProjectSeed(element, sourceId, projectId)) return element;
+      return {
+        ...element,
+        generatedNodeIds: appendUnique(element.generatedNodeIds ?? [], draftNode.id),
+      } as CanvasElement;
+    }),
+    draftNode,
+  ];
+  const nextConnections = draftConnection
+    ? addValidMaterializedConnections(state.connections, [draftConnection], nextElementsWithDraft)
+    : state.connections;
+  const projectGroupIndex = state.groups.findIndex(group =>
+    (projectId && group.id === projectId) || group.childIds.includes(sourceId),
+  );
+  const nextGroups = projectGroupIndex >= 0
+    ? state.groups.map((group, index) =>
+      index === projectGroupIndex
+        ? { ...group, childIds: appendUnique(group.childIds, draftNode.id) }
+        : group,
+    )
+    : state.groups;
+
+  return {
+    past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+    future: [],
+    elements: nextElementsWithDraft,
+    connections: nextConnections,
+    groups: nextGroups,
+    selectedIds: [draftNode.id],
+    currentLabel: '创建规划执行节点',
+    currentTimestamp: Date.now(),
+    _coalesceKey: undefined,
+    _coalesceAt: undefined,
+  };
+}
+
+function shouldAttachDraftToProjectSeed(
+  element: CanvasElement,
+  sourceId: string,
+  projectId: string | undefined,
+): element is PlanningElement {
+  return element.type === 'planning' &&
+    element.kind === 'projectSeed' &&
+    (
+      element.id === sourceId ||
+      (projectId !== undefined && element.projectId === projectId) ||
+      !!element.generatedNodeIds?.includes(sourceId)
+    );
+}
+
+function appendUnique<T>(items: T[], item: T): T[] {
+  return items.includes(item) ? items : [...items, item];
 }
 
 function addValidMaterializedConnections(

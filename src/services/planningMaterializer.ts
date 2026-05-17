@@ -52,17 +52,31 @@ export function materializePlanningResponse(
     }),
   );
 
-  const plotNodes = response.plots.map((plot, index) =>
-    createPlanningTextNode({
+  const plotEntries = response.plots.map((plot, index) => {
+    const plotNode = createPlanningTextNode({
       source,
       title: plot.title,
       body: formatPlotBody(plot),
       x: source.x + PLOT_COLUMN_X,
       y: source.y + index * NODE_VERTICAL_GAP,
-    }),
-  );
+    });
+    const draftNodes = plot.requirements
+      .filter(requirement => requirement.status === 'confirmed')
+      .map((requirement, requirementIndex) =>
+        createDraftExecutionNodeFromRequirement({
+          source,
+          requirement,
+          projectId,
+          x: plotNode.x + plotNode.width + 80,
+          y: plotNode.y + requirementIndex * 180,
+        }),
+      );
+    return { plotNode, draftNodes };
+  });
+  const plotNodes = plotEntries.map(entry => entry.plotNode);
+  const draftNodes = plotEntries.flatMap(entry => entry.draftNodes);
 
-  const nodes = [storyBible, ...characterNodes, ...plotNodes];
+  const nodes = [storyBible, ...characterNodes, ...plotNodes, ...draftNodes];
   const connections = createMaterializerConnections(source, storyBible, nodes);
 
   return {

@@ -85,6 +85,48 @@ describe('planningMaterializer', () => {
     });
   });
 
+  it('materializes confirmed plot requirements as pendingReview draft execution nodes', () => {
+    const result = materializePlanningResponse(source, {
+      ...response,
+      plots: [
+        {
+          ...response.plots[0],
+          requirements: [
+            {
+              id: 'req-confirmed-image',
+              title: 'confirmed image draft',
+              materialType: 'image',
+              description: 'visible clue',
+              status: 'confirmed',
+            },
+            {
+              id: 'req-pending-image',
+              title: 'pending image draft',
+              materialType: 'image',
+              description: 'should not become a draft',
+              status: 'pending',
+            },
+          ],
+        },
+      ],
+    });
+
+    const draftNodes = result.nodes.filter(node => node.planningDraft);
+
+    expect(draftNodes).toHaveLength(1);
+    expect(draftNodes[0]).toMatchObject({
+      type: 'image',
+      planningDraft: {
+        sourcePlanningId: 'console-1',
+        sourceRequirementId: 'req-confirmed-image',
+        projectId: 'project-1',
+        status: 'pendingReview',
+      },
+    });
+    expect(draftNodes[0].x).toBeGreaterThan(source.x + 860);
+    expect(result.projectGroup.childIds).toEqual(['console-1', ...result.nodes.map(node => node.id)]);
+  });
+
   it('creates usable connections with explicit materialized text input ports', () => {
     const result = materializePlanningResponse(source, response);
 

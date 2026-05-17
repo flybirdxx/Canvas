@@ -71,7 +71,7 @@ export function NodeInputBar({ element, x, y, width, scale }: NodeInputBarProps)
   const { pushRecent, findPreset } = usePromptLibraryStore();
 
   const mode: GenMode = useMemo(() => {
-    if (element.type === 'video') return 'video';
+    if (element.type === 'video' || element.type === 'audio') return 'video';
     if (element.type === 'text') return 'text';
     return 'image';
   }, [element.type]);

@@ -49,6 +49,7 @@ export function getUpstreamTextContributions(
 
     const src = elementsById.get(c.fromId);
     if (!src) continue;
+    if (isPendingPlanningDraft(src)) continue;
     const content = getOutgoingText(src);
     if (!content) continue;
 
@@ -89,6 +90,7 @@ export function getUpstreamImageContributions(
 
     const src = elementsById.get(c.fromId);
     if (!src) continue;
+    if (isPendingPlanningDraft(src)) continue;
 
     if (src.type === 'image' && src.src) {
       out.push({ connectionId: c.id, sourceId: src.id, src: src.src, label: '图像' });
@@ -120,6 +122,10 @@ function sortByCanvasPosition<T extends { sourceId: string }>(
     const dy = sa.y - sb.y;
     return Math.abs(dy) > 4 ? dy : sa.x - sb.x;
   });
+}
+
+function isPendingPlanningDraft(el: CanvasElement): boolean {
+  return el.planningDraft?.status === 'pendingReview';
 }
 
 function textTypeLabel(type: CanvasElement['type']): string {

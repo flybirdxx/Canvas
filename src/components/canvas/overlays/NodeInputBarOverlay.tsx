@@ -13,6 +13,7 @@ const INPUT_BAR_MIN_WIDTH_BY_TYPE: Record<string, number> = {
   text: 260,
   image: 400,
   video: 460,
+  audio: 360,
   aigenerating: 400,
 };
 const INPUT_BAR_MIN_WIDTH_FALLBACK = 260;
@@ -27,7 +28,7 @@ interface NodeInputBarOverlayProps {
 export function NodeInputBarOverlay({ elements, selectedIds, stageConfig }: NodeInputBarOverlayProps) {
   const visible = elements.filter(el =>
     selectedIds.includes(el.id) &&
-    (el.type === 'image' || el.type === 'video' || el.type === 'text' ||
+    (el.type === 'image' || el.type === 'video' || el.type === 'audio' || el.type === 'text' ||
       (el.type === 'aigenerating' && !!(el as any).error))
   );
 

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NodeInputBar } from './NodeInputBar';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { ImageElement } from '@/types/canvas';
+import type { ImageElement, MediaElement } from '@/types/canvas';
 
 function makePendingDraftImage(overrides: Partial<ImageElement> = {}): ImageElement {
   return {
@@ -17,6 +17,26 @@ function makePendingDraftImage(overrides: Partial<ImageElement> = {}): ImageElem
     planningDraft: {
       sourcePlanningId: 'planning-1',
       sourceRequirementId: 'req-watch',
+      projectId: 'project-1',
+      status: 'pendingReview',
+    },
+    ...overrides,
+  };
+}
+
+function makePendingDraftAudio(overrides: Partial<MediaElement> = {}): MediaElement {
+  return {
+    id: 'audio-draft-1',
+    type: 'audio',
+    x: 0,
+    y: 0,
+    width: 360,
+    height: 96,
+    src: '',
+    prompt: '生成一段紧张环境音',
+    planningDraft: {
+      sourcePlanningId: 'planning-1',
+      sourceRequirementId: 'req-audio',
       projectId: 'project-1',
       status: 'pendingReview',
     },
@@ -43,6 +63,21 @@ describe('NodeInputBar planning draft review', () => {
 
   it('shows pending review state, disables submit, and approves the draft node', () => {
     const node = makePendingDraftImage();
+    useCanvasStore.setState({ elements: [node] });
+
+    render(<NodeInputBar element={node} x={0} y={0} width={420} scale={1} />);
+
+    expect(screen.getByText('来自规划 · 待确认')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '确认可执行' }));
+
+    const updated = useCanvasStore.getState().elements.find(element => element.id === node.id);
+    expect(updated?.planningDraft?.status).toBe('approved');
+  });
+
+  it('shows the same confirmation path for audio pending drafts', () => {
+    const node = makePendingDraftAudio();
     useCanvasStore.setState({ elements: [node] });
 
     render(<NodeInputBar element={node} x={0} y={0} width={420} scale={1} />);

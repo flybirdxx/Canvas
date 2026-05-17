@@ -238,6 +238,47 @@ describe('getUpstreamTextContributions', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('skips pendingReview planning drafts and keeps approved drafts as upstream text', () => {
+    const pendingDraft = textEl({
+      id: 'draft-pending',
+      text: 'pending draft context',
+      planningDraft: {
+        sourcePlanningId: 'plan1',
+        sourceRequirementId: 'req-pending',
+        projectId: 'project-1',
+        status: 'pendingReview',
+      },
+    });
+    const approvedDraft = textEl({
+      id: 'draft-approved',
+      text: 'approved draft context',
+      x: 10,
+      planningDraft: {
+        sourcePlanningId: 'plan1',
+        sourceRequirementId: 'req-approved',
+        projectId: 'project-1',
+        status: 'approved',
+      },
+    });
+    const target = imageEl({
+      id: 'img1',
+      inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
+    });
+    const connections = [
+      conn('c-pending', 'draft-pending', 'img1', 'p-out', 'p-in-text'),
+      conn('c-approved', 'draft-approved', 'img1', 'p-out', 'p-in-text'),
+    ];
+
+    const result = getUpstreamTextContributions('img1', [pendingDraft, approvedDraft, target], connections);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      connectionId: 'c-approved',
+      sourceId: 'draft-approved',
+      content: 'approved draft context',
+    });
+  });
+
   it('should sort contributions by source element position (top-to-bottom, left-to-right)', () => {
     const tn1 = textEl({ id: 't1', text: 'A', x: 100, y: 200 });  // below
     const tn2 = textEl({ id: 't2', text: 'B', x: 100, y: 0 });    // above
