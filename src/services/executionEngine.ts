@@ -140,6 +140,12 @@ export async function executeNode(nodeId: string, execId: string): Promise<void>
     return;
   }
 
+  if (el.planningDraft?.status === 'pendingReview') {
+    store.updateNodeStatus(nodeId, 'running', undefined, undefined, execId);
+    store.updateNodeStatus(nodeId, 'failed', '此节点来自规划，确认后才能执行', 'unknown', execId);
+    return;
+  }
+
   store.updateNodeStatus(nodeId, 'running');
 
   if (el.type === 'text' || el.type === 'sticky' || el.type === 'rectangle' || el.type === 'circle' || el.type === 'file' || el.type === 'omniscript' || el.type === 'planning') {
