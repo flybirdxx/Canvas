@@ -194,15 +194,16 @@ describe('PlanningNode', () => {
     expect(updated.requirements?.[0]?.status).toBe('confirmed');
   });
 
-  it('creates one production task from a confirmed plot requirement and prevents duplicates', () => {
+  it('creates one selected draft execution node from a confirmed plot requirement and prevents duplicates', () => {
     const node = makePlanningNode({
+      projectId: 'project-1',
       outputs: [{ id: 'plot-output-1', type: 'text', label: 'Plan' }],
       requirements: [
         {
-          id: 'req-scene',
-          title: '雨夜仓库场景图',
-          materialType: 'scene',
-          description: '仓库外景，雨夜，破损霓虹灯。',
+          id: 'req-prop',
+          title: '血色怀表特写',
+          materialType: 'prop',
+          description: '带血痕的旧怀表近景。',
           status: 'confirmed',
         },
       ],
@@ -210,26 +211,44 @@ describe('PlanningNode', () => {
     useCanvasStore.setState({ elements: [node], connections: [] });
 
     render(<PlanningNode el={node} />);
-    const button = screen.getByRole('button', { name: '创建任务节点' });
+    const button = screen.getByRole('button', { name: '创建执行节点' });
 
     fireEvent.click(button);
     fireEvent.click(button);
 
-    const productionTasks = useCanvasStore.getState().elements.filter(element =>
+    const state = useCanvasStore.getState();
+    const draftNodes = state.elements.filter(element =>
+      element.planningDraft?.sourcePlanningId === node.id &&
+      element.planningDraft?.sourceRequirementId === 'req-prop',
+    );
+    expect(draftNodes).toHaveLength(1);
+    expect(draftNodes[0]).toMatchObject({
+      type: 'image',
+      x: node.x + node.width + 80,
+      y: node.y,
+      planningDraft: {
+        sourcePlanningId: node.id,
+        sourceRequirementId: 'req-prop',
+        projectId: 'project-1',
+        status: 'pendingReview',
+      },
+    });
+    expect(state.elements.some(element =>
       element.type === 'planning' &&
       element.kind === 'productionTask' &&
-      element.sourcePlanningId === node.id &&
-      element.title === '雨夜仓库场景图',
+      element.sourcePlanningId === node.id,
+    )).toBe(false);
+    expect(state.selectedIds).toEqual([draftNodes[0].id]);
+    const compatibleInput = draftNodes[0].inputs?.find(input =>
+      input.type === 'text' || input.type === 'any',
     );
-    expect(productionTasks).toHaveLength(1);
-    expect(productionTasks[0].x).toBe(node.x + node.width + 80);
-    expect(productionTasks[0].inputs?.[0]?.id).toBeTruthy();
-    expect(useCanvasStore.getState().connections).toHaveLength(1);
-    expect(useCanvasStore.getState().connections[0]).toMatchObject({
+    expect(compatibleInput?.id).toBeTruthy();
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0]).toMatchObject({
       fromId: node.id,
       fromPortId: 'plot-output-1',
-      toId: productionTasks[0].id,
-      toPortId: productionTasks[0].inputs?.[0]?.id,
+      toId: draftNodes[0].id,
+      toPortId: compatibleInput?.id,
     });
   });
 

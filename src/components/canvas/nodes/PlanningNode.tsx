@@ -7,10 +7,12 @@ import { snapshot, MAX_HISTORY } from '@/store/helpers';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
-import { materializePlanningResponse } from '@/services/planningMaterializer';
+import {
+  createDraftExecutionNodeFromRequirement,
+  materializePlanningResponse,
+} from '@/services/planningMaterializer';
 import {
   convertTaskToExecutionNode,
-  createTaskFromRequirement,
   detectPropVisualConflict,
   makePlanningConnection,
 } from '@/services/planningGraph';
@@ -109,28 +111,36 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
     event.stopPropagation();
     const store = useCanvasStore.getState();
     const exists = store.elements.some(existing =>
-      existing.type === 'planning' &&
-      existing.kind === 'productionTask' &&
-      existing.sourcePlanningId === el.id &&
-      existing.title === requirement.title,
+      existing.planningDraft?.sourcePlanningId === el.id &&
+      existing.planningDraft?.sourceRequirementId === requirement.id,
     );
     if (exists) return;
 
-    const task = createTaskFromRequirement(el, requirement);
-    store.addElement(task);
+    const draftNode = createDraftExecutionNodeFromRequirement({
+      source: el,
+      requirement,
+      projectId: el.projectId,
+      x: el.x + el.width + 80,
+      y: el.y,
+    });
+    store.addElement(draftNode);
+    store.setSelection([draftNode.id]);
 
-    const sourceOutputId = el.outputs?.[0]?.id;
-    if (!sourceOutputId) return;
-
-    const insertedTask = useCanvasStore.getState().elements.find(existing => existing.id === task.id);
-    if (insertedTask?.type !== 'planning') return;
-
-    const taskInputId = insertedTask.inputs?.[0]?.id;
-    if (!taskInputId) return;
-
-    useCanvasStore.getState().addConnection(
-      makePlanningConnection(el.id, sourceOutputId, insertedTask.id, taskInputId),
+    const nextStore = useCanvasStore.getState();
+    const sourceNode = nextStore.elements.find(existing => existing.id === el.id);
+    const insertedDraftNode = nextStore.elements.find(existing => existing.id === draftNode.id);
+    const sourceOutput = sourceNode?.outputs?.find(output =>
+      output.type === 'text' || output.type === 'any',
     );
+    const compatibleInput = insertedDraftNode?.inputs?.find(input =>
+      input.type === 'text' || input.type === 'any',
+    );
+
+    if (sourceOutput?.id && compatibleInput?.id && insertedDraftNode) {
+      nextStore.addConnection(
+        makePlanningConnection(el.id, sourceOutput.id, insertedDraftNode.id, compatibleInput.id),
+      );
+    }
   };
 
   const handleGenerateStoryBible = async (event: React.SyntheticEvent) => {
@@ -402,7 +412,7 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
                     onClick={(event) => handleCreateTask(event, requirement)}
                     style={actionButtonStyle}
                   >
-                    创建任务节点
+                    创建执行节点
                   </button>
                 </div>
               ))}
