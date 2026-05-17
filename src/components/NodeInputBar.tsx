@@ -53,6 +53,7 @@ import {
 } from './input-bar/utils';
 
 export interface NodeInputBarProps {
+  key?: React.Key;
   element: CanvasElement;
   x: number;
   y: number;
