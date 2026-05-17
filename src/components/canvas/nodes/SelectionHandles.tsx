@@ -1,13 +1,11 @@
 import React, { useRef } from 'react';
 import { Group, Line, Rect } from 'react-konva';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import { resolveNodeResize, shouldLockNodeAspectRatio } from '../interactions/resizeGeometry';
 
 const HANDLE_HIT_SIZE = 28;
 const HANDLE_VISUAL_SIZE = 16;
 const HANDLE_COLOR = '#B96545';
-
-const MIN_W = 60;
-const MIN_H = 40;
 
 interface DragStartState {
   mx: number;
@@ -16,16 +14,6 @@ interface DragStartState {
   y: number;
   w: number;
   h: number;
-}
-
-function shouldLockAspectRatio(el: any): boolean {
-  if (el.type === 'image' || el.type === 'aigenerating') return true;
-  if (el.type === 'file') {
-    const mt = String(el.mimeType || '').toLowerCase();
-    if (mt.startsWith('image/')) return true;
-    if ((mt.startsWith('video/') || mt.startsWith('audio/')) && el.thumbnailDataUrl) return true;
-  }
-  return false;
 }
 
 export interface SnapCallbacks {
@@ -54,7 +42,7 @@ export function SelectionHandles({
   dragGuardRef,
 }: SelectionHandlesProps) {
   const { width, height } = el;
-  const lockRatio = shouldLockAspectRatio(el);
+  const lockRatio = shouldLockNodeAspectRatio(el);
   const dragStartRef = useRef<DragStartState | null>(null);
   const liveResizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
@@ -112,35 +100,24 @@ export function SelectionHandles({
         const my = (ptr.y - stageY) / scale;
         const dx = mx - ds.mx;
         const dy = my - ds.my;
-        const { x: newX, y: newY, w: ow, h: oh } = ds;
-
-        let newW = Math.max(MIN_W, ow + dx);
-        let newH = Math.max(MIN_H, oh + dy);
-
-        if (lockRatio && ow > 0 && oh > 0) {
-          const aspect = ow / oh;
-          const rawW = ow + dx;
-          const rawH = oh + dy;
-          const absDW = Math.abs(newW - ow);
-          const absDH = Math.abs(newH - oh);
-          if (absDW >= absDH) {
-            newW = Math.max(MIN_W, rawW);
-            newH = newW / aspect;
-          } else {
-            newH = Math.max(MIN_H, rawH);
-            newW = newH * aspect;
-          }
-          if (newW < MIN_W) { newW = MIN_W; newH = newW / aspect; }
-          if (newH < MIN_H) { newH = MIN_H; newW = newH * aspect; }
-        }
+        const resized = resolveNodeResize({
+          start: { x: ds.x, y: ds.y, width: ds.w, height: ds.h },
+          delta: { x: dx, y: dy },
+          lockAspectRatio: lockRatio,
+        });
 
         e.target.position({ x: width, y: height });
 
         if (snapCallbacks) {
-          snapCallbacks.onResizeMove(el.id, newX, newY, newW, newH);
-          liveResizeRef.current = { x: newX, y: newY, w: newW, h: newH };
+          snapCallbacks.onResizeMove(el.id, resized.x, resized.y, resized.width, resized.height);
+          liveResizeRef.current = { x: resized.x, y: resized.y, w: resized.width, h: resized.height };
         } else {
-          useCanvasStore.getState().updateElement(el.id, { x: newX, y: newY, width: newW, height: newH });
+          useCanvasStore.getState().updateElement(el.id, {
+            x: resized.x,
+            y: resized.y,
+            width: resized.width,
+            height: resized.height,
+          });
         }
       }}
       onDragEnd={(e) => {

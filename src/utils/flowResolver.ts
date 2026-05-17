@@ -1,5 +1,5 @@
 import type { CanvasElement, Connection } from '@/types/canvas';
-import { formatPlanningText } from './planningText';
+import { getNodeDefinition } from '@/registry/nodeRegistry';
 
 export interface UpstreamTextContribution {
   connectionId: string;
@@ -9,26 +9,7 @@ export interface UpstreamTextContribution {
 }
 
 function getOutgoingText(el: CanvasElement): string {
-  switch (el.type) {
-    case 'text':
-    case 'sticky':
-      return el.text.trim();
-    case 'image':
-    case 'video':
-    case 'audio':
-    case 'aigenerating':
-      return (el.prompt ?? '').trim();
-    case 'omniscript':
-      return [
-        ...(el.result?.segments ?? []).map(item => item.summary),
-        ...(el.result?.structuredScript ?? []).map(item => item.copy),
-        ...(el.result?.highlights ?? []).map(item => item.reason),
-      ].filter(Boolean).join('\n');
-    case 'planning':
-      return formatPlanningText(el);
-    default:
-      return '';
-  }
+  return getNodeDefinition(el.type).getOutgoingText?.(el) ?? '';
 }
 
 export function getUpstreamTextContributions(

@@ -4,13 +4,12 @@ import { Html } from 'react-konva-utils';
 import type { GuideLine } from '@/utils/alignmentUtils';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import {
-  ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
-  AIGeneratingNode, FileNode, OmniScriptNode, PlanningNode,
   PortOverlay, SelectionHandles, SnapCallbacks, RunningPulse
 } from './nodes';
 import { GroupFrameLayer } from './GroupFrameLayer';
 import { setDragOffset, clearDragOffset } from './dragOffsets';
 import { resolveGroupFrame } from '@/utils/groupFrame';
+import { renderNodeContent } from './nodeRenderers';
 import {
   getNodeDragDelta,
   resolveNodeDragBound,
@@ -140,26 +139,7 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           },
         };
 
-        let nodeContent: React.JSX.Element | null = null;
-        if (el.type === 'rectangle' || el.type === 'circle') {
-          nodeContent = <ShapeNode el={el} />;
-        } else if (el.type === 'text') {
-          nodeContent = <TextNode el={el} />;
-        } else if (el.type === 'image') {
-          nodeContent = <ImageNode el={el} />;
-        } else if (el.type === 'sticky') {
-          nodeContent = <StickyNode el={el} />;
-        } else if (el.type === 'aigenerating') {
-          nodeContent = <AIGeneratingNode el={el} />;
-        } else if (el.type === 'video' || el.type === 'audio') {
-          nodeContent = <MediaNode el={el} />;
-        } else if (el.type === 'file') {
-          nodeContent = <FileNode el={el} />;
-        } else if (el.type === 'omniscript') {
-          nodeContent = <OmniScriptNode el={el} width={width} height={height} />;
-        } else if (el.type === 'planning') {
-          nodeContent = <PlanningNode el={el} />;
-        }
+        const nodeContent = renderNodeContent(el, { width, height });
 
         const rotOverride = rotation || 0;
 

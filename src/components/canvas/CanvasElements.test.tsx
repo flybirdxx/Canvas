@@ -105,6 +105,21 @@ describe('CanvasElements', () => {
     expect(screen.getByTestId('planning-node')).toHaveTextContent('项目种子');
   });
 
+  it('does not crash when persisted data contains an unsupported legacy element type', () => {
+    useCanvasStore.setState({
+      elements: [
+        {
+          ...makeTextNode(),
+          id: 'legacy-script-1',
+          type: 'script',
+        } as any,
+      ],
+      selectedIds: [],
+    });
+
+    expect(() => render(<CanvasElements guideLines={[]} snapCallbacks={snapCallbacks} />)).not.toThrow();
+  });
+
   it('clamps grouped node drag positions inside the group frame', () => {
     const planning = makePlanningNode();
     const story = makeTextNode();

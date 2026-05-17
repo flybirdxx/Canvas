@@ -29,9 +29,7 @@
  */
 import React, { useRef, useEffect, useState } from 'react';
 import { Stage, Layer } from 'react-konva';
-import { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
-import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { setStage } from '@/utils/stageRegistry';
 import { exportCanvasRect } from '@/utils/exportPng';
@@ -60,6 +58,7 @@ import { NodeVersionOverlay } from './overlays/NodeVersionOverlay';
 import { QuickAddMenu } from './QuickAddMenu';
 import { BatchGenerateBar } from './BatchGenerateBar';
 import { MarqueeToolbar } from './MarqueeToolbar';
+import { useCanvasPointerController } from './interactions/useCanvasPointerController';
 
 const INPUT_BAR_VISIBLE_SCALE = 0.5;
 
@@ -106,145 +105,31 @@ export function InfiniteCanvas() {
   }, []);
 
   // ── Pointer event handlers ───────────────────────────────────────────
-  const handlePointerDown = (e: KonvaEventObject<PointerEvent>) => {
-    setQuickAddMenu(null);
-    if (marquee.active && e.evt.button === 0) {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const scale = stage.scaleX();
-      const cx = (pointer.x - stage.x()) / scale;
-      const cy = (pointer.y - stage.y()) / scale;
-      startMarquee(cx, cy);
-      return;
-    }
-    if ((e.evt.button === 1 || (e.evt.button === 0 && isSpacePressed)) && !marquee.active) {
-      e.evt.preventDefault();
-      startPan(e.evt.clientX, e.evt.clientY);
-      return;
-    }
-    if (activeTool === 'select' && e.target === e.target.getStage()) {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const scale = stage.scaleX();
-      const x = (pointer.x - stage.x()) / scale;
-      const y = (pointer.y - stage.y()) / scale;
-      startSelectionBox(x, y);
-      return;
-    }
-  };
-
-  const handlePointerMove = (e: KonvaEventObject<PointerEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    if (marquee.active && marquee.drawing) {
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const scale = stage.scaleX();
-      const cx = (pointer.x - stage.x()) / scale;
-      const cy = (pointer.y - stage.y()) / scale;
-      updateMarquee(cx, cy);
-      return;
-    }
-
-    if (isPanningRef.current) {
-      e.evt.preventDefault();
-      updatePan(stage, e.evt.clientX, e.evt.clientY);
-      return;
-    }
-
-    if (selectionBox) {
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const scale = stage.scaleX();
-      const currentX = (pointer.x - stage.x()) / scale;
-      const currentY = (pointer.y - stage.y()) / scale;
-      updateSelectionBox(currentX, currentY);
-      return;
-    }
-
-    if (drawingConnection) {
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const scale = stage.scaleX();
-      const currentX = (pointer.x - stage.x()) / scale;
-      const currentY = (pointer.y - stage.y()) / scale;
-      if (drawingConnection.isDisconnecting) {
-        setDrawingConnection({ ...drawingConnection, startX: currentX, startY: currentY });
-      } else {
-        setDrawingConnection({ ...drawingConnection, toX: currentX, toY: currentY });
-      }
-    }
-  };
-
-  const handlePointerUp = (e: KonvaEventObject<PointerEvent>) => {
-    if (endMarquee()) return;
-    if (endPan()) return;
-    if (endSelectionBox()) return;
-
-    if (drawingConnection) {
-      const stage = e.target.getStage();
-      if (stage) {
-        const pointer = stage.getPointerPosition();
-        if (pointer) {
-          const scale = stage.scaleX();
-          const currentX = (pointer.x - stage.x()) / scale;
-          const currentY = (pointer.y - stage.y()) / scale;
-
-          const target = findPortUnderMouse(elements, currentX, currentY, !drawingConnection.isDisconnecting, drawingConnection.fromPortType || 'any');
-
-          if (target && target.element.id !== drawingConnection.fromElementId) {
-            const compatible = drawingConnection.fromPortType === 'any' || target.port.type === 'any' || drawingConnection.fromPortType === target.port.type;
-            if (compatible) {
-              addConnection({
-                id: uuidv4(),
-                fromId: drawingConnection.isDisconnecting ? target.element.id : drawingConnection.fromElementId!,
-                fromPortId: drawingConnection.isDisconnecting ? target.port.id : drawingConnection.fromPortId!,
-                toId: drawingConnection.isDisconnecting ? drawingConnection.fromElementId! : target.element.id,
-                toPortId: drawingConnection.isDisconnecting ? drawingConnection.fromPortId! : target.port.id,
-              });
-            }
-          } else if (!target) {
-            const rect = containerRef.current?.getBoundingClientRect();
-            if (rect) {
-              setQuickAddMenu({
-                x: pointer.x,
-                y: pointer.y,
-                canvasX: currentX,
-                canvasY: currentY,
-                fromElementId: drawingConnection.fromElementId,
-                fromPortId: drawingConnection.fromPortId,
-                fromPortType: drawingConnection.fromPortType
-              });
-            }
-          }
-        }
-      }
-      setDrawingConnection(null);
-      return;
-    }
-  };
-
-  const handleDblClick = (e: KonvaEventObject<MouseEvent>) => {
-    if (e.target === e.target.getStage()) {
-      clearSelectionBox();
-      const pointer = e.target.getStage()?.getPointerPosition();
-      if (!pointer) return;
-      const scale = stageConfig.scale;
-      const currentX = (pointer.x - stageConfig.x) / scale;
-      const currentY = (pointer.y - stageConfig.y) / scale;
-      setQuickAddMenu({
-        x: e.evt.clientX,
-        y: e.evt.clientY,
-        canvasX: currentX,
-        canvasY: currentY,
-      });
-    }
-  };
+  const { handlePointerDown, handlePointerMove, handlePointerUp, handleDblClick } = useCanvasPointerController({
+    activeTool,
+    addConnection,
+    clearSelectionBox,
+    containerRef,
+    drawingConnection,
+    elements,
+    endMarquee,
+    endPan,
+    endSelectionBox,
+    findPortUnderMouse,
+    isPanningRef,
+    isSpacePressed,
+    marquee,
+    selectionBox,
+    setDrawingConnection,
+    setQuickAddMenu,
+    stageConfig,
+    startMarquee,
+    startPan,
+    startSelectionBox,
+    updateMarquee,
+    updatePan,
+    updateSelectionBox,
+  });
 
   // ── Render ───────────────────────────────────────────────────────────
   return (

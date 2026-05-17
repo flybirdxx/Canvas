@@ -9,7 +9,7 @@ import {
   detectPropVisualConflict,
   convertTaskToExecutionNode,
   makePlanningConnection,
-} from './planningGraph';
+} from './graph';
 
 const seed: PlanningElement = {
   id: 'seed',

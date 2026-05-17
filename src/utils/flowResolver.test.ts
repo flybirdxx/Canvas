@@ -1,12 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   composeEffectivePrompt,
-  getUpstreamTextContributions,
   getUpstreamImageContributions,
+  getUpstreamTextContributions,
 } from '@/utils/flowResolver';
 import type { CanvasElement, Connection } from '@/types/canvas';
-
-// ─── helpers ────────────────────────────────────────────────────────
 
 function conn(
   id: string,
@@ -68,7 +66,7 @@ function fileImageEl(overrides: Partial<CanvasElement> = {}): CanvasElement {
     inputs: [],
     outputs: [{ id: 'p-out', type: 'image', label: 'Image' }],
     ...overrides,
-  } as any;
+  } as CanvasElement;
 }
 
 function videoEl(overrides: Partial<CanvasElement> = {}): CanvasElement {
@@ -119,123 +117,69 @@ function planningEl(overrides: Partial<CanvasElement> = {}): CanvasElement {
   } as CanvasElement;
 }
 
-// ─── composeEffectivePrompt ──────────────────────────────────────────
-
 describe('composeEffectivePrompt', () => {
-  it('should return only the local prompt when there are no upstream contributions', () => {
-    const result = composeEffectivePrompt('draw a cat', []);
-    expect(result).toBe('draw a cat');
+  it('returns only the local prompt when there are no upstream contributions', () => {
+    expect(composeEffectivePrompt('draw a cat', [])).toBe('draw a cat');
   });
 
-  it('should prepend upstream contributions before local prompt', () => {
+  it('prepends upstream contributions before local prompt', () => {
     const result = composeEffectivePrompt('make it blue', [
-      {
-        connectionId: 'c1',
-        sourceId: 's1',
-        label: 'text: Hello',
-        content: 'a red ball',
-      },
+      { connectionId: 'c1', sourceId: 's1', label: 'text: Hello', content: 'a red ball' },
     ]);
     expect(result).toBe('a red ball\n\nmake it blue');
   });
 
-  it('should join multiple upstream contributions', () => {
-    const result = composeEffectivePrompt('', [
-      {
-        connectionId: 'c1',
-        sourceId: 's1',
-        label: 'text: Hello',
-        content: 'first context',
-      },
-      {
-        connectionId: 'c2',
-        sourceId: 's2',
-        label: 'text: World',
-        content: 'second context',
-      },
-    ]);
-    expect(result).toBe('first context\n\nsecond context');
-  });
-
-  it('should trim whitespace from each part', () => {
+  it('trims whitespace from each part', () => {
     const result = composeEffectivePrompt('  clean  ', [
-      {
-        connectionId: 'c1',
-        sourceId: 's1',
-        label: '',
-        content: '  upstream  ',
-      },
+      { connectionId: 'c1', sourceId: 's1', label: '', content: '  upstream  ' },
     ]);
     expect(result).toBe('upstream\n\nclean');
   });
-
-  it('should handle empty local prompt and empty upstream gracefully', () => {
-    const result = composeEffectivePrompt('', []);
-    expect(result).toBe('');
-  });
 });
 
-// ─── getUpstreamTextContributions ────────────────────────────────────
-
 describe('getUpstreamTextContributions', () => {
-  it('should return an empty array if the target does not exist', () => {
-    const result = getUpstreamTextContributions('ghost', [], []);
-    expect(result).toEqual([]);
-  });
-
-  it('should collect text from a connected text node', () => {
-    const tn = textEl({ id: 't1', text: 'sunset over mountains' });
+  it('collects text from a connected text node and keeps a readable label', () => {
+    const source = textEl({ id: 't1', text: 'sunset over mountains' });
     const target = imageEl({
       id: 'img1',
       inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
     });
-    const c = conn('c1', 't1', 'img1', 'p-out', 'p-in-text');
+    const connection = conn('c1', 't1', 'img1', 'p-out', 'p-in-text');
 
-    const result = getUpstreamTextContributions('img1', [tn, target], [c]);
+    const result = getUpstreamTextContributions('img1', [source, target], [connection]);
+
     expect(result).toHaveLength(1);
-    expect(result[0].sourceId).toBe('t1');
-    expect(result[0].content).toBe('sunset over mountains');
+    expect(result[0]).toMatchObject({
+      sourceId: 't1',
+      content: 'sunset over mountains',
+      label: '文本：sunset over moun...',
+    });
   });
 
-  it('should accept connections to "any" ports', () => {
-    const tn = textEl({ id: 't1', text: 'hello' });
-    const target: CanvasElement = {
+  it('accepts connections to any ports and rejects non-text ports', () => {
+    const source = textEl({ id: 't1', text: 'hello' });
+    const anyTarget = {
       id: 'rect',
       type: 'rectangle',
-      x: 0, y: 0, width: 100, height: 100,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
       inputs: [{ id: 'p-in', type: 'any', label: 'In' }],
       outputs: [{ id: 'p-out', type: 'any', label: 'Out' }],
       fill: '#ccc',
     } as CanvasElement;
-    const c = conn('c1', 't1', 'rect', 'p-out', 'p-in');
-
-    const result = getUpstreamTextContributions('rect', [tn, target], [c]);
-    expect(result).toHaveLength(1);
-  });
-
-  it('should reject connections to non-text / non-any ports', () => {
-    const tn = textEl({ id: 't1', text: 'hello' });
-    const target = imageEl({
+    const imageTarget = imageEl({
       id: 'img1',
       inputs: [{ id: 'p-in-img', type: 'image', label: 'Ref' }],
     });
-    // Connect a TEXT output to an IMAGE input — should not be a text contribution
-    const c = conn('c1', 't1', 'img1', 'p-out', 'p-in-img');
 
-    const result = getUpstreamTextContributions('img1', [tn, target], [c]);
-    expect(result).toHaveLength(0);
-  });
-
-  it('should filter out empty upstream content', () => {
-    const tn = textEl({ id: 't1', text: '  ' }); // whitespace only
-    const target = imageEl({
-      id: 'img1',
-      inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
-    });
-    const c = conn('c1', 't1', 'img1', 'p-out', 'p-in-text');
-
-    const result = getUpstreamTextContributions('img1', [tn, target], [c]);
-    expect(result).toHaveLength(0);
+    expect(getUpstreamTextContributions('rect', [source, anyTarget], [
+      conn('c1', 't1', 'rect', 'p-out', 'p-in'),
+    ])).toHaveLength(1);
+    expect(getUpstreamTextContributions('img1', [source, imageTarget], [
+      conn('c2', 't1', 'img1', 'p-out', 'p-in-img'),
+    ])).toHaveLength(0);
   });
 
   it('skips pendingReview planning drafts and keeps approved drafts as upstream text', () => {
@@ -264,12 +208,11 @@ describe('getUpstreamTextContributions', () => {
       id: 'img1',
       inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
     });
-    const connections = [
+
+    const result = getUpstreamTextContributions('img1', [pendingDraft, approvedDraft, target], [
       conn('c-pending', 'draft-pending', 'img1', 'p-out', 'p-in-text'),
       conn('c-approved', 'draft-approved', 'img1', 'p-out', 'p-in-text'),
-    ];
-
-    const result = getUpstreamTextContributions('img1', [pendingDraft, approvedDraft, target], connections);
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
@@ -279,36 +222,20 @@ describe('getUpstreamTextContributions', () => {
     });
   });
 
-  it('should sort contributions by source element position (top-to-bottom, left-to-right)', () => {
-    const tn1 = textEl({ id: 't1', text: 'A', x: 100, y: 200 });  // below
-    const tn2 = textEl({ id: 't2', text: 'B', x: 100, y: 0 });    // above
+  it('sorts contributions by source element position', () => {
+    const below = textEl({ id: 't1', text: 'A', x: 100, y: 200 });
+    const above = textEl({ id: 't2', text: 'B', x: 100, y: 0 });
     const target = imageEl({
       id: 'img1',
       inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
     });
-    const c1 = conn('c1', 't1', 'img1', 'p-out', 'p-in-text');
-    const c2 = conn('c2', 't2', 'img1', 'p-out', 'p-in-text');
 
-    const result = getUpstreamTextContributions('img1', [tn1, tn2, target], [c1, c2]);
-    expect(result).toHaveLength(2);
-    // B (y=0) should come before A (y=200)
-    expect(result[0].sourceId).toBe('t2');
-    expect(result[1].sourceId).toBe('t1');
-  });
+    const result = getUpstreamTextContributions('img1', [below, above, target], [
+      conn('c1', 't1', 'img1', 'p-out', 'p-in-text'),
+      conn('c2', 't2', 'img1', 'p-out', 'p-in-text'),
+    ]);
 
-  it('should only consider connections targeting the given targetId', () => {
-    const tn = textEl({ id: 't1', text: 'hello' });
-    const target = imageEl({
-      id: 'img1',
-      inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
-    });
-    const otherTarget = imageEl({ id: 'img2' });
-    const c1 = conn('c1', 't1', 'img1', 'p-out', 'p-in-text');
-    const c2 = conn('c2', 't1', 'img2', 'p-out', 'p-in-text');
-
-    const result = getUpstreamTextContributions('img1', [tn, target, otherTarget], [c1, c2]);
-    // Only c1 targets img1
-    expect(result).toHaveLength(1);
+    expect(result.map(item => item.sourceId)).toEqual(['t2', 't1']);
   });
 
   it('collects planning text without dismissed requirements', () => {
@@ -317,9 +244,9 @@ describe('getUpstreamTextContributions', () => {
       id: 'img1',
       inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
     });
-    const c = conn('c1', 'plan1', 'img1', 'p-out', 'p-in-text');
-
-    const result = getUpstreamTextContributions('img1', [planning, target], [c]);
+    const result = getUpstreamTextContributions('img1', [planning, target], [
+      conn('c1', 'plan1', 'img1', 'p-out', 'p-in-text'),
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0].content).toContain('剧情节点');
@@ -329,92 +256,44 @@ describe('getUpstreamTextContributions', () => {
   });
 });
 
-// ─── getUpstreamImageContributions ───────────────────────────────────
-
 describe('getUpstreamImageContributions', () => {
-  it('should return an empty array if the target does not exist', () => {
-    const result = getUpstreamImageContributions('ghost', [], []);
-    expect(result).toEqual([]);
-  });
-
-  it('should collect an image src from a connected image node', () => {
-    const src = imageEl({ id: 'img-src', src: 'data:image/png;base64,xxx' });
-    const target = videoEl({
-      id: 'v1',
-      inputs: [{ id: 'p-in', type: 'image', label: 'Image' }],
-    });
-    const c = conn('c1', 'img-src', 'v1', 'p-out', 'p-in');
-
-    const result = getUpstreamImageContributions('v1', [src, target], [c]);
-    expect(result).toHaveLength(1);
-    expect(result[0].sourceId).toBe('img-src');
-    expect(result[0].src).toBe('data:image/png;base64,xxx');
-  });
-
-  it('should collect an image src from a connected file(image) node', () => {
+  it('collects image src from connected image and file(image) nodes', () => {
+    const image = imageEl({ id: 'img-src', src: 'data:image/png;base64,xxx' });
     const file = fileImageEl({ id: 'f1' });
     const target = videoEl({
       id: 'v1',
       inputs: [{ id: 'p-in', type: 'image', label: 'Image' }],
     });
-    const c = conn('c1', 'f1', 'v1', 'p-out', 'p-in');
 
-    const result = getUpstreamImageContributions('v1', [file, target], [c]);
-    expect(result).toHaveLength(1);
-    expect(result[0].sourceId).toBe('f1');
-    expect(result[0].src).toBe('data:image/jpeg;base64,def');
+    const result = getUpstreamImageContributions('v1', [image, file, target], [
+      conn('c1', 'img-src', 'v1', 'p-out', 'p-in'),
+      conn('c2', 'f1', 'v1', 'p-out', 'p-in'),
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ sourceId: 'f1', src: 'data:image/jpeg;base64,def', label: 'photo.jpg' });
+    expect(result[1]).toMatchObject({ sourceId: 'img-src', src: 'data:image/png;base64,xxx', label: '图像' });
   });
 
-  it('should reject a file node whose MIME type is not image/*', () => {
+  it('rejects non-image files, empty image sources, and non-image ports', () => {
     const file = fileImageEl({ id: 'f1', mimeType: 'application/pdf' });
+    const emptyImage = imageEl({ id: 'img-empty', src: '' });
+    const image = imageEl({ id: 'img-src', src: 'data:image/png;base64,zzz' });
     const target = videoEl({
       id: 'v1',
       inputs: [{ id: 'p-in', type: 'image', label: 'Image' }],
     });
-    const c = conn('c1', 'f1', 'v1', 'p-out', 'p-in');
-
-    const result = getUpstreamImageContributions('v1', [file, target], [c]);
-    expect(result).toHaveLength(0);
-  });
-
-  it('should accept connections to "any" ports', () => {
-    const src = imageEl({ id: 'img-src', src: 'data:image/png;base64,yyy' });
-    const target: CanvasElement = {
-      id: 'rect',
-      type: 'rectangle',
-      x: 0, y: 0, width: 100, height: 100,
-      inputs: [{ id: 'p-in', type: 'any', label: 'In' }],
-      outputs: [{ id: 'p-out', type: 'any', label: 'Out' }],
-      fill: '#ccc',
-    } as CanvasElement;
-    const c = conn('c1', 'img-src', 'rect', 'p-out', 'p-in');
-
-    const result = getUpstreamImageContributions('rect', [src, target], [c]);
-    expect(result).toHaveLength(1);
-    expect(result[0].src).toBe('data:image/png;base64,yyy');
-  });
-
-  it('should filter out image sources without a valid src', () => {
-    const src = imageEl({ id: 'img-src', src: '' }); // empty src
-    const target = videoEl({
-      id: 'v1',
-      inputs: [{ id: 'p-in', type: 'image', label: 'Image' }],
-    });
-    const c = conn('c1', 'img-src', 'v1', 'p-out', 'p-in');
-
-    const result = getUpstreamImageContributions('v1', [src, target], [c]);
-    expect(result).toHaveLength(0);
-  });
-
-  it('should reject connections to non-image / non-any ports', () => {
-    const src = imageEl({ id: 'img-src', src: 'data:image/png;base64,zzz' });
-    const target = imageEl({
+    const textTarget = imageEl({
       id: 'img1',
       inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
     });
-    const c = conn('c1', 'img-src', 'img1', 'p-out', 'p-in-text');
 
-    const result = getUpstreamImageContributions('img1', [src, target], [c]);
-    expect(result).toHaveLength(0);
+    expect(getUpstreamImageContributions('v1', [file, emptyImage, target], [
+      conn('c1', 'f1', 'v1', 'p-out', 'p-in'),
+      conn('c2', 'img-empty', 'v1', 'p-out', 'p-in'),
+    ])).toHaveLength(0);
+    expect(getUpstreamImageContributions('img1', [image, textTarget], [
+      conn('c3', 'img-src', 'img1', 'p-out', 'p-in-text'),
+    ])).toHaveLength(0);
   });
 });

@@ -3,14 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import type { CanvasElement, ElementType } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { exportSelection } from '@/utils/exportPng';
-
-const DEFAULT_PLANNING_BODY = [
-  '一句想法：',
-  '',
-  '题材 / 基调：',
-  '',
-  '短剧方向：',
-].join('\n');
+import { createCanvasElement } from '@/registry/createCanvasElement';
+import { getDefaultNodeSize } from '@/registry/nodeRegistry';
 
 export function useGlobalShortcuts() {
   const addElement = useCanvasStore(s => s.addElement);
@@ -22,45 +16,14 @@ export function useGlobalShortcuts() {
     const centerX = (window.innerWidth / 2 - stageConfig.x) / stageConfig.scale;
     const centerY = (window.innerHeight / 2 - stageConfig.y) / stageConfig.scale;
 
-    const { width, height } = getDefaultSize(type);
-    const id = uuidv4();
-    const isMedia = type === 'image' || type === 'video' || type === 'audio';
-
-    const element = {
-      id,
-      type,
+    const { width, height } = getDefaultNodeSize(type);
+    const element = createCanvasElement(type, {
       x: centerX - width / 2,
       y: centerY - height / 2,
-      width,
-      height,
-      text: type === 'sticky' ? '点击编辑便签内容...' : type === 'text' ? '' : undefined,
-      fontSize: type === 'text' ? 14 : undefined,
-      fontFamily: type === 'text' ? 'var(--font-serif)' : undefined,
-      fill:
-        type === 'rectangle' ? '#E1D7CB' :
-        type === 'circle' ? '#DDD1C2' :
-        type === 'sticky' ? '#F3E3A0' :
-        type === 'text' ? '#26211c' :
-        undefined,
-      src: isMedia ? '' : undefined,
-      cornerRadius: type === 'rectangle' ? 12 : undefined,
-      title:
-        type === 'omniscript' ? 'OmniScript' :
-        type === 'planning' ? '项目种子' :
-        undefined,
-      videoUrl: type === 'omniscript' ? '' : undefined,
-      notes: type === 'omniscript' ? '' : undefined,
-      analysisStatus: type === 'omniscript' ? 'idle' : undefined,
-      result: type === 'omniscript'
-        ? { segments: [], structuredScript: [], highlights: [] }
-        : undefined,
-      kind: type === 'planning' ? 'projectSeed' : undefined,
-      body: type === 'planning' ? DEFAULT_PLANNING_BODY : undefined,
-      template: type === 'planning' ? 'shortDrama' : undefined,
-    } as CanvasElement;
+    });
 
     addElement(element);
-    setSelection([id]);
+    setSelection([element.id]);
     setActiveTool('select');
   }, [addElement, setSelection, setActiveTool]);
 
@@ -159,15 +122,4 @@ export function useGlobalShortcuts() {
   }, [handleCreateNode]);
 
   return { handleCreateNode };
-}
-
-function getDefaultSize(type: ElementType): { width: number; height: number } {
-  if (type === 'sticky') return { width: 220, height: 220 };
-  if (type === 'text') return { width: 420, height: 280 };
-  if (type === 'image') return { width: 560, height: 560 };
-  if (type === 'video') return { width: 640, height: 360 };
-  if (type === 'audio') return { width: 360, height: 96 };
-  if (type === 'omniscript') return { width: 640, height: 440 };
-  if (type === 'planning') return { width: 340, height: 260 };
-  return { width: 100, height: 100 };
 }

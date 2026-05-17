@@ -9,6 +9,7 @@ const config = {
 describe('RunningHubProvider.generateText', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('sends inline video data URLs as OpenAI-compatible video_url content parts', async () => {
@@ -69,6 +70,58 @@ describe('RunningHubProvider.generateText', () => {
     expect(body.messages[0].content[1]).toEqual({
       type: 'video_url',
       video_url: { url: 'https://example.com/video.mp4' },
+    });
+  });
+});
+
+describe('RunningHubProvider.generateVideo', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('returns structured failure when video task submission fails', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await RunningHubProvider.generateVideo?.({
+      model: 'sparkvideo-2.0-text',
+      prompt: '生成一个短视频',
+      size: '16:9',
+      durationSec: 5,
+    }, config);
+
+    expect(result).toMatchObject({
+      ok: false,
+      kind: 'network',
+      message: 'RunningHub 任务提交失败',
+    });
+  });
+
+  it('returns successful video URLs from polling without re-parsing provider result wrappers', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ taskId: 'task-1' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: 'SUCCESS',
+        results: [{ url: 'https://cdn.example.com/video.mp4' }],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = RunningHubProvider.generateVideo?.({
+      model: 'sparkvideo-2.0-text',
+      prompt: '生成一个短视频',
+      size: '16:9',
+      durationSec: 5,
+    }, config);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toEqual({
+      ok: true,
+      urls: ['https://cdn.example.com/video.mp4'],
     });
   });
 });

@@ -4,10 +4,10 @@ import {
   generateShortDramaPlanning,
   normalizePlanningResponse,
   parsePlanningJson,
-} from './planning';
-import { generateTextByModelId } from './gateway';
+} from './index';
+import { generateTextByModelId } from '../gateway';
 
-vi.mock('./gateway', () => ({
+vi.mock('../gateway', () => ({
   generateTextByModelId: vi.fn(),
 }));
 

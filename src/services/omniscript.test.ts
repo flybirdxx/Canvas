@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeVideoToOmniScript, parseOmniScriptResult } from './omniscript';
+import { analyzeVideoToOmniScript, buildOmniScriptTextRequest, parseOmniScriptResult } from './omniscript';
 
 describe('parseOmniScriptResult', () => {
   it('extracts the three OmniScript report columns from model JSON', () => {
@@ -24,11 +24,23 @@ describe('parseOmniScriptResult', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok === false) {
       expect(parsed.message).toContain('OmniScript');
+      expect(parsed.message).toContain('JSON');
     }
   });
 });
 
 describe('analyzeVideoToOmniScript', () => {
+  it('includes user notes in the OmniScript prompt', () => {
+    const request = buildOmniScriptTextRequest({
+      model: 'mock-video-model',
+      videoUrl: 'https://example.com/video.mp4',
+      notes: '重点观察前三秒钩子',
+    });
+
+    expect(request.messages[1]?.content).toContain('用户补充要求：重点观察前三秒钩子');
+    expect(request.messages[1]?.content).not.toContain('?{');
+  });
+
   it('returns an explicit unsupported error instead of pretending to analyze video', async () => {
     const result = await analyzeVideoToOmniScript({
       model: 'mock-text-only',

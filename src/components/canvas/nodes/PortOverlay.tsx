@@ -2,6 +2,7 @@ import React from 'react';
 import { Group, Circle } from 'react-konva';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { getPortColor } from './shared';
+import { getPortLayout } from '../interactions/portLayout';
 
 interface PortOverlayProps {
   el: any;
@@ -13,15 +14,12 @@ export function PortOverlay({ el, isSelected, hoveredId }: PortOverlayProps) {
   if (!el.inputs && !el.outputs) return null;
   const showPorts = isSelected || hoveredId === el.id;
   const { x, y, width, height } = el;
-
-  const inputSpacing = height / ((el.inputs?.length || 0) + 1);
-  const outputSpacing = height / ((el.outputs?.length || 0) + 1);
+  const layout = getPortLayout(el);
   const portRadius = 7;
 
   return (
     <>
-      {el.inputs?.map((port: any, i: number) => {
-        const portY = inputSpacing * (i + 1);
+      {layout.inputs.map(({ port, localY: portY }) => {
         return (
           <Group key={`in-${port.id}`} x={0} y={portY} opacity={showPorts ? 1 : 0} listening={showPorts}>
             <Circle
@@ -77,8 +75,7 @@ export function PortOverlay({ el, isSelected, hoveredId }: PortOverlayProps) {
         );
       })}
 
-      {el.outputs?.map((port: any, i: number) => {
-        const portY = outputSpacing * (i + 1);
+      {layout.outputs.map(({ port, localY: portY }) => {
         return (
           <Group key={`out-${port.id}`} x={width} y={portY} opacity={showPorts ? 1 : 0} listening={showPorts}>
             <Circle

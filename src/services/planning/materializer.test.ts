@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CanvasElement, PlanningElement, PlanningRequirement, TextElement } from '@/types/canvas';
-import type { NormalizedPlanningResponse } from './planning';
+import type { NormalizedPlanningResponse } from './index';
 import {
   createDraftExecutionNodeFromRequirement,
   materializePlanningResponse,
-} from './planningMaterializer';
+} from './materializer';
 
 const source: PlanningElement = {
   id: 'console-1',

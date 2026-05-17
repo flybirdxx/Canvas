@@ -3,11 +3,12 @@ import type React from 'react';
 import { Group, Rect } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { Play, AlertCircle } from 'lucide-react';
-import type { FileElement, MediaElement, OmniScriptElement } from '@/types/canvas';
+import type { OmniScriptElement } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { analyzeVideoToOmniScript } from '@/services/omniscript';
 import { listModels } from '@/services/gateway';
 import { readBlob } from '@/services/fileStorage';
+import { resolveUpstreamVideoSource } from '@/utils/mediaResolver';
 
 export function OmniScriptNode({ el, width, height }: { el: OmniScriptElement; width: number; height: number }) {
   const updateElement = useCanvasStore(s => s.updateElement);
@@ -17,7 +18,7 @@ export function OmniScriptNode({ el, width, height }: { el: OmniScriptElement; w
 
   const models = useMemo(() => listModels('text'), []);
   const selectedModel = el.model || models[0]?.id || '';
-  const upstreamVideo = useMemo(() => resolveUpstreamVideo(el.id, elements, connections), [el.id, elements, connections]);
+  const upstreamVideo = useMemo(() => resolveUpstreamVideoSource(el.id, elements, connections), [el.id, elements, connections]);
   const result = el.result ?? { segments: [], structuredScript: [], highlights: [] };
 
   const run = useCallback(async () => {
@@ -162,33 +163,6 @@ function Column({ title, items }: { title: string; items: string[] }) {
       ))}
     </div>
   );
-}
-
-function resolveUpstreamVideo(
-  nodeId: string,
-  elements: ReturnType<typeof useCanvasStore.getState>['elements'],
-  connections: ReturnType<typeof useCanvasStore.getState>['connections'],
-): { label: string; url?: string; dataUrl?: string; fileRef?: string } | null {
-  const upstreamIds = connections.filter(conn => conn.toId === nodeId).map(conn => conn.fromId);
-  for (const id of upstreamIds) {
-    const el = elements.find(item => item.id === id);
-    if (!el) continue;
-    if (el.type === 'video') {
-      const media = el as MediaElement;
-      return { label: 'video', url: /^https?:\/\//i.test(media.src) ? media.src : undefined, dataUrl: media.src.startsWith('data:') ? media.src : undefined };
-    }
-    if (el.type === 'file') {
-      const file = el as FileElement;
-      if (!file.mimeType.toLowerCase().startsWith('video/')) continue;
-      return {
-        label: file.name,
-        url: /^https?:\/\//i.test(file.src) ? file.src : undefined,
-        dataUrl: file.src.startsWith('data:') ? file.src : undefined,
-        fileRef: file.blobKey,
-      };
-    }
-  }
-  return null;
 }
 
 const controlStyle: React.CSSProperties = {
