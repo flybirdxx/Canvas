@@ -1,6 +1,7 @@
 // src/utils/exportHtml.ts
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '@/types/canvas';
+import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement, PlanningElement } from '@/types/canvas';
+import { formatPlanningText } from './planningText';
 
 function escapeHtml(s: string): string {
   return s
@@ -96,6 +97,14 @@ function renderNodeCard(el: CanvasElement): string {
         : "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif";
       return `<div class="node node-sticky" style="position:absolute;left:${el.x}px;top:${el.y}px;width:${w}px;min-height:${h}px;background:${s.fill};border-radius:6px;padding:12px;font-family:${fontFamily};font-size:14px;color:#1a1a1a;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
   ${escapeHtml(s.text)}
+</div>`;
+    }
+    case 'planning': {
+      const p = el as PlanningElement;
+      const content = formatPlanningText(p, { includeDismissed: true });
+      return `<div class="node node-planning" style="position:absolute;left:${el.x}px;top:${el.y}px;width:${w}px;min-height:${h}px;background:#fffaf0;border:${border};border-radius:8px;padding:12px;font-family:'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;color:#2b2118;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+  <div style="font-size:11px;color:#a65f2b;margin-bottom:6px;">企划</div>
+  ${escapeHtml(content)}
 </div>`;
     }
     default:

@@ -86,6 +86,39 @@ function videoEl(overrides: Partial<CanvasElement> = {}): CanvasElement {
   } as CanvasElement;
 }
 
+function planningEl(overrides: Partial<CanvasElement> = {}): CanvasElement {
+  return {
+    id: 'plan1',
+    type: 'planning',
+    kind: 'plot',
+    title: '剧情节点',
+    body: '主角发现红色怀表。',
+    x: 0,
+    y: 0,
+    width: 360,
+    height: 300,
+    outputs: [{ id: 'p-out', type: 'text', label: 'Plan' }],
+    inputs: [],
+    requirements: [
+      {
+        id: 'req-confirmed',
+        title: '红色怀表',
+        materialType: 'prop',
+        description: '红色旧怀表特写',
+        status: 'confirmed',
+      },
+      {
+        id: 'req-dismissed',
+        title: '废弃雨伞',
+        materialType: 'prop',
+        description: '已被用户忽略',
+        status: 'dismissed',
+      },
+    ],
+    ...overrides,
+  } as CanvasElement;
+}
+
 // ─── composeEffectivePrompt ──────────────────────────────────────────
 
 describe('composeEffectivePrompt', () => {
@@ -235,6 +268,23 @@ describe('getUpstreamTextContributions', () => {
     const result = getUpstreamTextContributions('img1', [tn, target, otherTarget], [c1, c2]);
     // Only c1 targets img1
     expect(result).toHaveLength(1);
+  });
+
+  it('collects planning text without dismissed requirements', () => {
+    const planning = planningEl();
+    const target = imageEl({
+      id: 'img1',
+      inputs: [{ id: 'p-in-text', type: 'text', label: 'Prompt' }],
+    });
+    const c = conn('c1', 'plan1', 'img1', 'p-out', 'p-in-text');
+
+    const result = getUpstreamTextContributions('img1', [planning, target], [c]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toContain('剧情节点');
+    expect(result[0].content).toContain('红色怀表');
+    expect(result[0].content).not.toContain('废弃雨伞');
+    expect(result[0].label).toContain('企划');
   });
 });
 

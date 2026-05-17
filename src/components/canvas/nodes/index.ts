@@ -6,6 +6,7 @@ export { MediaNode } from './MediaNode';
 export { AIGeneratingNode } from './AIGeneratingNode';
 export { FileNode } from './FileNode';
 export { OmniScriptNode } from './OmniScriptNode';
+export { PlanningNode } from './PlanningNode';
 export { PortOverlay } from './PortOverlay';
 export { SelectionHandles } from './SelectionHandles';
 export type { SnapCallbacks } from './SelectionHandles';

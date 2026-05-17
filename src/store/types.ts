@@ -55,7 +55,7 @@ export interface CanvasState {
   currentTimestamp: number;
   selectedIds: string[];
   stageConfig: { scale: number; x: number; y: number };
-  activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'omniscript';
+  activeTool: 'select' | 'hand' | 'rectangle' | 'circle' | 'text' | 'image' | 'sticky' | 'video' | 'audio' | 'omniscript' | 'planning';
   viewMode: 'canvas';
   groups: GroupRecord[];
   lastSavedAt: number | null;

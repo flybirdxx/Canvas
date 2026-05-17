@@ -1,4 +1,5 @@
 import type { CanvasElement, Connection } from '@/types/canvas';
+import { formatPlanningText } from './planningText';
 
 export interface UpstreamTextContribution {
   connectionId: string;
@@ -23,6 +24,8 @@ function getOutgoingText(el: CanvasElement): string {
         ...(el.result?.structuredScript ?? []).map(item => item.copy),
         ...(el.result?.highlights ?? []).map(item => item.reason),
       ].filter(Boolean).join('\n');
+    case 'planning':
+      return formatPlanningText(el);
     default:
       return '';
   }
@@ -125,5 +128,6 @@ function textTypeLabel(type: CanvasElement['type']): string {
   if (type === 'video') return '视频提示';
   if (type === 'audio') return '音频提示';
   if (type === 'omniscript') return 'OmniScript';
+  if (type === 'planning') return '企划';
   return '文本';
 }

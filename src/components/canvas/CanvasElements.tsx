@@ -5,7 +5,7 @@ import type { GuideLine } from '@/utils/alignmentUtils';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import {
   ImageNode, TextNode, ShapeNode, StickyNode, MediaNode,
-  AIGeneratingNode, FileNode, OmniScriptNode,
+  AIGeneratingNode, FileNode, OmniScriptNode, PlanningNode,
   PortOverlay, SelectionHandles, SnapCallbacks, RunningPulse
 } from './nodes';
 import { INK_1 } from './nodes/shared';
@@ -170,6 +170,8 @@ export function CanvasElements({ guideLines, snapCallbacks }: CanvasElementsProp
           nodeContent = <FileNode el={el} />;
         } else if (el.type === 'omniscript') {
           nodeContent = <OmniScriptNode el={el} width={width} height={height} />;
+        } else if (el.type === 'planning') {
+          nodeContent = <PlanningNode el={el} />;
         }
 
         // FR1 grouping: if node belongs to a selected group, render a dashed border overlay

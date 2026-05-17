@@ -1,6 +1,7 @@
 import { getStage } from './stageRegistry';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement } from '@/types/canvas';
+import type { CanvasElement, Connection, ShapeElement, TextElement, ImageElement, StickyElement, PlanningElement } from '@/types/canvas';
+import { formatPlanningText } from './planningText';
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -101,6 +102,15 @@ function renderElementSvg(el: CanvasElement, imageDataUrls: Map<string, string>)
         ? "font-family=\"'Noto Sans SC', 'Source Han Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif\""
         : "font-family=\"'Noto Sans SC', 'Source Han Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif\"";
       return `<text x="${el.x + 8}" y="${el.y + 24}" font-size="14" fill="#1a1a1a"${fontFamily}>${escapeXml(s.text)}</text>`;
+    }
+    case 'planning': {
+      const p = el as PlanningElement;
+      const lines = formatPlanningText(p, { includeDismissed: true }).split(/\r?\n/).slice(0, 8);
+      const title = escapeXml(lines[0] ?? p.title);
+      const bodyLines = lines.slice(1);
+      return `<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" rx="8" ry="8" fill="#fffaf0" stroke="#d8c7ad" stroke-width="1"/>
+<text x="${el.x + 12}" y="${el.y + 26}" font-size="15" fill="#2b2118" font-family="'Noto Sans SC', 'Microsoft YaHei', sans-serif">${title}</text>
+${bodyLines.map((line, index) => `<text x="${el.x + 12}" y="${el.y + 50 + index * 16}" font-size="12" fill="#5f5143" font-family="'Noto Sans SC', 'Microsoft YaHei', sans-serif">${escapeXml(line)}</text>`).join('\n')}`;
     }
     default:
       return '';

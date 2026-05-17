@@ -142,7 +142,7 @@ export async function executeNode(nodeId: string, execId: string): Promise<void>
 
   store.updateNodeStatus(nodeId, 'running');
 
-  if (el.type === 'text' || el.type === 'sticky' || el.type === 'rectangle' || el.type === 'circle' || el.type === 'file' || el.type === 'omniscript') {
+  if (el.type === 'text' || el.type === 'sticky' || el.type === 'rectangle' || el.type === 'circle' || el.type === 'file' || el.type === 'omniscript' || el.type === 'planning') {
     store.updateNodeStatus(nodeId, 'success');
     return;
   }

@@ -2,6 +2,8 @@
 import { jsPDF } from 'jspdf';
 import { getStage } from './stageRegistry';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import type { PlanningElement } from '@/types/canvas';
+import { formatPlanningText } from './planningText';
 
 function hasChinese(text: string): boolean {
   return /[\u4e00-\u9fa5]/.test(text);
@@ -19,6 +21,7 @@ function collectText(elements: ReturnType<typeof useCanvasStore.getState>['eleme
           ...((el.result?.highlights ?? []).map(item => item.reason)),
         ].join(' ');
       }
+      if (el.type === 'planning') return formatPlanningText(el as PlanningElement, { includeDismissed: true });
       return '';
     })
     .join(' ');
@@ -43,6 +46,7 @@ function buildPdfImage(stage: any, x: number, y: number, w: number, h: number): 
 
 export async function exportViewportAsPdf(): Promise<boolean> {
   const stage = getStage();
+  const { elements, stageConfig } = useCanvasStore.getState();
   if (!stage) {
     alert('画布尚未就绪');
     return false;
@@ -59,7 +63,21 @@ export async function exportViewportAsPdf(): Promise<boolean> {
       format: [W, H],
     });
 
+    const allText = collectText(elements);
+    if (hasChinese(allText)) {
+      await embedChineseFont(pdf);
+    }
+
     pdf.addImage(dataUrl, 'PNG', 0, 0, W, H);
+    drawPlanningTextLayer(
+      pdf,
+      elements,
+      -stageConfig.x / stageConfig.scale,
+      -stageConfig.y / stageConfig.scale,
+      stageConfig.scale,
+      0,
+      0,
+    );
     pdf.save(`canvas-viewport-${Date.now()}.pdf`);
     return true;
   } catch (e: any) {
@@ -145,11 +163,45 @@ export async function exportAsCustomPdf(size: PageSize = 'a4'): Promise<boolean>
     }
 
     pdf.addImage(dataUrl, 'PNG', offsetX, offsetY, drawW, drawH);
+    drawPlanningTextLayer(pdf, elements, minX, minY, scale, offsetX, offsetY);
     pdf.save(`canvas-${size}-${Date.now()}.pdf`);
     return true;
   } catch (e: any) {
     alert(e.message ?? '导出 PDF 失败');
     return false;
+  }
+}
+
+function drawPlanningTextLayer(
+  pdf: jsPDF,
+  elements: ReturnType<typeof useCanvasStore.getState>['elements'],
+  minX: number,
+  minY: number,
+  scale: number,
+  offsetX: number,
+  offsetY: number,
+): void {
+  const planningNodes = elements.filter((el): el is PlanningElement => el.type === 'planning');
+  if (planningNodes.length === 0) return;
+
+  pdf.setTextColor(43, 33, 24);
+  pdf.setFontSize(Math.max(8, 11 * scale));
+
+  for (const node of planningNodes) {
+    const x = offsetX + (node.x - minX + 12) * scale;
+    let y = offsetY + (node.y - minY + 24) * scale;
+    const maxWidth = Math.max(40, (node.width - 24) * scale);
+    const lines = formatPlanningText(node, { includeDismissed: true }).split(/\r?\n/).slice(0, 12);
+
+    for (const line of lines) {
+      const wrapped = pdf.splitTextToSize(line, maxWidth).slice(0, 3);
+      for (const segment of wrapped) {
+        pdf.text(segment, x, y, { maxWidth });
+        y += Math.max(10, 14 * scale);
+        if (y > offsetY + (node.y - minY + node.height - 12) * scale) break;
+      }
+      if (y > offsetY + (node.y - minY + node.height - 12) * scale) break;
+    }
   }
 }
 
