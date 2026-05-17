@@ -25,6 +25,7 @@ export interface UISlice {
   setDrawingConnection: (drawing: DrawingConnection | null) => void;
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
+  createGroupFromIds: (id: string, childIds: string[], label?: string) => void;
   ungroupSelected: () => void;
   setViewMode: (mode: 'canvas') => void;
 }
@@ -77,6 +78,49 @@ export const createUISlice: StateCreator<CanvasState, [], [], UISlice> = (set) =
     };
   }),
 
+  createGroupFromIds: (id, childIds, label) => set((state) => {
+    const normalizedLabel = label || undefined;
+    const elementIds = new Set(state.elements.map(el => el.id));
+    const cleanIds = [...new Set(childIds)].filter(childId => elementIds.has(childId));
+    if (cleanIds.length < 2) return state;
+
+    const existingGroup = state.groups.find(group => group.id === id);
+    const survivingGroups = state.groups
+      .filter(group => group.id !== id)
+      .map(group => ({
+        ...group,
+        childIds: group.childIds.filter(childId => !cleanIds.includes(childId)),
+      }))
+      .filter(group => group.childIds.length >= 2);
+
+    const otherGroupsUnchanged = groupsEqual(
+      survivingGroups,
+      state.groups.filter(group => group.id !== id),
+    );
+    if (
+      existingGroup &&
+      arraysEqual(existingGroup.childIds, cleanIds) &&
+      existingGroup.label === normalizedLabel &&
+      otherGroupsUnchanged
+    ) {
+      return state;
+    }
+
+    const newGroup: GroupRecord = normalizedLabel
+      ? { id, childIds: cleanIds, label: normalizedLabel }
+      : { id, childIds: cleanIds };
+
+    return {
+      past: [...state.past, snapshot(state)].slice(-MAX_HISTORY),
+      future: [],
+      groups: [...survivingGroups, newGroup],
+      currentLabel: `成组 ${cleanIds.length} 个元素`,
+      currentTimestamp: Date.now(),
+      _coalesceKey: undefined,
+      _coalesceAt: undefined,
+    };
+  }),
+
   ungroupSelected: () => set((state) => {
     const matchedGroups = state.groups.filter(g =>
       g.childIds.some(id => state.selectedIds.includes(id)),
@@ -97,3 +141,16 @@ export const createUISlice: StateCreator<CanvasState, [], [], UISlice> = (set) =
 
   setViewMode: (mode) => set({ viewMode: mode }),
 });
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function groupsEqual(left: GroupRecord[], right: GroupRecord[]): boolean {
+  return left.length === right.length && left.every((group, index) => {
+    const other = right[index];
+    return group.id === other.id &&
+      group.label === other.label &&
+      arraysEqual(group.childIds, other.childIds);
+  });
+}

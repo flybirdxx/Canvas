@@ -13,6 +13,7 @@ export function HistoryPanel() {
   const future = useCanvasStore(s => s.future);
   const elements = useCanvasStore(s => s.elements);
   const connections = useCanvasStore(s => s.connections);
+  const groups = useCanvasStore(s => s.groups);
   const currentLabel = useCanvasStore(s => s.currentLabel);
   const currentTimestamp = useCanvasStore(s => s.currentTimestamp);
   const jumpToHistory = useCanvasStore(s => s.jumpToHistory);
@@ -24,11 +25,12 @@ export function HistoryPanel() {
     const current: HistorySnapshot = {
       elements,
       connections,
+      groups,
       label: currentLabel,
       timestamp: currentTimestamp,
     };
     return [...past, current, ...future];
-  }, [past, future, elements, connections, currentLabel, currentTimestamp]);
+  }, [past, future, elements, connections, groups, currentLabel, currentTimestamp]);
 
   const currentIdx = past.length;
   const totalChanges = past.length + future.length;

@@ -11,6 +11,7 @@ import type { CanvasElement, Connection } from '@/types/canvas';
 export interface HistorySnapshot {
   elements: CanvasElement[];
   connections: Connection[];
+  groups: GroupRecord[];
   label: string;
   timestamp: number;
 }
@@ -77,6 +78,7 @@ export interface CanvasState {
   setDrawingConnection: (drawing: DrawingConnection | null) => void;
   setInpaintMask: (state: InpaintMaskState | null) => void;
   groupSelected: () => void;
+  createGroupFromIds: (id: string, childIds: string[], label?: string) => void;
   ungroupSelected: () => void;
   setViewMode: (mode: 'canvas') => void;
   undo: () => void;

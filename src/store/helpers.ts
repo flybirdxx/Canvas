@@ -18,11 +18,12 @@ export const MAX_HISTORY = 50;
 export const COALESCE_WINDOW_MS = 500;
 
 export function snapshot(
-  state: Pick<CanvasState, 'elements' | 'connections' | 'currentLabel' | 'currentTimestamp'>,
+  state: Pick<CanvasState, 'elements' | 'connections' | 'groups' | 'currentLabel' | 'currentTimestamp'>,
 ): HistorySnapshot {
   return {
     elements: state.elements,
     connections: state.connections,
+    groups: state.groups.map(group => ({ ...group, childIds: [...group.childIds] })),
     label: state.currentLabel,
     timestamp: state.currentTimestamp,
   };
