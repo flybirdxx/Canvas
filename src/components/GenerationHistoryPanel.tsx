@@ -149,10 +149,10 @@ function HistoryRow({
           {promptShort}
         </div>
       </div>
-      <button onClick={onLocate} className="btn btn-ghost btn-icon" style={{ width: 22, height: 22, padding: 0 }} title="定位节点">
+      <button onClick={onLocate} className="btn btn-ghost btn-icon" style={{ width: 22, height: 22, padding: 0 }} title="定位节点" aria-label="定位节点">
         <MapPin className="w-3 h-3" />
       </button>
-      <button onClick={onRemove} className="btn btn-ghost btn-icon" style={{ width: 22, height: 22, padding: 0 }} title="移除记录">
+      <button onClick={onRemove} className="btn btn-ghost btn-icon" style={{ width: 22, height: 22, padding: 0 }} title="移除记录" aria-label="移除记录">
         <X className="w-3 h-3" />
       </button>
     </div>
