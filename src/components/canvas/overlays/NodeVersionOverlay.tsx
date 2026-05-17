@@ -5,7 +5,7 @@
  * Extracted from InfiniteCanvas L554-L577.
  */
 import React from 'react';
-import { NodeVersionSwitcher } from '@/components/NodeVersionSwitcher';
+import { NodeVersionSwitcher } from './NodeVersionSwitcher';
 import type { CanvasElement } from '@/types/canvas';
 import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 

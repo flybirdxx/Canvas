@@ -9,7 +9,7 @@ import {
   isRunComplete,
 } from '@/store/useExecutionStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import { dispatchToast } from './Toast';
+import { dispatchToast } from '@/components/ui/Toast';
 import { appendLog, clearLogs, subscribeLogs, type LogEntry } from '@/services/executionLogs';
 import { cancelExecution, retryNode, restartRun } from '@/services/executionEngine';
 

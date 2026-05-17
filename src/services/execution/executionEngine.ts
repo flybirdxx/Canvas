@@ -8,7 +8,7 @@ import { runVideoGeneration } from '../videoGeneration';
 import type { VideoGenRequest } from '../videoGeneration';
 import type { Connection, AIGeneratingElement } from '@/types/canvas';
 import type { ExecutionErrorKind } from '@/store/useExecutionStore';
-import { dispatchToast } from '@/components/Toast';
+import { dispatchToast } from '@/components/ui/Toast';
 import { appendLog } from '../executionLogs';
 import { getController, setController, getExecId, setExecId, getSignal, isAborted, phIdToNodeId } from '../executionSession';
 import { getNodeExecutionKind } from './nodeExecutionPolicy';

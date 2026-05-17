@@ -5,7 +5,7 @@
  * Extracted from InfiniteCanvas L530-L552.
  */
 import React from 'react';
-import { NodeNoteIndicator } from '@/components/NodeNoteIndicator';
+import { NodeNoteIndicator } from './NodeNoteIndicator';
 import type { CanvasElement } from '@/types/canvas';
 import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 

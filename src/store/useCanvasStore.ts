@@ -1,14 +1,11 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
-import type { CanvasState } from './types';
-import { createElementSlice } from './slices/elementSlice';
-import { createConnectionSlice } from './slices/connectionSlice';
-import { createHistorySlice } from './slices/historySlice';
-import { createUISlice } from './slices/uiSlice';
 import { migrateCanvasPersistedState } from './migrations';
+import { createConnectionSlice, createElementSlice, createHistorySlice, createUISlice } from './slices';
+import type { CanvasState } from './types';
 
-export type { HistorySnapshot, DrawingConnection, InpaintMaskState, GroupRecord, CanvasState } from './types';
+export type { CanvasState, DrawingConnection, GroupRecord, HistorySnapshot, InpaintMaskState } from './types';
 
 function createThrottledLocalStorage(delayMs: number): StateStorage {
   let pending: { key: string; value: string } | null = null;

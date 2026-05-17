@@ -4,7 +4,7 @@ import type { TextElement } from '@/types/canvas';
 import { NodeInputBarOverlay } from './NodeInputBarOverlay';
 import { clearGroupDragOffsets, setGroupDragOffsets } from '../dragOffsets';
 
-vi.mock('@/components/NodeInputBar', () => ({
+vi.mock('@/components/input-bar/NodeInputBar', () => ({
   NodeInputBar: ({ x, y }: { x: number; y: number }) => (
     <div data-testid="node-input-bar" data-x={x} data-y={y} />
   ),

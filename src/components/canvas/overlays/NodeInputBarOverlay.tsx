@@ -5,7 +5,7 @@
  * Extracted from InfiniteCanvas L478-L508.
  */
 import React from 'react';
-import { NodeInputBar } from '@/components/NodeInputBar';
+import { NodeInputBar } from '@/components/input-bar/NodeInputBar';
 import type { CanvasElement } from '@/types/canvas';
 import { getDragOffset, useDragOffsetsVersion } from '../dragOffsets';
 

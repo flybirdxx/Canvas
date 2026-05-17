@@ -1,25 +1,25 @@
 import { useEffect, useState } from 'react';
-import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
-import { SettingsModal } from './components/SettingsModal';
-import { HistoryPanel } from './components/HistoryPanel';
-import { AssetLibraryPanel } from './components/AssetLibraryPanel';
-import { TemplatesModal } from './components/TemplatesModal';
-import { AlignmentToolbar } from './components/AlignmentToolbar';
-import { GenerationQueuePanel } from './components/GenerationQueuePanel';
-import { GenerationHistoryPanel } from './components/GenerationHistoryPanel';
-import { Atmosphere } from './components/Atmosphere';
-import { StatusBar } from './components/StatusBar';
-import { TopBar } from './components/chrome/TopBar';
-import { ToolDock } from './components/chrome/ToolDock';
-import { FloatingActions } from './components/FloatingActions';
-import { useCanvasStore } from './store/useCanvasStore';
-import { runExecution } from './services/executionEngine';
-import { RunPanel } from './components/RunPanel';
-import { ToastContainer } from './components/Toast';
-import { resumePendingImageTasks } from './services/taskResume';
-import { buildFileElement } from './services/fileIngest';
-import { storeBlob, blobKey } from './services/fileStorage';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { InfiniteCanvas } from '@/components/canvas/InfiniteCanvas';
+import { AlignmentToolbar } from '@/components/canvas/AlignmentToolbar';
+import { Atmosphere } from '@/components/chrome/Atmosphere';
+import { FloatingActions } from '@/components/chrome/FloatingActions';
+import { StatusBar } from '@/components/chrome/StatusBar';
+import { TopBar } from '@/components/chrome/TopBar';
+import { ToolDock } from '@/components/chrome/ToolDock';
+import { AssetLibraryPanel } from '@/components/panels/AssetLibraryPanel';
+import { GenerationHistoryPanel } from '@/components/panels/GenerationHistoryPanel';
+import { GenerationQueuePanel } from '@/components/panels/GenerationQueuePanel';
+import { HistoryPanel } from '@/components/panels/HistoryPanel';
+import { RunPanel } from '@/components/panels/RunPanel';
+import { SettingsModal } from '@/components/panels/SettingsModal';
+import { TemplatesModal } from '@/components/panels/TemplatesModal';
+import { ToastContainer } from '@/components/ui/Toast';
+import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
+import { runExecution } from '@/services/executionEngine';
+import { buildFileElement } from '@/services/fileIngest';
+import { useCanvasStore } from '@/store/useCanvasStore';
+import { runBlobMigration } from './bootstrap/migrateBlobs';
+import { startTaskResumeLoop } from './bootstrap/resumeTasks';
 
 export default function App() {
   const activeTool = useCanvasStore(s => s.activeTool);
@@ -39,41 +39,10 @@ export default function App() {
     return () => window.removeEventListener('open-settings', open);
   }, []);
 
-  useEffect(() => {
-    resumePendingImageTasks();
-    const id = setInterval(resumePendingImageTasks, 3 * 60 * 1000);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => startTaskResumeLoop(), []);
 
   useEffect(() => {
-    const queue = window.__canvasBlobMigration;
-    if (!queue || queue.length === 0) return;
-    delete window.__canvasBlobMigration;
-
-    const migrationTasks = queue.map(async ({ id, dataUrl }) => {
-      try {
-        const key = blobKey(id);
-        await storeBlob(key, dataUrl);
-        const el = useCanvasStore.getState().elements.find(e => e.id === id);
-        if (el && el.type === 'file') {
-          useCanvasStore.getState().updateElement(id, {
-            persistence: 'blob',
-            blobKey: key,
-            src: '',
-          } as Partial<typeof el>);
-        }
-        return { id, ok: true };
-      } catch (err) {
-        console.warn(`[migration] blob store failed for ${id}, keeping data`, err);
-        return { id, ok: false, error: err };
-      }
-    });
-    Promise.allSettled(migrationTasks).then((results) => {
-      const failed = results.filter(r => r.status === 'fulfilled' && !(r as any).value?.ok);
-      if (failed.length > 0) {
-        console.warn(`[migration] ${failed.length}/${queue.length} blob migrations failed, kept as data URLs`);
-      }
-    });
+    runBlobMigration();
   }, []);
 
   const handleUploadFiles = async (files: File[]) => {

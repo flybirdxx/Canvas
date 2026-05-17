@@ -22,7 +22,7 @@ import { useAssetLibraryStore } from '@/store/useAssetLibraryStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { CanvasElement, AppliedPreset } from '@/types/canvas';
 import { PromptPreset } from '@/data/promptLibrary';
-import { PromptLibraryPanel } from './PromptLibraryPanel';
+import { PromptLibraryPanel } from '@/components/panels/PromptLibraryPanel';
 import { runGeneration } from '@/services/imageGeneration';
 import { runVideoGeneration } from '@/services/videoGeneration';
 import { runTextGeneration } from '@/services/textGeneration';
@@ -33,8 +33,8 @@ import {
   isScreenwritingMasterTemplatePreset,
 } from '@/services/screenwriting';
 import { findModel, computeUnitPrice } from '@/services/gateway';
-import { submitVideo } from './input-bar/submitVideo';
-import { submitImage } from './input-bar/submitImage';
+import { submitVideo } from './submitVideo';
+import { submitImage } from './submitImage';
 import {
   getUpstreamTextContributions,
   getUpstreamImageContributions,
@@ -42,11 +42,11 @@ import {
   UpstreamTextContribution,
   UpstreamImageContribution,
 } from '@/utils/flowResolver';
-import { QuickChip } from './ui/QuickChip';
-import { ThumbChip } from './ui/ThumbChip';
-import { Dropdown } from './ui/Dropdown';
-import { MoreMenu } from './ui/MoreMenu';
-import { ToolbarDivider } from './ui/ToolbarDivider';
+import { QuickChip } from '@/components/ui/QuickChip';
+import { ThumbChip } from '@/components/ui/ThumbChip';
+import { Dropdown } from '@/components/ui/Dropdown';
+import { MoreMenu } from '@/components/ui/MoreMenu';
+import { ToolbarDivider } from '@/components/ui/ToolbarDivider';
 import {
   type DropdownOption,
   type GenMode,
@@ -57,7 +57,7 @@ import {
   DURATION_OPTIONS,
   COUNT_OPTIONS,
   removeSnippetFromPrompt,
-} from './input-bar/utils';
+} from './utils';
 
 export interface NodeInputBarProps {
   element: CanvasElement;

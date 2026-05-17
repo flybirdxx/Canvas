@@ -5,7 +5,7 @@
  * Extracted from InfiniteCanvas L510-L528.
  */
 import React from 'react';
-import { InpaintOverlay } from '@/components/InpaintOverlay';
+import { InpaintOverlay } from './InpaintOverlay';
 import type { CanvasElement } from '@/types/canvas';
 import type { InpaintMaskState } from '@/store/types';
 
