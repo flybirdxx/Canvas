@@ -271,6 +271,20 @@ describe('PlanningNode', () => {
     return { executionNode, node, originalTask, state };
   }
 
+  it('labels legacy production task planning nodes while keeping conversion available', () => {
+    const node = makePlanningNode({
+      id: 'production-task-legacy',
+      kind: 'productionTask',
+      recommendedTaskType: 'image',
+    });
+    useCanvasStore.setState({ elements: [node], connections: [] });
+
+    render(<PlanningNode el={node} />);
+
+    expect(screen.getByText('旧版任务卡')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '转换为生成节点' })).toBeInTheDocument();
+  });
+
   it('copy-converts image production tasks into selected execution nodes and connects text-compatible inputs', () => {
     const { executionNode, node, originalTask, state } = convertProductionTask('image');
 

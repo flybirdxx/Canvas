@@ -214,12 +214,29 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
             <div
               className="meta"
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
                 color: 'var(--accent)',
                 fontSize: 10,
                 marginBottom: 5,
               }}
             >
-              {KIND_LABELS[el.kind]}
+              <span>{KIND_LABELS[el.kind]}</span>
+              {el.kind === 'productionTask' && (
+                <span
+                  style={{
+                    border: '1px solid var(--line-1)',
+                    borderRadius: 999,
+                    color: 'var(--ink-2)',
+                    fontSize: 9.5,
+                    lineHeight: 1.2,
+                    padding: '1px 5px',
+                  }}
+                >
+                  旧版任务卡
+                </span>
+              )}
             </div>
             <input
               className="serif pointer-events-auto"
