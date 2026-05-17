@@ -40,9 +40,17 @@ const MATERIAL_LABELS: Record<PlanningRequirement['materialType'], string> = {
 export function PlanningNode({ el }: { el: PlanningElement }) {
   const executionBorder = useExecutionBorder(el.id);
   const updateElement = useCanvasStore((s) => s.updateElement);
+  const allElements = useCanvasStore((s) => s.elements);
   const [isGeneratingStoryBible, setIsGeneratingStoryBible] = useState(false);
   const [storyBibleError, setStoryBibleError] = useState<string | null>(null);
   const requirements = el.requirements ?? [];
+  const generatedNodeIds = new Set(el.generatedNodeIds ?? []);
+  const projectNodes = generatedNodeIds.size > 0
+    ? allElements.filter(element => generatedNodeIds.has(element.id))
+    : [];
+  const pendingDraftCount = projectNodes.filter(element =>
+    element.planningDraft?.status === 'pendingReview',
+  ).length;
   const pendingRequirements = requirements.filter(req => req.status === 'pending');
   const confirmedRequirements = el.kind === 'plot'
     ? requirements.filter(req => req.status === 'confirmed')
@@ -253,6 +261,24 @@ export function PlanningNode({ el }: { el: PlanningElement }) {
               padding: 12,
             }}
           />
+          {el.kind === 'projectSeed' && projectNodes.length > 0 && (
+            <section
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                borderTop: '1px solid var(--line-1)',
+                color: 'var(--ink-2)',
+                fontSize: 10.5,
+                lineHeight: 1.3,
+                background: 'color-mix(in oklch, var(--bg-2) 94%, var(--accent) 6%)',
+              }}
+            >
+              <span>项目节点 {projectNodes.length}</span>
+              <span>待确认执行 {pendingDraftCount}</span>
+            </section>
+          )}
           {el.kind === 'projectSeed' && (
             <section
               style={{

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlanningElement } from '@/types/canvas';
+import type { CanvasElement, PlanningElement } from '@/types/canvas';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { listModels } from '@/services/gateway';
 import { generateShortDramaPlanning } from '@/services/planning';
@@ -362,6 +362,65 @@ describe('PlanningNode', () => {
     render(<PlanningNode el={node} />);
 
     expect(screen.getByRole('button', { name: '生成规划结构' })).toBeInTheDocument();
+  });
+
+  it('summarizes generated project nodes and pending execution drafts for project seeds', () => {
+    const node = makePlanningNode({
+      id: 'project-seed-1',
+      kind: 'projectSeed',
+      projectId: 'project-1',
+      generatedNodeIds: ['story-text-1', 'plot-text-1', 'draft-image-1'],
+      title: '短剧项目种子',
+      body: '一句短剧想法',
+      requirements: [],
+    });
+    const projectNodes: CanvasElement[] = [
+      {
+        id: 'story-text-1',
+        type: 'text',
+        x: 420,
+        y: 0,
+        width: 240,
+        height: 160,
+        text: '故事圣经',
+        fontSize: 16,
+        fontFamily: 'var(--font-sans)',
+        fill: '#1f1b16',
+      },
+      {
+        id: 'plot-text-1',
+        type: 'text',
+        x: 420,
+        y: 190,
+        width: 240,
+        height: 160,
+        text: '剧情节点',
+        fontSize: 16,
+        fontFamily: 'var(--font-sans)',
+        fill: '#1f1b16',
+      },
+      {
+        id: 'draft-image-1',
+        type: 'image',
+        x: 700,
+        y: 0,
+        width: 240,
+        height: 160,
+        src: '',
+        planningDraft: {
+          sourcePlanningId: 'planning-plot-1',
+          sourceRequirementId: 'req-image-1',
+          projectId: 'project-1',
+          status: 'pendingReview',
+        },
+      },
+    ];
+    useCanvasStore.setState({ elements: [node, ...projectNodes] });
+
+    render(<PlanningNode el={node} />);
+
+    expect(screen.getByText('项目节点 3')).toBeInTheDocument();
+    expect(screen.getByText('待确认执行 1')).toBeInTheDocument();
   });
 
   it('generates existing text nodes, connections, and a project group from a project seed', async () => {
