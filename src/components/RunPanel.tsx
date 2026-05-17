@@ -193,7 +193,7 @@ export function RunPanel() {
   // Story 1.4: is there a node in running or queued state?
   const hasRunningOrQueued = activeRun
     ? Object.values(activeRun.nodeStates).some(
-        (ns) => ns.status === 'running' || ns.status === 'queued',
+        (ns) => (ns as any).status === 'running' || (ns as any).status === 'queued',
       )
     : false;
 
