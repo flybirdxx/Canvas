@@ -1,11 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildShortDramaPlanningPrompt,
+  generateShortDramaPlanning,
   normalizePlanningResponse,
   parsePlanningJson,
 } from './planning';
+import { generateTextByModelId } from './gateway';
+
+vi.mock('./gateway', () => ({
+  generateTextByModelId: vi.fn(),
+}));
 
 describe('planning service', () => {
+  beforeEach(() => {
+    vi.mocked(generateTextByModelId).mockReset();
+  });
+
   it('normalizes story bible, characters, plots, and requirements', () => {
     const normalized = normalizePlanningResponse({
       storyBible: {
@@ -67,6 +77,54 @@ describe('planning service', () => {
       title: '雨夜重逢',
       body: '失散亲人重逢。',
     });
+  });
+
+  it('parses JSON objects surrounded by prose', () => {
+    const parsed = parsePlanningJson([
+      '先给你一个可执行版本：',
+      '{"storyBible":{"title":"雨夜重逢","body":"旧债引发家族短剧。"},"characters":[],"plots":[]}',
+      '以上是完整结构。',
+    ].join('\n'));
+
+    expect(parsed.storyBible).toMatchObject({
+      title: '雨夜重逢',
+      body: '旧债引发家族短剧。',
+    });
+  });
+
+  it('repairs non-json planning output before normalizing', async () => {
+    vi.mocked(generateTextByModelId)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: '【第一幕】殿外风起。女主发现红色怀表。',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: '{"storyBible":{"title":"怀表疑云","body":"女主发现红色怀表。"},"characters":[],"plots":[{"title":"殿外风起","body":"女主发现红色怀表。","requirements":[]}]}',
+      });
+
+    const response = await generateShortDramaPlanning('红色怀表', 'text-model-1');
+
+    expect(generateTextByModelId).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(generateTextByModelId).mock.calls[1][0].messages[0].content).toContain('转换为严格 JSON');
+    expect(response.storyBible.title).toBe('怀表疑云');
+    expect(response.plots[0].title).toBe('殿外风起');
+  });
+
+  it('returns a readable error when json repair still fails', async () => {
+    vi.mocked(generateTextByModelId)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: '{"storyBible":{"title":"截断',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: '仍然不是 JSON',
+      });
+
+    await expect(generateShortDramaPlanning('红色怀表', 'text-model-1'))
+      .rejects
+      .toThrow('企划返回格式不正确');
   });
 
   it('uses defaults when story bible, characters, or plots are missing', () => {

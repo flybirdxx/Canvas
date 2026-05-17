@@ -74,6 +74,19 @@ export function buildShortDramaPlanningPrompt(seed: string): string {
   ].join('\n');
 }
 
+function buildPlanningJsonRepairPrompt(rawText: string): string {
+  return [
+    '请把下面的企划内容转换为严格 JSON。',
+    '只输出 JSON，不要 Markdown，不要解释，不要代码围栏。',
+    'JSON 结构必须是：{"storyBible":{"title":"","body":""},"characters":[{"title":"","body":"","plotResponsibility":""}],"plots":[{"title":"","body":"","requirements":[{"title":"","materialType":"prop","description":"","necessity":""}]}]}',
+    'materialType 只能使用 character、scene、prop、image、text、video、audio。',
+    '如果原文缺少某个字段，请用空数组或简短中文默认值补齐。',
+    '',
+    '原始企划内容：',
+    rawText.slice(0, 6000),
+  ].join('\n');
+}
+
 export function normalizePlanningResponse(raw: RawPlanningResponse): NormalizedPlanningResponse {
   const storyBible = toRecord(raw.storyBible) ?? {};
 
@@ -106,8 +119,18 @@ export function parsePlanningJson(text: string): RawPlanningResponse {
     }
   }
 
-  const detail = rawParseError instanceof Error ? rawParseError.message : String(rawParseError);
-  throw new Error(`企划返回内容不是可解析的 JSON 对象：${detail}`);
+  for (const candidate of extractJsonObjectCandidates(text)) {
+    try {
+      return parseJsonObject(candidate);
+    } catch {
+      // Keep looking for a later balanced object.
+    }
+  }
+
+  throw new Error(
+    '企划返回格式不正确：模型没有返回完整 JSON 对象。请重试，或换用更严格遵循 JSON 输出的文本模型。',
+    { cause: rawParseError },
+  );
 }
 
 export async function generateShortDramaPlanning(
@@ -127,7 +150,33 @@ export async function generateShortDramaPlanning(
     );
   }
 
-  return normalizePlanningResponse(parsePlanningJson(result.text));
+  try {
+    return normalizePlanningResponse(parsePlanningJson(result.text));
+  } catch (initialError) {
+    const repair = await generateTextByModelId({
+      model,
+      messages: [{ role: 'user', content: buildPlanningJsonRepairPrompt(result.text) }],
+    });
+
+    if (repair.ok === false) {
+      throw new Error(
+        repair.detail
+          ? `企划返回格式不正确，且自动修复失败：${repair.message}\n${repair.detail}`
+          : `企划返回格式不正确，且自动修复失败：${repair.message}`,
+        { cause: initialError },
+      );
+    }
+
+    try {
+      return normalizePlanningResponse(parsePlanningJson(repair.text));
+    } catch (repairError) {
+      const initialMessage = initialError instanceof Error ? initialError.message : String(initialError);
+      throw new Error(
+        `企划返回格式不正确，自动修复后仍不是可解析的 JSON。请重试，或换用更严格遵循 JSON 输出的文本模型。\n${initialMessage}`,
+        { cause: repairError },
+      );
+    }
+  }
 }
 
 function normalizeCharacters(value: unknown): NormalizedPlanningCharacter[] {
@@ -200,6 +249,50 @@ function parseJsonObject(text: string): RawPlanningResponse {
 
 function extractFencedBlocks(text: string): string[] {
   return [...text.matchAll(/```[^\r\n]*\r?\n([\s\S]*?)```/g)].map(match => match[1]);
+}
+
+function extractJsonObjectCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        candidates.push(text.slice(start, index + 1));
+        start = -1;
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
